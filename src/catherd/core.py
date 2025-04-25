@@ -1,10 +1,19 @@
 import json
+import os
 import shutil
+import sqlite3
 import subprocess  # noqa: S404
 import sys
+from pathlib import Path
 from typing import Any
 
 from .config import get_session_file
+
+
+def get_atuin_history_db_path() -> Path:
+    xdg_data = os.environ.get("XDG_DATA_HOME")
+    path = Path(xdg_data) if xdg_data else Path("~/.local/share").expanduser()
+    return path / "atuin" / "history.db"
 
 
 def get_kitty_windows(*, verbose: bool = False) -> list[dict[str, Any]] | None:
@@ -22,7 +31,8 @@ def get_kitty_windows(*, verbose: bool = False) -> list[dict[str, Any]] | None:
 
     if result.returncode != 0:
         print(
-            f"[error] 'kitty @ ls' failed (exit code {result.returncode}):\n{result.stderr}", file=sys.stderr
+            f"[error] 'kitty @ ls' failed (exit code {result.returncode}):\n{result.stderr}",
+            file=sys.stderr,
         )
         return None
 
@@ -43,13 +53,12 @@ def get_kitty_windows(*, verbose: bool = False) -> list[dict[str, Any]] | None:
             for window in tab.get("windows", []):
                 win_id = window.get("id", None)
                 win_title = window.get("title", tab_title)
-                windows.append({
-                    "id": win_id,
-                    "tab": tab_id,
-                    "title": win_title,
-                })
+                windows.append({"id": win_id, "tab": tab_id, "title": win_title})
     if not windows:
-        print("[warning] No windows found in Kitty session. Try opening a window or tab.", file=sys.stderr)
+        print(
+            "[warning] No windows found in Kitty session. Try opening a window or tab.",
+            file=sys.stderr,
+        )
     return windows
 
 
@@ -68,25 +77,32 @@ def get_atuin_session_for_window(window_id: str, *, verbose: bool = False) -> st
 
 
 def get_last_command_for_atuin_session(session_id: str, *, verbose: bool = False) -> str:
-    atuin_path = shutil.which("atuin")
-    if not atuin_path:
+    db_path = get_atuin_history_db_path()
+    if not db_path.exists():
         if verbose:
-            print("[verbose] 'atuin' is not found in PATH.")
-        return "(atuin not found)"
+            print(f"[verbose] Atuin history DB not found at {db_path}")
+        return "(no history db)"
     try:
-        result = subprocess.run(  # noqa: S603
-            [atuin_path, "search", "--session", session_id, "--limit", "1", "--format", "{command}"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT command
+                FROM history
+                WHERE session = ?
+                ORDER BY timestamp DESC
+                LIMIT 1;
+                """,
+                (session_id,),
+            )
+            row = cursor.fetchone()
+            if row:
+                return row[0]
+            return "(no command)"
+    except sqlite3.DatabaseError as e:
         if verbose:
-            print(f"[verbose] Atuin search result for session {session_id}: '{result.stdout.strip()}'")
-        return result.stdout.strip() or "(no command)"
-    except (FileNotFoundError, subprocess.SubprocessError) as exc:
-        if verbose:
-            print(f"[verbose] Error running atuin for session {session_id}: {exc}")
-        return "(atuin error)"
+            print(f"[verbose] SQLite error: {e}")
+        return "(sqlite error)"
 
 
 def main(*, verbose: bool = False) -> None:
