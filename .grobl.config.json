@@ -1,0 +1,18 @@
+{
+  "exclude_tree": [
+    "*.egg-info",
+    "*.ipynb",
+    ".git/",
+    ".gitmodules",
+    ".groblignore",
+    ".pytest_cache/",
+    ".venv/",
+    ".coverage.xml",
+    "ruff.default.toml",
+    "uv.lock",
+    "yarn.lock"
+  ],
+  "exclude_print": [],
+  "include_tree_tags": "tree",
+  "include_file_tags": "file"
+}

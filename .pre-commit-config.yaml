@@ -1,0 +1,35 @@
+repos:
+- hooks:
+  - id: ruff
+  - id: ruff-format
+  repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.11.6
+- hooks:
+  - id: check-yaml
+  - id: end-of-file-fixer
+  repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v5.0.0
+- hooks:
+  - entry: awl
+    files: ^src/.+\.py$
+    id: awl
+    language: system
+    name: awl- sync __all__
+    stages:
+    - commit
+  repo: https://github.com/josephcourtney/awl
+  rev: v0.0.11
+- hooks:
+  - always_run: true
+    entry: pytest
+    id: pytest
+    language: system
+    name: pytest
+  repo: local
+- hooks:
+  - id: commitizen
+  - id: commitizen-branch
+    stages:
+    - push
+  repo: https://github.com/commitizen-tools/commitizen
+  rev: v4.6.0
