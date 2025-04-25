@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+
+# Auto-generated git-branch wrapper
+REAL_GIT=$(command -v git)
+
+# Collect args
+NEW=""
+ARGS=()
+while (("$#")); do
+  case "$1" in
+  -b | --create)
+    ARGS+=("$1")
+    shift
+    NEW="$1"
+    ARGS+=("$1")
+    ;;
+  *)
+    ARGS+=("$1")
+    ;;
+  esac
+  shift
+done
+
+# Validate on branch creation
+if [[ -n "$NEW" ]]; then
+  sprig validate "$NEW" || exit 1
+fi
+
+# Delegate to real git
+exec "$REAL_GIT" branch "${ARGS[@]}"
