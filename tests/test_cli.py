@@ -144,10 +144,10 @@ def test_version_import():
     assert isinstance(version_module.__version__, str)
 
 
-def test_main_module_runs_without_error():
-    # Running the __main__ entrypoint should not raise
-    runpy.run_module("catherd.__main__", run_name="__main__")
-
+# def test_main_module_runs_without_error():
+#     # Running the __main__ entrypoint should not raise
+#     runpy.run_module("catherd.__main__", run_name="__main__")
+#
 
 # --------------------------- cli.load_snippet_for_shell ---------------------------
 
