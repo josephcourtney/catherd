@@ -1,4 +1,6 @@
 # ensure separate stderr capture for CliRunner everywhere
+import inspect
+
 import click.testing as _ct
 import pytest
 from click.testing import CliRunner
@@ -6,10 +8,14 @@ from click.testing import CliRunner
 import catherd.cli
 
 _orig_init = _ct.CliRunner.__init__
+_supports_mix_stderr = "mix_stderr" in inspect.signature(_orig_init).parameters
 
 
 def _patched_init(self, *args, **kwargs):
-    _orig_init(self, *args, mix_stderr=False, **kwargs)
+    if _supports_mix_stderr:
+        _orig_init(self, *args, mix_stderr=False, **kwargs)
+    else:
+        _orig_init(self, *args, **kwargs)
 
 
 _ct.CliRunner.__init__ = _patched_init

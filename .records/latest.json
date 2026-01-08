@@ -1,12 +1,12 @@
 {
   "bundle": {
-    "coverage_xml": ".artifacts/20260108T035749Z_384dcef8685a/coverage.xml",
+    "coverage_xml": ".artifacts/20260108T040304Z_dc35e0caf9f8/coverage.xml",
     "flake_log": null,
     "mutation_score_txt": null,
     "perf_dir": null,
-    "pytest_json": ".artifacts/20260108T035749Z_384dcef8685a/pytest-report.json",
-    "pytest_junit": ".artifacts/20260108T035749Z_384dcef8685a/pytest-junit.xml",
-    "root": ".artifacts/20260108T035749Z_384dcef8685a"
+    "pytest_json": ".artifacts/20260108T040304Z_dc35e0caf9f8/pytest-report.json",
+    "pytest_junit": ".artifacts/20260108T040304Z_dc35e0caf9f8/pytest-junit.xml",
+    "root": ".artifacts/20260108T040304Z_dc35e0caf9f8"
   },
   "coverage": {
     "branch_coverage_pct": 85.71,
@@ -22,7 +22,7 @@
     "python": {
       "executable": "/Users/josephcourtney/code/catherd/.venv/bin/python",
       "implementation": "CPython",
-      "version": "3.13.0rc2"
+      "version": "3.13.9"
     }
   },
   "flake": {
@@ -30,36 +30,36 @@
   },
   "git": {
     "branch": "main",
-    "describe": "384dcef-dirty",
+    "describe": "dc35e0c-dirty",
     "is_dirty": true,
-    "sha": "384dcef8685a3b20900f40597b7ec595877dda07"
+    "sha": "dc35e0caf9f80d4d5081c43a6ba854a534fc605e"
   },
   "junit": {
     "present": true,
     "slowest": [
       {
-        "duration_s": 0.167,
+        "duration_s": 0.348,
         "nodeid": "tests.test_cli::test_main_invocation",
         "outcome": "passed"
       },
       {
-        "duration_s": 0.006,
-        "nodeid": "tests.test_atuin::test_get_last_command_with_db",
+        "duration_s": 0.005,
+        "nodeid": "tests.test_cli::test__collect_kitty_session_diagnostics",
         "outcome": "passed"
       },
       {
         "duration_s": 0.004,
-        "nodeid": "tests.test_config::test_get_xdg_config_dir",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": 0.004,
-        "nodeid": "tests.test_cli::test_show_none_warns",
+        "nodeid": "tests.test_cli::test_main_entrypoint_exits_zero",
         "outcome": "passed"
       },
       {
         "duration_s": 0.003,
-        "nodeid": "tests.test_cli::test_main_entrypoint_exits_zero",
+        "nodeid": "tests.test_cli::test_install_dry_run",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": 0.003,
+        "nodeid": "tests.test_cli::test__collect_kitty_session_diagnostics_branches",
         "outcome": "passed"
       },
       {
@@ -68,63 +68,33 @@
         "outcome": "passed"
       },
       {
-        "duration_s": 0.002,
-        "nodeid": "tests.test_config::test_get_session_file",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": 0.002,
-        "nodeid": "tests.test_atuin::test_get_last_command_db_error",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": 0.002,
-        "nodeid": "tests.test_cli::test_install_shell_snippet_unsupported",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": 0.002,
-        "nodeid": "tests.test_cli::test_errors_and_diagnostics_to_stderr",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": 0.002,
-        "nodeid": "tests.test_cli::test_json_output",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": 0.002,
-        "nodeid": "tests.test_cli::test_doctor_no_windows",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": 0.002,
-        "nodeid": "tests.test_cli::test__collect_kitty_session_diagnostics_branches",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": 0.002,
+        "duration_s": 0.003,
         "nodeid": "tests.test_cli::test_show_prints_commands",
         "outcome": "passed"
       },
       {
-        "duration_s": 0.002,
+        "duration_s": 0.003,
         "nodeid": "tests.test_cli::test_preflight_only_on_show",
         "outcome": "passed"
       },
       {
-        "duration_s": 0.002,
-        "nodeid": "tests.test_cli::test_install_dry_run",
+        "duration_s": 0.003,
+        "nodeid": "tests.test_cli::test_doctor_basic",
         "outcome": "passed"
       },
       {
-        "duration_s": 0.002,
+        "duration_s": 0.003,
         "nodeid": "tests.test_cli::test_install_shell_snippet",
         "outcome": "passed"
       },
       {
-        "duration_s": 0.002,
-        "nodeid": "tests.test_cli::test_doctor_basic",
+        "duration_s": 0.003,
+        "nodeid": "tests.test_atuin::test_get_last_command_with_db",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": 0.003,
+        "nodeid": "tests.test_kitty::test_get_kitty_windows_verbose_branch",
         "outcome": "passed"
       },
       {
@@ -134,7 +104,7 @@
       },
       {
         "duration_s": 0.002,
-        "nodeid": "tests.test_cli::test__collect_kitty_session_diagnostics",
+        "nodeid": "tests.test_cli::test_show_env_verbose",
         "outcome": "passed"
       },
       {
@@ -143,23 +113,53 @@
         "outcome": "passed"
       },
       {
-        "duration_s": 0.001,
-        "nodeid": "tests.test_config::test_get_xdg_cache_dir",
+        "duration_s": 0.002,
+        "nodeid": "tests.test_cli::test_json_output",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": 0.002,
+        "nodeid": "tests.test_cli::test_errors_and_diagnostics_to_stderr",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": 0.002,
+        "nodeid": "tests.test_cli::test_show_none_warns",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": 0.002,
+        "nodeid": "tests.test_atuin::test_get_last_command_db_error",
         "outcome": "passed"
       },
       {
         "duration_s": 0.001,
-        "nodeid": "tests.test_config::test_get_xdg_cache_dir_default",
+        "nodeid": "tests.test_cli::test_print_kitty_session_diagnostics_none_synced",
         "outcome": "passed"
       },
       {
         "duration_s": 0.001,
-        "nodeid": "tests.test_atuin::test_get_last_command_no_db",
+        "nodeid": "tests.test_cli::test_is_sync_env_missing",
         "outcome": "passed"
       },
       {
         "duration_s": 0.001,
-        "nodeid": "tests.test_atuin::test_atuin_history_db_path",
+        "nodeid": "tests.test_cli::test_install_shell_snippet_unsupported",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": 0.001,
+        "nodeid": "tests.test_cli::test_print_shell_snippet_and_env",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": 0.001,
+        "nodeid": "tests.test_cli::test_exit_code_on_unknown_shell_install",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": 0.001,
+        "nodeid": "tests.test_cli::test_print_kitty_session_diagnostics_all_branches",
         "outcome": "passed"
       }
     ],
@@ -168,7 +168,7 @@
       "failures": 0,
       "skipped": 0,
       "tests": 50,
-      "time_s": 0.412
+      "time_s": 0.606
     }
   },
   "mutation": {
@@ -192,42 +192,42 @@
     "tests": [
       {
         "duration_s": null,
-        "nodeid": "tests/test_config.py::test_get_xdg_config_dir",
+        "nodeid": "tests/test_cli.py::test__collect_kitty_session_diagnostics",
         "outcome": "passed"
       },
       {
         "duration_s": null,
-        "nodeid": "tests/test_config.py::test_get_xdg_cache_dir",
+        "nodeid": "tests/test_cli.py::test_install_dry_run",
         "outcome": "passed"
       },
       {
         "duration_s": null,
-        "nodeid": "tests/test_config.py::test_get_xdg_cache_dir_default",
+        "nodeid": "tests/test_cli.py::test__collect_kitty_session_diagnostics_branches",
         "outcome": "passed"
       },
       {
         "duration_s": null,
-        "nodeid": "tests/test_config.py::test_get_session_file",
+        "nodeid": "tests/test_cli.py::test_print_kitty_session_diagnostics_none_synced",
         "outcome": "passed"
       },
       {
         "duration_s": null,
-        "nodeid": "tests/test_atuin.py::test_get_last_command_no_db",
+        "nodeid": "tests/test_cli.py::test_uninstall_dry_run_and_remove",
         "outcome": "passed"
       },
       {
         "duration_s": null,
-        "nodeid": "tests/test_atuin.py::test_get_last_command_with_db",
+        "nodeid": "tests/test_cli.py::test_install_shell_snippet_already_installed",
         "outcome": "passed"
       },
       {
         "duration_s": null,
-        "nodeid": "tests/test_atuin.py::test_get_last_command_db_error",
+        "nodeid": "tests/test_cli.py::test_show_env_verbose",
         "outcome": "passed"
       },
       {
         "duration_s": null,
-        "nodeid": "tests/test_atuin.py::test_atuin_history_db_path",
+        "nodeid": "tests/test_cli.py::test_is_sync_env_missing",
         "outcome": "passed"
       },
       {
@@ -237,12 +237,32 @@
       },
       {
         "duration_s": null,
-        "nodeid": "tests/test_cli.py::test_errors_and_diagnostics_to_stderr",
+        "nodeid": "tests/test_cli.py::test_is_sync_success",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": null,
+        "nodeid": "tests/test_cli.py::test_show_prints_commands",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": null,
+        "nodeid": "tests/test_cli.py::test_print_shell_snippet_and_env",
         "outcome": "passed"
       },
       {
         "duration_s": null,
         "nodeid": "tests/test_cli.py::test_json_output",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": null,
+        "nodeid": "tests/test_cli.py::test_errors_and_diagnostics_to_stderr",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": null,
+        "nodeid": "tests/test_cli.py::test_preflight_only_on_show",
         "outcome": "passed"
       },
       {
@@ -257,7 +277,7 @@
       },
       {
         "duration_s": null,
-        "nodeid": "tests/test_cli.py::test_print_kitty_session_diagnostics_none_synced",
+        "nodeid": "tests/test_cli.py::test_doctor_basic",
         "outcome": "passed"
       },
       {
@@ -267,12 +287,7 @@
       },
       {
         "duration_s": null,
-        "nodeid": "tests/test_cli.py::test_show_none_warns",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": null,
-        "nodeid": "tests/test_cli.py::test_show_empty_warns",
+        "nodeid": "tests/test_cli.py::test_print_kitty_session_diagnostics_all_branches",
         "outcome": "passed"
       },
       {
@@ -282,27 +297,12 @@
       },
       {
         "duration_s": null,
-        "nodeid": "tests/test_cli.py::test__collect_kitty_session_diagnostics_branches",
+        "nodeid": "tests/test_cli.py::test_show_empty_warns",
         "outcome": "passed"
       },
       {
         "duration_s": null,
-        "nodeid": "tests/test_cli.py::test_show_prints_commands",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": null,
-        "nodeid": "tests/test_cli.py::test_preflight_only_on_show",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": null,
-        "nodeid": "tests/test_cli.py::test_print_kitty_session_diagnostics_all_branches",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": null,
-        "nodeid": "tests/test_cli.py::test_install_dry_run",
+        "nodeid": "tests/test_cli.py::test_show_none_warns",
         "outcome": "passed"
       },
       {
@@ -312,62 +312,22 @@
       },
       {
         "duration_s": null,
-        "nodeid": "tests/test_cli.py::test_is_sync_env_missing",
+        "nodeid": "tests/test_atuin.py::test_atuin_history_db_path",
         "outcome": "passed"
       },
       {
         "duration_s": null,
-        "nodeid": "tests/test_cli.py::test_doctor_basic",
+        "nodeid": "tests/test_atuin.py::test_get_last_command_with_db",
         "outcome": "passed"
       },
       {
         "duration_s": null,
-        "nodeid": "tests/test_cli.py::test_install_shell_snippet_already_installed",
+        "nodeid": "tests/test_atuin.py::test_get_last_command_no_db",
         "outcome": "passed"
       },
       {
         "duration_s": null,
-        "nodeid": "tests/test_cli.py::test_uninstall_dry_run_and_remove",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": null,
-        "nodeid": "tests/test_cli.py::test__collect_kitty_session_diagnostics",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": null,
-        "nodeid": "tests/test_cli.py::test_print_shell_snippet_and_env",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": null,
-        "nodeid": "tests/test_cli.py::test_show_env_verbose",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": null,
-        "nodeid": "tests/test_cli.py::test_is_sync_success",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": null,
-        "nodeid": "tests/test_shell.py::test_get_shell_rc_path_zsh",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": null,
-        "nodeid": "tests/test_shell.py::test_get_shell_rc_path_zsh_no_zdotdir",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": null,
-        "nodeid": "tests/test_shell.py::test_load_snippet_unknown_shell",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": null,
-        "nodeid": "tests/test_shell.py::test_get_shell_rc_path_bash",
+        "nodeid": "tests/test_atuin.py::test_get_last_command_db_error",
         "outcome": "passed"
       },
       {
@@ -387,47 +347,27 @@
       },
       {
         "duration_s": null,
+        "nodeid": "tests/test_shell.py::test_get_shell_rc_path_bash",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": null,
+        "nodeid": "tests/test_shell.py::test_load_snippet_unknown_shell",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": null,
         "nodeid": "tests/test_shell.py::test_get_shell_rc_path_fish_no_xdg",
         "outcome": "passed"
       },
       {
         "duration_s": null,
-        "nodeid": "tests/test_kitty.py::test_get_kitty_windows_kitty_not_found",
+        "nodeid": "tests/test_shell.py::test_get_shell_rc_path_zsh_no_zdotdir",
         "outcome": "passed"
       },
       {
         "duration_s": null,
-        "nodeid": "tests/test_kitty.py::test_get_kitty_windows_nonzero_return",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": null,
-        "nodeid": "tests/test_kitty.py::test_get_kitty_windows_no_windows",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": null,
-        "nodeid": "tests/test_kitty.py::test_get_kitty_windows_verbose_branch",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": null,
-        "nodeid": "tests/test_kitty.py::test_get_kitty_windows_json_decode_error",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": null,
-        "nodeid": "tests/test_kitty.py::test_kittywindow_repr_and_fields",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": null,
-        "nodeid": "tests/test_kitty.py::test_get_kitty_windows_subprocess_error",
-        "outcome": "passed"
-      },
-      {
-        "duration_s": null,
-        "nodeid": "tests/test_kitty.py::test_get_kitty_windows_json_parsing",
+        "nodeid": "tests/test_shell.py::test_get_shell_rc_path_zsh",
         "outcome": "passed"
       },
       {
@@ -437,13 +377,73 @@
       },
       {
         "duration_s": null,
+        "nodeid": "tests/test_kitty.py::test_kittywindow_repr_and_fields",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": null,
+        "nodeid": "tests/test_kitty.py::test_get_kitty_windows_no_windows",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": null,
+        "nodeid": "tests/test_kitty.py::test_get_kitty_windows_kitty_not_found",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": null,
+        "nodeid": "tests/test_kitty.py::test_get_kitty_windows_verbose_branch",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": null,
+        "nodeid": "tests/test_kitty.py::test_get_kitty_windows_json_parsing",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": null,
+        "nodeid": "tests/test_kitty.py::test_get_kitty_windows_json_decode_error",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": null,
+        "nodeid": "tests/test_kitty.py::test_get_kitty_windows_nonzero_return",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": null,
+        "nodeid": "tests/test_kitty.py::test_get_kitty_windows_subprocess_error",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": null,
+        "nodeid": "tests/test_config.py::test_get_xdg_config_dir",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": null,
+        "nodeid": "tests/test_config.py::test_get_xdg_cache_dir_default",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": null,
+        "nodeid": "tests/test_config.py::test_get_session_file",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": null,
+        "nodeid": "tests/test_config.py::test_get_xdg_cache_dir",
+        "outcome": "passed"
+      },
+      {
+        "duration_s": null,
         "nodeid": "tests/test_catherd.py::test_dummy",
         "outcome": "passed"
       }
     ]
   },
-  "run_id": "20260108T035749Z_384dcef8685a",
+  "run_id": "20260108T040304Z_dc35e0caf9f8",
   "schema_version": 1,
   "tag": "local",
-  "timestamp_utc": "2026-01-08T03:57:49Z"
+  "timestamp_utc": "2026-01-08T04:03:04Z"
 }

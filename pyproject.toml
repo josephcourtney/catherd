@@ -17,7 +17,12 @@
   ]
   requires-python = ">=3.12,<3.14"
   dependencies = [
-  ]
+  "click>=8.3.1",
+]
+
+  [project.scripts]
+    catherd = "catherd.cli:main"
+
 
 [dependency-groups]
   dev = [
