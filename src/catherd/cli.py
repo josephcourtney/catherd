@@ -52,21 +52,25 @@ def get_shell_info(force_shell: str | None = None) -> str:
 def main():
     """catherd: herd your Kitty windows and Atuin history."""
     # default to `show` if no subcommand given
-    if not hasattr(main, "_called") and not click.get_current_context().invoked_subcommand:
+    if (
+        not main.__dict__.get("default_show_forwarded", False)
+        and not click.get_current_context().invoked_subcommand
+    ):
         click.get_current_context().invoked_subcommand = "show"
         click.get_current_context().forward(show)
-    main._called = True
+    main.__dict__["default_show_forwarded"] = True
 
 
 @main.command()
 @click.option("-v", "--verbose", is_flag=True, help="Show verbose/debug output")
 @click.option("--json", "as_json", is_flag=True, help="Output in JSON format")
-def show(*, verbose: bool = False, as_json: bool = False) -> None:
+def show(*, verbose: bool, as_json: bool) -> None:
     """Show each open Kitty window/tab and its last Atuin command."""
     # pre-flight: require KITTY_WINDOW_ID + ATUIN_SESSION
     if not (os.environ.get("KITTY_WINDOW_ID") and os.environ.get("ATUIN_SESSION")):
         msg = "Atuin/Kitty sync snippet is not active in this shell; run 'catherd doctor' to diagnose."
         raise click.ClickException(msg)
+
     windows = get_kitty_windows(verbose=verbose)
     if windows is None:
         click.echo("[error] Could not get Kitty windows. See error messages above.", err=True)
@@ -75,11 +79,13 @@ def show(*, verbose: bool = False, as_json: bool = False) -> None:
         click.echo("[warning] No Kitty windows/tabs found. Is Kitty running?", err=True)
         return
 
-    click.secho(f"{'Kitty WinID':>10} | {'TabID':>5} | {'Title':<25} | Last Command", fg="cyan", bold=True)
-    click.secho("-" * 80, fg="cyan")
+    if not as_json:
+        click.secho(
+            f"{'Kitty WinID':>10} | {'TabID':>5} | {'Title':<25} | Last Command", fg="cyan", bold=True
+        )
+        click.secho("-" * 80, fg="cyan")
 
-    if as_json:
-        out = []
+    out: list[dict[str, str | None]] = []
 
     for win in windows:
         session_id = get_atuin_session_for_window(win.id, verbose=verbose)
@@ -88,8 +94,9 @@ def show(*, verbose: bool = False, as_json: bool = False) -> None:
             if session_id
             else "(no session info)"
         )
-        click.echo(f"{win.id:>10} | {win.tab or '':>5} | {win.title[:25]:<25} | {last_cmd}")
-        if as_json:
+        if not as_json:
+            click.echo(f"{win.id:>10} | {win.tab or '':>5} | {win.title[:25]:<25} | {last_cmd}")
+        else:
             out.append({
                 "window_id": win.id,
                 "tab": win.tab,
@@ -103,7 +110,7 @@ def show(*, verbose: bool = False, as_json: bool = False) -> None:
 @main.command("install")
 @click.option("--shell", "force_shell", help="Force install for this shell (zsh, bash, fish, csh)")
 @click.option("--dry-run", is_flag=True)
-def install_shell_snippet(force_shell: str | None = None, dry_run: bool = False) -> None:
+def install_shell_snippet(*, force_shell: str | None = None, dry_run: bool) -> None:
     """Install the Atuin/Kitty session sync snippet to your shell startup file (idempotent)."""
     try:
         shell = get_shell_info(force_shell)
@@ -144,7 +151,7 @@ def install_shell_snippet(force_shell: str | None = None, dry_run: bool = False)
 @main.command("uninstall")
 @click.option("--shell", "force_shell", help="Force uninstall for this shell (zsh, bash, fish, csh)")
 @click.option("--dry-run", is_flag=True)
-def uninstall(force_shell: str | None = None, dry_run: bool = False) -> None:
+def uninstall(*, force_shell: str | None = None, dry_run: bool) -> None:
     """Remove the Atuin/Kitty session sync snippet from your shell startup file."""
     shell = get_shell_info(force_shell)
     rc_path = get_shell_rc_path(shell)

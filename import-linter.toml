@@ -1,0 +1,95 @@
+[tool.importlinter]
+  root_package              = "catherd"
+  include_external_packages = false
+
+  # Examples
+  # # -----------------------
+  # # core: may not import other internal borh packages
+  # # -----------------------
+  # [[tool.importlinter.contracts]]
+  #   name = "core may not import algebra/algorithms/runtime/api (but may use reals)"
+  #   type = "forbidden"
+  #   source_modules = ["borh.core"]
+  #   forbidden_modules = [
+  #     "borh.algebra",
+  #     "borh.algorithms",
+  #     "borh.runtime",
+  #     "borh.api",
+  #   ]
+  #
+  # # -----------------------
+  # # algebra: may import only core (and itself)
+  # # -----------------------
+  # [[tool.importlinter.contracts]]
+  #   name = "algebra may not import algorithms/runtime/api"
+  #   type = "forbidden"
+  #   source_modules = ["borh.algebra"]
+  #   forbidden_modules = [
+  #     "borh.algorithms",
+  #     "borh.runtime",
+  #     "borh.api",
+  #   ]
+  #
+  # # -----------------------
+  # # reals: may import only core + algebra (and itself)
+  # # -----------------------
+  # [[tool.importlinter.contracts]]
+  #   name = "reals may not import algorithms/api"
+  #   type = "forbidden"
+  #   source_modules = ["borh.reals"]
+  #   forbidden_modules = [
+  #     "borh.algorithms",
+  #     "borh.api",
+  #   ]
+  #
+  # # -----------------------
+  # # algorithms: may import only core + algebra + reals (and itself)
+  # # -----------------------
+  # [[tool.importlinter.contracts]]
+  #   name = "algorithms may not import api"
+  #   type = "forbidden"
+  #   source_modules = ["borh.algorithms"]
+  #   forbidden_modules = [
+  #     "borh.api",
+  #   ]
+  #
+  # # -----------------------
+  # # runtime: must not import the facade (api)
+  # # -----------------------
+  # [[tool.importlinter.contracts]]
+  #   name              = "runtime may not import api"
+  #   type              = "forbidden"
+  #   source_modules    = ["borh.runtime"]
+  #   forbidden_modules = ["borh.api"]
+  #
+  # # -----------------------
+  # # global: no internal imports of borh.api (facade is outbound-only)
+  # # -----------------------
+  # [[tool.importlinter.contracts]]
+  #   name = "No internal imports of borh.api"
+  #   type = "forbidden"
+  #   source_modules = [
+  #     "borh.core",
+  #     "borh.algebra",
+  #     "borh.reals",
+  #     "borh.algorithms",
+  #     "borh.runtime",
+  #   ]
+  #   forbidden_modules = ["borh.api"]
+  #
+  # # -----------------------
+  # # global: forbid `import borh` (package root module) from internal code
+  # # Implemented with as_packages=false to avoid shared-descendants errors.
+  # # -----------------------
+  # [[tool.importlinter.contracts]]
+  #   name = "No internal imports of package root module `borh`"
+  #   type = "forbidden"
+  #   as_packages = false
+  #   source_modules = [
+  #     "borh.core.*",
+  #     "borh.algebra.*",
+  #     "borh.reals.*",
+  #     "borh.algorithms.*",
+  #     "borh.runtime.*",
+  #   ]
+  #   forbidden_modules = ["borh"]

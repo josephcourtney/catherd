@@ -3,16 +3,16 @@ import click.testing as _ct
 import pytest
 from click.testing import CliRunner
 
+import catherd.cli
+
 _orig_init = _ct.CliRunner.__init__
 
 
-def _patched_init(self, *args, mix_stderr=False, **kwargs):
+def _patched_init(self, *args, **kwargs):
     _orig_init(self, *args, mix_stderr=False, **kwargs)
 
 
 _ct.CliRunner.__init__ = _patched_init
-
-import catherd.cli
 
 MAX_OUTPUT_LINES = 32
 
