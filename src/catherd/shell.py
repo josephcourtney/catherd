@@ -1,11 +1,36 @@
 import os
 from pathlib import Path
+from typing import Final
 
-SHELL_SNIPPET_FILENAMES = {
-    "zsh": "catherd_rc_snippet.zsh",
-    "bash": "catherd_rc_snippet.bash",
-    "fish": "catherd_rc_snippet.fish",
-    "csh": "catherd_rc_snippet.csh",
+_EMBEDDED_SNIPPETS: Final[dict[str, str]] = {
+    "bash": (
+        'if [[ -n "$KITTY_WINDOW_ID" && -n "$ATUIN_SESSION" ]]; then\n'
+        '  mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}/catherd"\n'
+        '  echo "$ATUIN_SESSION $KITTY_WINDOW_ID" > '
+        '"${XDG_CACHE_HOME:-$HOME/.cache}/catherd/atuin_kitty_${KITTY_WINDOW_ID}"\n'
+        "fi\n"
+    ),
+    "zsh": (
+        'if [[ -n "$KITTY_WINDOW_ID" && -n "$ATUIN_SESSION" ]]; then\n'
+        '    mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}/catherd"\n'
+        '    echo "$ATUIN_SESSION $KITTY_WINDOW_ID" > '
+        '"${XDG_CACHE_HOME:-$HOME/.cache}/catherd/atuin_kitty_${KITTY_WINDOW_ID}"\n'
+        "fi\n"
+    ),
+    "fish": (
+        "if set -q KITTY_WINDOW_ID; and set -q ATUIN_SESSION\n"
+        '    mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}/catherd"\n'
+        '    echo "$ATUIN_SESSION $KITTY_WINDOW_ID" > '
+        '"${XDG_CACHE_HOME:-$HOME/.cache}/catherd/atuin_kitty_${KITTY_WINDOW_ID}"\n'
+        "end\n"
+    ),
+    "csh": (
+        "if ($?KITTY_WINDOW_ID && $?ATUIN_SESSION) then\n"
+        '    mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}/catherd"\n'
+        '    echo "$ATUIN_SESSION $KITTY_WINDOW_ID" > '
+        '"${XDG_CACHE_HOME:-$HOME/.cache}/catherd/atuin_kitty_${KITTY_WINDOW_ID}"\n'
+        "endif\n"
+    ),
 }
 
 
@@ -41,10 +66,7 @@ def load_snippet_for_shell(shell: str) -> str:
 
     Raises ValueError if the shell is unknown.
     """
-    if shell not in SHELL_SNIPPET_FILENAMES:
+    if shell not in _EMBEDDED_SNIPPETS:
         msg = f"Unknown shell: {shell!r}"
         raise ValueError(msg)
-    snippet_file = Path(__file__).parent / SHELL_SNIPPET_FILENAMES[shell]
-    if not snippet_file.exists():
-        return "# (no snippet for this shell)"
-    return snippet_file.read_text(encoding="utf-8")
+    return _EMBEDDED_SNIPPETS[shell]

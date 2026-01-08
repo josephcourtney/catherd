@@ -2,13 +2,14 @@ import json
 import os
 import shutil
 from pathlib import Path
+from typing import Final
 
 import click
 
 from .atuin import get_last_command_for_atuin_session
 from .config import get_session_file
 from .kitty import KittyWindow, get_kitty_windows
-from .shell import SHELL_SNIPPET_FILENAMES, get_shell_rc_path, load_snippet_for_shell
+from .shell import get_shell_rc_path, load_snippet_for_shell
 
 
 def is_sync_active_in_this_shell() -> bool:
@@ -48,17 +49,21 @@ def get_shell_info(force_shell: str | None = None) -> str:
     return shell
 
 
-@click.group()
-def main():
+@click.group(invoke_without_command=True)
+@click.pass_context
+def main(ctx: click.Context) -> None:
     """catherd: herd your Kitty windows and Atuin history."""
-    # default to `show` if no subcommand given
-    if (
-        not main.__dict__.get("default_show_forwarded", False)
-        and not click.get_current_context().invoked_subcommand
-    ):
-        click.get_current_context().invoked_subcommand = "show"
-        click.get_current_context().forward(show)
-    main.__dict__["default_show_forwarded"] = True
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(show)
+
+
+_MISSING_COMMAND_SENTINELS: Final[set[str]] = {"(no history db)", "(no command)", "(sqlite error)"}
+
+
+def _is_missing_or_error_command(last_cmd: str | None) -> bool:
+    if not last_cmd:
+        return True
+    return last_cmd in _MISSING_COMMAND_SENTINELS
 
 
 @main.command()
@@ -66,10 +71,14 @@ def main():
 @click.option("--json", "as_json", is_flag=True, help="Output in JSON format")
 def show(*, verbose: bool, as_json: bool) -> None:
     """Show each open Kitty window/tab and its last Atuin command."""
-    # pre-flight: require KITTY_WINDOW_ID + ATUIN_SESSION
-    if not (os.environ.get("KITTY_WINDOW_ID") and os.environ.get("ATUIN_SESSION")):
-        msg = "Atuin/Kitty sync snippet is not active in this shell; run 'catherd doctor' to diagnose."
-        raise click.ClickException(msg)
+    # soft preflight: warn, but degrade gracefully
+    if not (os.environ.get("KITTY_WINDOW_ID") and os.environ.get("ATUIN_SESSION")) and not as_json:
+        click.secho(
+            "[WARN] Atuin/Kitty sync env vars are not set in this shell; results may be incomplete. "
+            "Run 'catherd doctor' to diagnose.",
+            fg="yellow",
+            err=True,
+        )
 
     windows = get_kitty_windows(verbose=verbose)
     if windows is None:
@@ -134,11 +143,19 @@ def install_shell_snippet(*, force_shell: str | None = None, dry_run: bool) -> N
                 fg="yellow",
                 err=dry_run,
             )
+        elif dry_run:
+            click.echo(f"[DRY-RUN] Would create {rc_path} and append snippet", err=True)
+            click.secho("[OK] Dry-run complete; no changes made.", fg="green")
+            return
+
+        if dry_run:
+            click.echo(f"[DRY-RUN] Would append snippet to {rc_path}", err=True)
+            click.secho("[OK] Dry-run complete; no changes made.", fg="green")
+            return
+
         with rc_path.open("a", encoding="utf-8") as f:
-            if dry_run:
-                click.echo(f"[DRY-RUN] Would append snippet to {rc_path}", err=True)
-            else:
-                f.write("\n\n" + snippet_block + "\n")
+            f.write("\n\n" + snippet_block + "\n")
+
         click.secho(f"[OK] Snippet added to {rc_path}", fg="green")
         click.secho(
             "You must restart Kitty tabs/windows or re-source your shell for the change to take effect.",
@@ -162,7 +179,7 @@ def uninstall(*, force_shell: str | None = None, dry_run: bool) -> None:
         msg = f"No rc file found at {rc_path}"
         raise click.ClickException(msg)
 
-    lines = rc_path.read_text().splitlines()
+    lines = rc_path.read_text(encoding="utf-8").splitlines()
     inside = False
     new = []
     removed = False
@@ -187,18 +204,18 @@ def uninstall(*, force_shell: str | None = None, dry_run: bool) -> None:
 
     backup = rc_path.with_suffix(rc_path.suffix + ".catherd.uninstall.bak")
     shutil.copyfile(rc_path, backup)
-    rc_path.write_text("\n".join(new))
+    rc_path.write_text("\n".join(new), encoding="utf-8")
     click.secho(f"[OK] Snippet removed from {rc_path}; backup at {backup}", fg="green")
 
 
 def print_shell_snippet(shell: str) -> None:
-    if shell in SHELL_SNIPPET_FILENAMES:
-        rc_path = get_shell_rc_path(shell) or "<your-shell-rc>"
+    try:
+        rc_path = get_shell_rc_path(shell)
         snippet = load_snippet_for_shell(shell)
         click.echo(f"Add this to your shell rc file ({rc_path}):\n")
         click.echo(snippet)
         click.echo("\nOr run 'catherd install' to do it automatically.")
-    else:
+    except ValueError:
         click.echo(
             "[INFO] Unknown shell. See the README or scripts/catherd_rc_snippet.* for setup instructions.\n"
         )
@@ -231,7 +248,7 @@ def _collect_kitty_session_diagnostics(
             else:
                 session_id = content.split()[0]
                 last_cmd = get_last_command_for_atuin_session(session_id, verbose=verbose)
-                if not last_cmd or last_cmd.startswith("(atuin error)"):
+                if _is_missing_or_error_command(last_cmd):
                     missing_command.append((win, content, last_cmd))
                 else:
                     ok.append((win, content, last_cmd))

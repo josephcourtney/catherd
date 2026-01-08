@@ -37,6 +37,7 @@ def test_show_prints_commands(mock_last, mock_sess, mock_win):
     mock_sess.side_effect = ["sessA", "sessB"]
     mock_last.side_effect = ["cmdA", "cmdB"]
     result = CliRunner().invoke(cli.main, ["show"])
+    # show prints header even if sync env vars are missing
     assert "Kitty WinID" in result.output
     assert "cmdA" in result.output
     assert "cmdB" in result.output
@@ -95,9 +96,10 @@ def test_preflight_only_on_show(tmp_path, monkeypatch):
     monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
     monkeypatch.delenv("ATUIN_SESSION", raising=False)
 
-    show_result = CliRunner().invoke(cli.main, ["show"])
-    assert show_result.exit_code == 1
-    assert "run 'catherd doctor'" in show_result.stderr
+    with patch("catherd.cli.get_kitty_windows", return_value=[]):
+        show_result = CliRunner().invoke(cli.main, ["show"])
+    assert show_result.exit_code == 0
+    assert "Run 'catherd doctor'" in show_result.stderr or "diagnose" in show_result.stderr
 
     monkeypatch.setenv("HOME", str(tmp_path))
     rc = tmp_path / ".bashrc"
@@ -258,7 +260,7 @@ def test__collect_kitty_session_diagnostics_branches(tmp_path, monkeypatch):
 
     def fake_last(session_id, *, verbose=False):
         if session_id == "sess_c" and verbose:
-            return "(atuin error)"
+            return "(sqlite error)"
         return "cmd"
 
     monkeypatch.setattr(cli, "get_last_command_for_atuin_session", fake_last)
@@ -283,7 +285,7 @@ def test_print_kitty_session_diagnostics_all_branches(monkeypatch, capsys):
     ok = [(w_ok, "sessid", "cmd")]
     missing_file = [w_missing]
     corrupt_file = [(w_corrupt, "")]
-    missing_command = [(w_cmd, "sessid", "(atuin error)")]
+    missing_command = [(w_cmd, "sessid", "(sqlite error)")]
 
     monkeypatch.setattr(
         cli,
