@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 from pathlib import Path
@@ -50,12 +51,22 @@ def get_shell_info(force_shell: str | None = None) -> str:
 @click.group()
 def main():
     """catherd: herd your Kitty windows and Atuin history."""
+    # default to `show` if no subcommand given
+    if not hasattr(main, "_called") and not click.get_current_context().invoked_subcommand:
+        click.get_current_context().invoked_subcommand = "show"
+        click.get_current_context().forward(show)
+    main._called = True
 
 
 @main.command()
 @click.option("-v", "--verbose", is_flag=True, help="Show verbose/debug output")
-def show(*, verbose: bool = False) -> None:
+@click.option("--json", "as_json", is_flag=True, help="Output in JSON format")
+def show(*, verbose: bool = False, as_json: bool = False) -> None:
     """Show each open Kitty window/tab and its last Atuin command."""
+    # pre-flight: require KITTY_WINDOW_ID + ATUIN_SESSION
+    if not (os.environ.get("KITTY_WINDOW_ID") and os.environ.get("ATUIN_SESSION")):
+        msg = "Atuin/Kitty sync snippet is not active in this shell; run 'catherd doctor' to diagnose."
+        raise click.ClickException(msg)
     windows = get_kitty_windows(verbose=verbose)
     if windows is None:
         click.echo("[error] Could not get Kitty windows. See error messages above.", err=True)
@@ -64,8 +75,12 @@ def show(*, verbose: bool = False) -> None:
         click.echo("[warning] No Kitty windows/tabs found. Is Kitty running?", err=True)
         return
 
-    click.echo(f"{'Kitty WinID':>10} | {'TabID':>5} | {'Title':<25} | Last Command")
-    click.echo("-" * 80)
+    click.secho(f"{'Kitty WinID':>10} | {'TabID':>5} | {'Title':<25} | Last Command", fg="cyan", bold=True)
+    click.secho("-" * 80, fg="cyan")
+
+    if as_json:
+        out = []
+
     for win in windows:
         session_id = get_atuin_session_for_window(win.id, verbose=verbose)
         last_cmd = (
@@ -74,11 +89,21 @@ def show(*, verbose: bool = False) -> None:
             else "(no session info)"
         )
         click.echo(f"{win.id:>10} | {win.tab or '':>5} | {win.title[:25]:<25} | {last_cmd}")
+        if as_json:
+            out.append({
+                "window_id": win.id,
+                "tab": win.tab,
+                "title": win.title,
+                "last_command": last_cmd,
+            })
+    if as_json:
+        click.echo(json.dumps(out, indent=2))
 
 
 @main.command("install")
 @click.option("--shell", "force_shell", help="Force install for this shell (zsh, bash, fish, csh)")
-def install_shell_snippet(force_shell: str | None = None) -> None:
+@click.option("--dry-run", is_flag=True)
+def install_shell_snippet(force_shell: str | None = None, dry_run: bool = False) -> None:
     """Install the Atuin/Kitty session sync snippet to your shell startup file (idempotent)."""
     try:
         shell = get_shell_info(force_shell)
@@ -90,23 +115,73 @@ def install_shell_snippet(force_shell: str | None = None) -> None:
             + load_snippet_for_shell(shell).rstrip()
             + "\n# end catherd atuin/kitty sync\n"
         )
-
         if rc_path.exists():
             contents = rc_path.read_text(encoding="utf-8")
             if snippet_marker in contents:
                 click.secho(f"[OK] Snippet already installed in {rc_path}", fg="green")
                 return
-            shutil.copyfile(rc_path, rc_path.with_suffix(rc_path.suffix + ".catherd.bak"))
+            if not dry_run:
+                shutil.copyfile(rc_path, rc_path.with_suffix(rc_path.suffix + ".catherd.bak"))
+            click.secho(
+                f"[INFO] Backed up {rc_path} → {rc_path.with_suffix(rc_path.suffix + '.catherd.bak')}",
+                fg="yellow",
+                err=dry_run,
+            )
         with rc_path.open("a", encoding="utf-8") as f:
-            f.write("\n\n" + snippet_block + "\n")
+            if dry_run:
+                click.echo(f"[DRY-RUN] Would append snippet to {rc_path}", err=True)
+            else:
+                f.write("\n\n" + snippet_block + "\n")
         click.secho(f"[OK] Snippet added to {rc_path}", fg="green")
         click.secho(
             "You must restart Kitty tabs/windows or re-source your shell for the change to take effect.",
             fg="yellow",
         )
     except ValueError as err:
-        click.secho(f"[FAIL] {err}", fg="red")
+        raise click.ClickException(str(err)) from err
+
+
+@main.command("uninstall")
+@click.option("--shell", "force_shell", help="Force uninstall for this shell (zsh, bash, fish, csh)")
+@click.option("--dry-run", is_flag=True)
+def uninstall(force_shell: str | None = None, dry_run: bool = False) -> None:
+    """Remove the Atuin/Kitty session sync snippet from your shell startup file."""
+    shell = get_shell_info(force_shell)
+    rc_path = get_shell_rc_path(shell)
+    marker = "# catherd atuin/kitty sync snippet"
+    end_marker = "# end catherd atuin/kitty sync"
+
+    if not rc_path.exists():
+        msg = f"No rc file found at {rc_path}"
+        raise click.ClickException(msg)
+
+    lines = rc_path.read_text().splitlines()
+    inside = False
+    new = []
+    removed = False
+    for ln in lines:
+        if ln.strip() == marker:
+            inside = True
+            removed = True
+            continue
+        if inside and ln.strip() == end_marker:
+            inside = False
+            continue
+        if not inside:
+            new.append(ln)
+
+    if not removed:
+        click.secho(f"[WARN] No snippet found in {rc_path}", fg="yellow")
         return
+
+    if dry_run:
+        click.echo(f"[DRY-RUN] Would remove snippet from {rc_path}", err=True)
+        return
+
+    backup = rc_path.with_suffix(rc_path.suffix + ".catherd.uninstall.bak")
+    shutil.copyfile(rc_path, backup)
+    rc_path.write_text("\n".join(new))
+    click.secho(f"[OK] Snippet removed from {rc_path}; backup at {backup}", fg="green")
 
 
 def print_shell_snippet(shell: str) -> None:
@@ -226,7 +301,7 @@ def doctor(*, verbose: bool = False) -> None:
         click.secho(
             "[FAIL] No Kitty windows found. Is Kitty running and are there open windows/tabs?", fg="red"
         )
-        return
+        raise SystemExit(1)
 
     print_kitty_session_diagnostics(windows, verbose=verbose)
 

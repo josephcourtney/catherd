@@ -1,5 +1,16 @@
+# ensure separate stderr capture for CliRunner everywhere
+import click.testing as _ct
 import pytest
 from click.testing import CliRunner
+
+_orig_init = _ct.CliRunner.__init__
+
+
+def _patched_init(self, *args, mix_stderr=False, **kwargs):
+    _orig_init(self, *args, mix_stderr=False, **kwargs)
+
+
+_ct.CliRunner.__init__ = _patched_init
 
 import catherd.cli
 

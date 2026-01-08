@@ -1,3 +1,5 @@
+import json
+import os
 from unittest.mock import patch
 
 from click.testing import CliRunner
@@ -11,16 +13,26 @@ from catherd.cli import (
 from catherd.kitty import KittyWindow
 
 
+def setup_sync_env(tmp_path, monkeypatch):
+    """Helper to simulate a valid KITTY_WINDOW_ID + ATUIN_SESSION setup."""
+    # write a fake session file
+    monkeypatch.setenv("KITTY_WINDOW_ID", "1")
+    monkeypatch.setenv("ATUIN_SESSION", "s")
+    sf = tmp_path / "atuin_kitty_1"
+    sf.write_text("s 1")
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+
+
 def test_main_entrypoint_exits_zero():
-    runner = CliRunner()
-    result = runner.invoke(cli.main, ["--help"])
+    result = CliRunner().invoke(cli.main, ["--help"])
     assert result.exit_code == 0
 
 
 @patch("catherd.cli.get_kitty_windows")
 @patch("catherd.cli.get_atuin_session_for_window")
 @patch("catherd.cli.get_last_command_for_atuin_session")
-def test_show_prints_commands(mock_last, mock_sess, mock_win):
+def test_show_prints_commands(mock_last, mock_sess, mock_win, monkeypatch):
+    setup_sync_env(None, monkeypatch)
     mock_win.return_value = [
         KittyWindow(id="a", tab="t1", title="foo"),
         KittyWindow(id="b", tab="t2", title="bar"),
@@ -35,9 +47,10 @@ def test_show_prints_commands(mock_last, mock_sess, mock_win):
 
 @patch("catherd.cli.get_kitty_windows", return_value=[])
 def test_show_empty_warns(mock_win):
-    _ = mock_win
-    result = CliRunner().invoke(cli.main, ["show"])
-    assert "No Kitty windows/tabs found" in result.output
+    monkeypatch.setenv("KITTY_WINDOW_ID", "1")
+    monkeypatch.setenv("ATUIN_SESSION", "s")
+    res = CliRunner().invoke(cli.main, ["show"])
+    assert "No Kitty windows/tabs found" in res.stderr
 
 
 @patch("catherd.cli.get_kitty_windows", return_value=None)
@@ -64,12 +77,11 @@ def test_install_shell_snippet_unsupported(monkeypatch):
 
 
 @patch("catherd.cli.get_kitty_windows", return_value=None)
-@patch("catherd.cli.is_sync_active_in_this_shell", return_value=False)
-def test_doctor_no_windows(mock_sync, mock_win):
-    _ = mock_sync
-    _ = mock_win
-    out = CliRunner().invoke(cli.main, ["doctor"]).output
-    assert "No Kitty windows found" in out
+def test_show_none_warns(mock_win, monkeypatch):
+    monkeypatch.setenv("KITTY_WINDOW_ID", "1")
+    monkeypatch.setenv("ATUIN_SESSION", "s")
+    res = CliRunner().invoke(cli.main, ["show"])
+    assert "Could not get Kitty windows" in res.stderr
 
 
 @patch("catherd.cli.get_kitty_windows")
@@ -100,9 +112,9 @@ def test_is_sync_success(monkeypatch, tmp_path):
     assert cli.is_sync_active_in_this_shell()
 
 
-def test_main_invocation(monkeypatch, runner):
+def test_main_invocation(monkeypatch):
     _ = monkeypatch
-    result = runner.invoke(["-m", "catherd"])
+    result = CliRunner().invoke(["-m", "catherd"])
     assert result.exit_code == 0
 
 
@@ -115,8 +127,7 @@ def test_show_env_verbose(monkeypatch):
 
     monkeypatch.setattr(cli, "get_kitty_windows", lambda *_args, **_kwargs: [FakeWin()])
     monkeypatch.setattr(cli, "get_atuin_session_for_window", lambda *_args, **_kwargs: None)
-    runner = CliRunner()
-    result = runner.invoke(cli.main, ["show", "-v"])
+    result = CliRunner().invoke(cli.main, ["show", "-v"])
     assert "no session info" in result.output
 
 
@@ -143,8 +154,7 @@ def test__collect_kitty_session_diagnostics(monkeypatch, tmp_path):
 def test_doctor_all(monkeypatch):
     monkeypatch.setattr(cli, "get_kitty_windows", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(cli, "is_sync_active_in_this_shell", lambda: False)
-    runner = CliRunner()
-    result = runner.invoke(cli.main, ["doctor"])
+    result = CliRunner().invoke(cli.main, ["doctor"])
     assert "No Kitty windows found" in result.output
 
 
@@ -246,8 +256,7 @@ def test_install_shell_snippet_already_installed(tmp_path, monkeypatch):
     fake_bashrc = tmp_path / ".bashrc"
     fake_bashrc.write_text(rc.read_text())
 
-    runner = CliRunner()
-    result = runner.invoke(cli.main, ["install", "--shell", "bash"])
+    result = CliRunner().invoke(cli.main, ["install", "--shell", "bash"])
     assert "[OK] Snippet already installed" in result.output
 
 
@@ -290,3 +299,105 @@ def test__collect_kitty_session_diagnostics_branches(tmp_path, monkeypatch):
     assert missing_cmd[0][0] == w_nocommand
     assert len(ok) == 1
     assert ok[0][0] == w_ok
+
+
+def test_default_subcommand_is_show(tmp_path, monkeypatch):
+    setup_sync_env(tmp_path, monkeypatch)
+    # stub out get_kitty_windows so show runs but finds no windows
+    monkeypatch.setattr(cli, "get_kitty_windows", lambda **kw: [])
+    res = CliRunner().invoke(cli.main, [])
+    assert res.exit_code == 0
+    # because no windows, it should warn us on stderr
+    assert "No Kitty windows/tabs found" in res.stderr
+
+
+def test_json_output(tmp_path, monkeypatch):
+    setup_sync_env(tmp_path, monkeypatch)
+    # stub a single window
+
+    class W:
+        id = "1"
+        tab = "t"
+        title = "T"
+
+    monkeypatch.setattr(cli, "get_kitty_windows", lambda **kw: [W()])
+    monkeypatch.setattr(cli, "get_atuin_session_for_window", lambda win, **kw: "s")
+    monkeypatch.setattr(cli, "get_last_command_for_atuin_session", lambda sess, **kw: "ls")
+    res = CliRunner().invoke(cli.main, ["show", "--json"])
+    assert res.exit_code == 0
+    data = json.loads(res.output)
+    assert isinstance(data, list)
+    assert len(data) == 1
+    item = data[0]
+    assert item["window_id"] == "1"
+    assert item["tab"] == "t"
+    assert item["title"] == "T"
+    assert item["last_command"] == "ls"
+
+
+def test_preflight_only_on_show(monkeypatch):
+    # no KITTY_WINDOW_ID or ATUIN_SESSION
+    monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
+    monkeypatch.delenv("ATUIN_SESSION", raising=False)
+    # show should error
+    res = CliRunner().invoke(cli.main, ["show"])
+    assert res.exit_code == 1
+    assert "run 'catherd doctor'" in res.stderr
+
+    # install should still run (no pre-flight)
+    # create a fake rc file
+    tmp = os.getcwd()  # not really used here
+    monkeypatch.setenv("HOME", tmp)
+    with CliRunner().isolated_filesystem():
+        with open(".bashrc", "w", encoding="utf-8") as f:
+            f.write("")
+        res2 = CliRunner().invoke(cli.main, ["install", "--shell", "bash", "--dry-run"])
+    assert res2.exit_code == 0
+    assert "DRY-RUN" in res2.stderr
+
+
+def test_install_dry_run(tmp_path, monkeypatch):
+    # ensure install can dry-run without touching the file
+    rc = tmp_path / ".bashrc"
+    rc.write_text("orig")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    res = CliRunner().invoke(cli.main, ["install", "--shell", "bash", "--dry-run"])
+    assert res.exit_code == 0
+    assert "DRY-RUN" in res.stderr or "Would append" in res.stderr
+    assert rc.read_text() == "orig"
+
+
+def test_uninstall_dry_run_and_remove(tmp_path, monkeypatch):
+    # prepare rc with snippet markers
+    content = "line1\n# catherd atuin/kitty sync snippet\nfoo\n# end catherd atuin/kitty sync\nline2"
+    rc = tmp_path / ".bashrc"
+    rc.write_text(content)
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    # dry-run mode
+    res = CliRunner().invoke(cli.main, ["uninstall", "--dry-run"])
+    assert res.exit_code == 0
+    assert "DRY-RUN" in res.stderr
+    # actual uninstall
+    res2 = CliRunner().invoke(cli.main, ["uninstall"])
+    assert res2.exit_code == 0
+    assert "Snippet removed" in res2.output
+    new = rc.read_text()
+    assert "catherd atuin/kitty" not in new
+    # backup file should exist
+    assert (tmp_path / ".bashrc.catherd.uninstall.bak").exists()
+
+
+def test_exit_code_on_unknown_shell_install(tmp_path, monkeypatch):
+    # unsupported shell should exit 1
+    res = CliRunner().invoke(cli.main, ["install", "--shell", "noshell"])
+    assert res.exit_code == 1
+    assert "Unknown shell" in res.stderr
+
+
+def test_errors_and_diagnostics_to_stderr(tmp_path, monkeypatch):
+    # uninstall when no rc file => ClickException routed to stderr
+    monkeypatch.setenv("HOME", str(tmp_path))
+    res = CliRunner().invoke(cli.main, ["uninstall"])
+    assert res.exit_code == 1
+    assert "No rc file found" in res.stderr
