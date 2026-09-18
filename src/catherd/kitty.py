@@ -5,7 +5,7 @@ import shutil
 import subprocess  # ruff: ignore[suspicious-subprocess-import]
 import sys
 from dataclasses import dataclass
-from typing import cast
+from typing import Literal, cast
 
 from .model import KittyState, OsWindow, Pane, Tab
 
@@ -174,6 +174,39 @@ class KittyOutputError(KittyClientError):
     """Raised when Kitty returns invalid JSON."""
 
 
+class KittyObjectNotFoundError(KittyClientError):
+    """Raised when an operation references a Kitty object absent from the snapshot."""
+
+    def __init__(self, kind: str, object_id: str) -> None:
+        super().__init__(f"{kind} {object_id!r} was not found")
+
+
+class KittyStateError(KittyClientError):
+    """Raised when a snapshot cannot support the requested operation."""
+
+
+def _require_os_window(state: KittyState, os_window_id: str) -> OsWindow:
+    os_window = state.find_os_window(os_window_id)
+    if os_window is None:
+        raise KittyObjectNotFoundError("OS window", os_window_id)
+    return os_window
+
+
+def _representative_tab_id(os_window: OsWindow) -> str:
+    for tab in os_window.tabs:
+        if tab.id is not None:
+            return tab.id
+    raise KittyStateError(f"OS window {os_window.id!r} has no addressable tab")
+
+
+def _representative_pane_id(os_window: OsWindow) -> str:
+    for tab in os_window.tabs:
+        for pane in tab.panes:
+            if pane.id:
+                return pane.id
+    raise KittyStateError(f"OS window {os_window.id!r} has no addressable pane")
+
+
 @dataclass(frozen=True, slots=True)
 class KittyClient:
     """Thin synchronous adapter around Kitty's supported remote-control CLI."""
@@ -188,20 +221,118 @@ class KittyClient:
             raise KittyNotFoundError
         return cls(executable=executable)
 
-    def read_state_json(self) -> str:
-        """Return raw JSON from kitty @ ls."""
-        command = (self.executable, "@", "ls")
+    def _run_remote(self, *args: str) -> str:
+        command = (self.executable, "@", *args)
         try:
-            result = subprocess.run(command, capture_output=True, text=True, check=False)  # ruff: ignore[subprocess-without-shell-equals-true]
+            result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
+                command,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
         except (FileNotFoundError, subprocess.SubprocessError) as exc:
             raise KittyInvocationError(command, exc) from exc
         if result.returncode != 0:
             raise KittyCommandError(command, result.returncode, result.stderr)
         return result.stdout
 
+    def read_state_json(self) -> str:
+        """Return raw JSON from kitty @ ls."""
+        return self._run_remote("ls")
+
     def snapshot(self) -> KittyState:
         """Read and parse the current Kitty hierarchy."""
         return _parse_kitty_state_json(self.read_state_json())
+
+    def focus_pane(self, pane_id: str) -> None:
+        """Focus a pane, switching tab and OS window if needed."""
+        self._run_remote("focus-window", "--match", f"id:{pane_id}")
+
+    def focus_tab(self, tab_id: str) -> None:
+        """Focus a tab and its active pane."""
+        self._run_remote("focus-tab", "--match", f"id:{tab_id}")
+
+    def focus_os_window(self, os_window_id: str) -> None:
+        """Focus an OS window via one of its panes."""
+        pane_id = _representative_pane_id(_require_os_window(self.snapshot(), os_window_id))
+        self.focus_pane(pane_id)
+
+    def rename_pane(self, pane_id: str, title: str) -> None:
+        """Set a pane title."""
+        self._run_remote("set-window-title", "--match", f"id:{pane_id}", title)
+
+    def rename_tab(self, tab_id: str, title: str) -> None:
+        """Set a tab title."""
+        self._run_remote("set-tab-title", "--match", f"id:{tab_id}", title)
+
+    def rename_os_window(self, os_window_id: str, title: str) -> None:
+        """Set an OS-window title via one of its panes."""
+        pane_id = _representative_pane_id(_require_os_window(self.snapshot(), os_window_id))
+        self._run_remote("set-os-window-title", "--match", f"id:{pane_id}", title)
+
+    def move_pane(self, pane_id: str, target_tab_id: str) -> None:
+        """Move a pane into an existing tab."""
+        self._run_remote(
+            "detach-window",
+            "--match",
+            f"id:{pane_id}",
+            "--target-tab",
+            f"id:{target_tab_id}",
+        )
+
+    def detach_pane_to_new_tab(self, pane_id: str) -> None:
+        """Move a pane into a new tab in the current OS window."""
+        self._run_remote("detach-window", "--match", f"id:{pane_id}", "--target-tab", "new")
+
+    def detach_pane_to_new_os_window(self, pane_id: str) -> None:
+        """Move a pane into a new OS window."""
+        self._run_remote("detach-window", "--match", f"id:{pane_id}")
+
+    def move_tab(self, tab_id: str, target_os_window_id: str) -> None:
+        """Move a tab into an existing OS window."""
+        target = _require_os_window(self.snapshot(), target_os_window_id)
+        target_tab_id = _representative_tab_id(target)
+        self._run_remote(
+            "detach-tab",
+            "--match",
+            f"id:{tab_id}",
+            "--target-tab",
+            f"id:{target_tab_id}",
+        )
+
+    def detach_tab_to_new_os_window(self, tab_id: str) -> None:
+        """Move a tab into a new OS window."""
+        self._run_remote("detach-tab", "--match", f"id:{tab_id}")
+
+    def reorder_pane(self, pane_id: str, direction: Literal["forward", "backward"]) -> None:
+        """Move a pane one sibling position, focusing it first as Kitty requires."""
+        self.focus_pane(pane_id)
+        action = "move_window_forward" if direction == "forward" else "move_window_backward"
+        self._run_remote("action", action)
+
+    def reorder_tab(self, tab_id: str, direction: Literal["forward", "backward"]) -> None:
+        """Move a tab one sibling position, focusing it first as Kitty requires."""
+        self.focus_tab(tab_id)
+        action = "move_tab_forward" if direction == "forward" else "move_tab_backward"
+        self._run_remote("action", action)
+
+    def merge_os_windows(self, source_os_window_id: str, target_os_window_id: str) -> None:
+        """Move every tab from one OS window into another."""
+        if source_os_window_id == target_os_window_id:
+            return
+        state = self.snapshot()
+        source = _require_os_window(state, source_os_window_id)
+        target = _require_os_window(state, target_os_window_id)
+        target_tab_id = _representative_tab_id(target)
+        for tab in source.tabs:
+            if tab.id is not None:
+                self._run_remote(
+                    "detach-tab",
+                    "--match",
+                    f"id:{tab.id}",
+                    "--target-tab",
+                    f"id:{target_tab_id}",
+                )
 
 
 def _parse_kitty_state_json(raw: str) -> KittyState:
