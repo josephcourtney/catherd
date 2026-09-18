@@ -563,8 +563,10 @@ def test_compact_hint_normalizes_and_truncates() -> None:
 
 @pytest.mark.small
 def test_shell_wrapper_is_omitted_from_pane_activity_hint() -> None:
+    location = _state().find_pane("2")
+    assert location is not None
     pane = replace(
-        _state().find_pane("2").pane,
+        location.pane,
         current_command=None,
         foreground_cmd="/Users/me/.local/bin/atuin-patched pty-proxy --shell /bin/zsh",
     )
