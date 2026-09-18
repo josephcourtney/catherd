@@ -338,6 +338,7 @@ class KittyTree(Tree[NodeRef]):
         Binding("k", "cursor_up", "Up", show=False),
         Binding("h", "collapse_or_parent", "Collapse", show=False),
         Binding("l", "expand_or_child", "Expand", show=False),
+        Binding("enter,f,F", "focus_kitty", "Focus"),
     ]
 
     def action_collapse_or_parent(self) -> None:
@@ -358,6 +359,9 @@ class KittyTree(Tree[NodeRef]):
             node.expand()
             return
         self.move_cursor(node.children[0])
+
+    def action_focus_kitty(self) -> None:
+        self.app.action_focus_selected()
 
 
 class VimOptionList(OptionList):
@@ -477,7 +481,6 @@ class KittyManagerApp(App[None]):
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("q", "quit", "Quit"),
-        Binding("enter,f,F", "focus_selected", "Focus", priority=True),
         Binding("r", "rename_selected", "Rename"),
         Binding("m", "move_selected", "Move"),
         Binding("M,shift+m", "merge_selected", "Merge"),
@@ -726,14 +729,23 @@ class KittyManagerApp(App[None]):
                 pane_ref,
             )
 
-    @staticmethod
-    def _schedule_cursor_restore(tree: KittyTree, node: TreeNode[NodeRef]) -> None:
+    def _schedule_cursor_restore(self, tree: KittyTree, node: TreeNode[NodeRef]) -> None:
         parent = node.parent
         while parent is not None:
             if parent.is_collapsed:
                 parent.expand()
             parent = parent.parent
-        tree.call_after_refresh(tree.move_cursor, node, animate=False)
+        ref = node.data
+        tree.call_after_refresh(self._restore_cursor_if_current, tree, node, ref)
+
+    def _restore_cursor_if_current(
+        self,
+        tree: KittyTree,
+        node: TreeNode[NodeRef],
+        ref: NodeRef | None,
+    ) -> None:
+        if ref is not None and self._logical_selection == ref:
+            tree.move_cursor(node, animate=False)
 
     async def refresh_state(self, preferred: NodeRef | None = None) -> None:
         """Reload Kitty state and redraw while preserving navigation state."""
