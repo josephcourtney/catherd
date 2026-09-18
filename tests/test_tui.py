@@ -159,7 +159,8 @@ async def test_tui_renders_hierarchy_and_selects_active_pane() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None)
 
-    async with app.run_test():
+    async with app.run_test() as pilot:
+        await pilot.pause()
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
         assert len(tree.root.children) == 2
         assert tree.cursor_node is not None
@@ -181,6 +182,7 @@ async def test_refresh_preserves_selection_and_reveals_it() -> None:
         os_windows[1] = replace(os_windows[1], title="renamed")
         backend.state = KittyState(tuple(os_windows))
         await app.refresh_state()
+        await pilot.pause()
 
         assert tree.cursor_node is not None
         assert tree.cursor_node.data == tab_ref
@@ -210,6 +212,7 @@ async def test_reorder_routes_to_backend_and_preserves_selection() -> None:
         tree.move_cursor(_find_node(tree, pane_ref))
         await pilot.press("shift+j")
         await app.workers.wait_for_complete()
+        await pilot.pause()
         assert tree.cursor_node is not None
         assert tree.cursor_node.data == pane_ref
 
@@ -241,7 +244,8 @@ async def test_rename_dialog_routes_to_backend() -> None:
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
         tree.move_cursor(_find_node(tree, NodeRef("pane", "2")))
         await pilot.press("r")
-        rename_input = app.query_one("#rename-input", Input)
+        await pilot.pause()
+        rename_input = app.screen.query_one("#rename-input", Input)
         rename_input.value = "test runner"
         await pilot.press("enter")
         await app.workers.wait_for_complete()
