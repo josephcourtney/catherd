@@ -548,6 +548,7 @@ class KittyManagerApp(App[None]):
 
     async def on_mount(self) -> None:
         await self.refresh_state()
+        self._tree().focus()
         if self.poll_interval is not None:
             self.set_interval(self.poll_interval, self._poll)
 
@@ -858,10 +859,11 @@ class KittyManagerApp(App[None]):
     def _complete_merge(self, source: NodeRef, destination: Destination | None) -> None:
         if destination is None or destination.id is None:
             return
-        target = NodeRef(destination.kind, destination.id)
         if source.kind == "tab" and destination.kind == "tab":
+            target = NodeRef("tab", destination.id)
             operation = partial(self.client.merge_tabs, source.id, destination.id)
         elif source.kind == "os_window" and destination.kind == "os_window":
+            target = NodeRef("os_window", destination.id)
             operation = partial(self.client.merge_os_windows, source.id, destination.id)
         else:
             self._status("That merge is not supported")
