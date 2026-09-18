@@ -9,7 +9,6 @@ from catherd import cli
 from catherd.cli import _collect_kitty_session_diagnostics, print_kitty_session_diagnostics
 from catherd.model import KittyState, OsWindow, Pane, Tab
 
-pytestmark = pytest.mark.small
 
 
 def _state(
@@ -54,11 +53,13 @@ def setup_sync_env(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
 
 
+@pytest.mark.small
 def test_main_entrypoint_exits_zero():
     result = CliRunner().invoke(cli.main, ["--help"])
     assert result.exit_code == 0
 
 
+@pytest.mark.small
 def test_tui_command(monkeypatch):
     calls = []
     monkeypatch.setattr(cli, "run_tui", lambda: calls.append("run"))
@@ -72,6 +73,7 @@ def test_tui_command(monkeypatch):
 @patch("catherd.cli.get_kitty_state")
 @patch("catherd.cli.get_atuin_session_for_window")
 @patch("catherd.cli.get_last_command_for_atuin_session")
+@pytest.mark.small
 def test_show_prints_commands(mock_last, mock_sess, mock_state):
     mock_state.return_value = _two_tab_state()
     mock_sess.side_effect = ["sessA", "sessB"]
@@ -82,18 +84,21 @@ def test_show_prints_commands(mock_last, mock_sess, mock_state):
     assert "cmdB" in result.output
 
 
+@pytest.mark.small
 def test_show_empty_warns():
     with patch("catherd.cli.get_kitty_state", return_value=KittyState(os_windows=())):
         result = CliRunner().invoke(cli.main, ["show"])
     assert "No Kitty windows/tabs found" in result.stderr
 
 
+@pytest.mark.small
 def test_show_none_warns():
     with patch("catherd.cli.get_kitty_state", return_value=None):
         result = CliRunner().invoke(cli.main, ["show"])
     assert "Could not get Kitty windows" in result.stderr
 
 
+@pytest.mark.medium
 def test_json_output(tmp_path, monkeypatch):
     setup_sync_env(tmp_path, monkeypatch)
     state = _state(Pane(id="1", title="T"))
@@ -112,6 +117,7 @@ def test_json_output(tmp_path, monkeypatch):
     assert item["last_command"] == "ls"
 
 
+@pytest.mark.medium
 def test_inspect_outputs_full_metadata(tmp_path, monkeypatch):
     session_file = tmp_path / "atuin_kitty_win"
     session_file.write_text("sessA win")
@@ -160,6 +166,7 @@ def test_inspect_outputs_full_metadata(tmp_path, monkeypatch):
     assert payload[0]["session_content"] == "sessA win"
 
 
+@pytest.mark.small
 def test_show_env_verbose(monkeypatch):
     state = _state(Pane(id="w", title="tit"))
     monkeypatch.setattr(cli, "get_kitty_state", lambda *_args, **_kwargs: state)
@@ -168,6 +175,7 @@ def test_show_env_verbose(monkeypatch):
     assert "(no command)" in result.output
 
 
+@pytest.mark.small
 def test_show_prefers_running_command(monkeypatch):
     state = _state(
         Pane(
@@ -189,6 +197,7 @@ def test_show_prefers_running_command(monkeypatch):
     assert payload[0]["current_command"] == "uv run pytest"
 
 
+@pytest.mark.medium
 def test_preflight_only_on_show(tmp_path, monkeypatch):
     monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
     monkeypatch.delenv("ATUIN_SESSION", raising=False)
@@ -206,6 +215,7 @@ def test_preflight_only_on_show(tmp_path, monkeypatch):
     assert "DRY-RUN" in dry_run.stderr
 
 
+@pytest.mark.medium
 def test_install_shell_snippet(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "get_shell_info", lambda *_args, **_kwargs: "bash")
     monkeypatch.setattr(cli, "load_snippet_for_shell", lambda *_args, **_kwargs: "# mock snippet")
@@ -216,6 +226,7 @@ def test_install_shell_snippet(monkeypatch, tmp_path):
         assert "Snippet added" in result.output or "already installed" in result.output
 
 
+@pytest.mark.small
 def test_install_shell_snippet_unsupported(monkeypatch):
     monkeypatch.setattr(cli, "get_shell_info", lambda *_args, **_kwargs: "badsh")
     result = CliRunner().invoke(cli.main, ["install"])
@@ -223,6 +234,7 @@ def test_install_shell_snippet_unsupported(monkeypatch):
     assert "Unknown shell" in result.stderr
 
 
+@pytest.mark.medium
 def test_install_shell_snippet_already_installed(tmp_path, monkeypatch):
     rc = tmp_path / "rc"
     rc.write_text("# catherd atuin/kitty sync snippet\n…")
@@ -233,6 +245,7 @@ def test_install_shell_snippet_already_installed(tmp_path, monkeypatch):
     assert "Snippet already installed" in result.output
 
 
+@pytest.mark.medium
 def test_install_dry_run(tmp_path, monkeypatch):
     rc = tmp_path / ".bashrc"
     rc.write_text("orig")
@@ -243,6 +256,7 @@ def test_install_dry_run(tmp_path, monkeypatch):
     assert rc.read_text() == "orig"
 
 
+@pytest.mark.medium
 def test_uninstall_dry_run_and_remove(tmp_path, monkeypatch):
     content = "line1\n# catherd atuin/kitty sync snippet\nfoo\n# end catherd atuin/kitty sync\nline2"
     rc = tmp_path / ".bashrc"
@@ -261,12 +275,14 @@ def test_uninstall_dry_run_and_remove(tmp_path, monkeypatch):
     assert (tmp_path / ".bashrc.catherd.uninstall.bak").exists()
 
 
+@pytest.mark.small
 def test_exit_code_on_unknown_shell_install():
     result = CliRunner().invoke(cli.main, ["install", "--shell", "noshell"])
     assert result.exit_code == 1
     assert "Unknown shell" in result.stderr
 
 
+@pytest.mark.medium
 def test_errors_and_diagnostics_to_stderr(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("SHELL", "/bin/bash")
@@ -276,6 +292,7 @@ def test_errors_and_diagnostics_to_stderr(tmp_path, monkeypatch):
 
 
 @patch("catherd.cli.get_kitty_state", return_value=KittyState(os_windows=()))
+@pytest.mark.medium
 def test_doctor_no_windows(mock_state):
     _ = mock_state
     result = CliRunner().invoke(cli.main, ["doctor"])
@@ -284,6 +301,7 @@ def test_doctor_no_windows(mock_state):
 
 
 @patch("catherd.cli.get_kitty_state")
+@pytest.mark.medium
 def test_doctor_basic(mock_state):
     mock_state.return_value = _state(Pane(id="X", title="Y"), tab_id="T")
     with (
@@ -296,12 +314,14 @@ def test_doctor_basic(mock_state):
     assert "sync snippet" in result.output or "Add this to your shell rc file" in result.output
 
 
+@pytest.mark.small
 def test_is_sync_env_missing(monkeypatch):
     monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
     monkeypatch.delenv("ATUIN_SESSION", raising=False)
     assert not cli.is_sync_active_in_this_shell()
 
 
+@pytest.mark.medium
 def test_is_sync_success(monkeypatch, tmp_path):
     monkeypatch.setenv("KITTY_WINDOW_ID", "a")
     monkeypatch.setenv("ATUIN_SESSION", "sess")
@@ -311,6 +331,7 @@ def test_is_sync_success(monkeypatch, tmp_path):
     assert cli.is_sync_active_in_this_shell()
 
 
+@pytest.mark.medium
 def test__collect_kitty_session_diagnostics(monkeypatch, tmp_path):
     state = _state(Pane(id="id", title="title"), tab_id="tab")
     session_file = tmp_path / "atuin_kitty_id"
@@ -322,6 +343,7 @@ def test__collect_kitty_session_diagnostics(monkeypatch, tmp_path):
     assert notes == []
 
 
+@pytest.mark.medium
 def test__collect_kitty_session_diagnostics_branches(tmp_path, monkeypatch):
     state = _state(
         Pane(id="a", title=""),
@@ -361,6 +383,7 @@ def test__collect_kitty_session_diagnostics_branches(tmp_path, monkeypatch):
     assert notes == []
 
 
+@pytest.mark.small
 def test_print_kitty_session_diagnostics_all_branches(monkeypatch, capsys):
     state = _state(
         Pane(id="a", title="title"),
@@ -388,6 +411,7 @@ def test_print_kitty_session_diagnostics_all_branches(monkeypatch, capsys):
     assert "Atuin/Kitty sync active in" in out
 
 
+@pytest.mark.small
 def test_print_kitty_session_diagnostics_none_synced(monkeypatch, capsys):
     state = _state(Pane(id="a", title="title"))
     location = next(state.iter_panes())
@@ -401,7 +425,9 @@ def test_print_kitty_session_diagnostics_none_synced(monkeypatch, capsys):
     assert "sync is not active in any open windows" in out
 
 
+@pytest.mark.small
 def test_main_invocation(runner, monkeypatch):
+    monkeypatch.setattr(cli, "is_sync_active_in_this_shell", lambda: True)
     monkeypatch.setattr(cli, "get_kitty_state", lambda **_kwargs: KittyState(os_windows=()))
 
     result = runner.invoke(cli.main, [])
@@ -409,6 +435,7 @@ def test_main_invocation(runner, monkeypatch):
     assert result.exit_code == 0
 
 
+@pytest.mark.small
 def test_print_shell_snippet_and_env(monkeypatch, capsys):
     monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: "rc")
     monkeypatch.setattr(cli, "load_snippet_for_shell", lambda *_args, **_kwargs: "snippet")
