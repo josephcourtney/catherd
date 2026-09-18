@@ -214,7 +214,7 @@ def _pane_position(pane: Pane) -> str | None:
         parts.append(f"pane {pane.tab_index}/{pane.tab_count}")
     if pane.group_index is not None and pane.group_count is not None:
         parts.append(f"group {pane.group_index}/{pane.group_count}")
-    return " · ".join(parts) or None
+    return " / ".join(parts) or None
 
 
 def _pane_neighbors(pane: Pane) -> str | None:
