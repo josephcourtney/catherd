@@ -280,7 +280,11 @@ def selected_details(
     _append_detail(details, "Root process", pane.root_cmdline)
     _append_detail(details, "Position", _pane_position(pane))
     _append_detail(details, "Neighbors", _pane_neighbors(pane))
-    size = f"{pane.cols}×{pane.rows}" if pane.cols is not None and pane.rows is not None else None  # ruff: ignore[ambiguous-unicode-character-string]
+    size = (
+        f"{pane.cols}×{pane.rows}"  # ruff: ignore[ambiguous-unicode-character-string]
+        if pane.cols is not None and pane.rows is not None
+        else None
+    )
     _append_detail(details, "Size", size)
     _append_detail(details, "At prompt", pane.at_prompt)
     _append_detail(details, "Title locked", pane.title_overridden)
