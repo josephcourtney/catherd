@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 import pytest
-from textual.widgets import Tree
+from textual.widgets import Input, Tree
 
 from catherd.model import KittyState, OsWindow, Pane, Tab
 from catherd.tui import (
@@ -214,3 +214,64 @@ async def test_reorder_routes_to_backend_and_preserves_selection() -> None:
         assert tree.cursor_node.data == pane_ref
 
     assert ("reorder_pane", "2", "forward") in backend.calls
+
+
+
+async def test_reorder_restores_manager_focus(monkeypatch) -> None:
+    monkeypatch.setenv("KITTY_WINDOW_ID", "99")
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None)
+
+    async with app.run_test() as pilot:
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        tree.move_cursor(_find_node(tree, NodeRef("pane", "2")))
+        await pilot.press("shift+j")
+        await app.workers.wait_for_complete()
+
+    reorder_index = backend.calls.index(("reorder_pane", "2", "forward"))
+    restore_index = backend.calls.index(("focus_pane", "99"))
+    assert restore_index > reorder_index
+
+
+async def test_rename_dialog_routes_to_backend() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None)
+
+    async with app.run_test() as pilot:
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        tree.move_cursor(_find_node(tree, NodeRef("pane", "2")))
+        await pilot.press("r")
+        rename_input = app.query_one("#rename-input", Input)
+        rename_input.value = "test runner"
+        await pilot.press("enter")
+        await app.workers.wait_for_complete()
+
+    assert ("rename_pane", "2", "test runner") in backend.calls
+
+
+async def test_move_dialog_routes_to_backend() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None)
+
+    async with app.run_test() as pilot:
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        tree.move_cursor(_find_node(tree, NodeRef("pane", "1")))
+        await pilot.press("m")
+        await pilot.press("enter")
+        await app.workers.wait_for_complete()
+
+    assert ("move_pane", "1", "11") in backend.calls
+
+
+async def test_merge_dialog_routes_to_backend() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None)
+
+    async with app.run_test() as pilot:
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        tree.move_cursor(_find_node(tree, NodeRef("os_window", "100")))
+        await pilot.press("shift+m")
+        await pilot.press("enter")
+        await app.workers.wait_for_complete()
+
+    assert ("merge_os_windows", "100", "200") in backend.calls
