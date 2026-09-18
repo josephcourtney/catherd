@@ -59,6 +59,8 @@ def _is_missing_or_error_command(last_cmd: str | None) -> bool:
 
 
 def _resolve_display_command(pane: Pane, atuin_cmd: str | None) -> str:
+    if pane.current_command:
+        return pane.current_command
     if atuin_cmd and not _is_missing_or_error_command(atuin_cmd):
         return atuin_cmd
     if pane.foreground_cmd:
@@ -102,6 +104,13 @@ def _serialize_pane(location: PaneLocation, last_command: str) -> dict[str, str 
         "pid": pane.pid,
         "cwd": pane.cwd,
         "foreground_cmd": pane.foreground_cmd,
+        "root_cmdline": pane.root_cmdline,
+        "current_command": pane.current_command,
+        "at_prompt": pane.at_prompt,
+        "title_overridden": pane.title_overridden,
+        "needs_attention": pane.needs_attention,
+        "has_activity_since_last_focus": pane.has_activity_since_last_focus,
+        "is_self": pane.is_self,
         "tty": pane.tty,
         "cols": pane.cols,
         "rows": pane.rows,
@@ -116,7 +125,6 @@ _TITLE_WIDTH: Final[int] = 25
 _CMD_WIDTH: Final[int] = 25
 _CWD_WIDTH: Final[int] = 20
 _FG_WIDTH: Final[int] = 20
-_TTY_WIDTH: Final[int] = 15
 _SIZE_WIDTH: Final[int] = 7
 _ACTIVE_WIDTH: Final[int] = 10
 _TAB_TITLE_HINT_WIDTH: Final[int] = 30
@@ -133,7 +141,6 @@ def _print_show_row(location: PaneLocation, display_cmd: str) -> None:
     truncated_cmd = _truncate(display_cmd, _CMD_WIDTH)
     truncated_cwd = _truncate(pane.cwd, _CWD_WIDTH)
     truncated_fg = _truncate(pane.foreground_cmd, _FG_WIDTH)
-    truncated_tty = _truncate(pane.tty, _TTY_WIDTH)
     size = ""
     if pane.cols is not None or pane.rows is not None:
         size = f"{pane.cols or ''}x{pane.rows or ''}"
@@ -143,7 +150,7 @@ def _print_show_row(location: PaneLocation, display_cmd: str) -> None:
         f"{pane.id:>10} | {location.tab.id or '':>5} | {truncated_title:<{_TITLE_WIDTH}} | "
         f"{truncated_cmd:<{_CMD_WIDTH}} | {truncated_cwd:<{_CWD_WIDTH}} | "
         f"{pane.pid or '':>5} | {truncated_fg:<{_FG_WIDTH}} | "
-        f"{truncated_tty:<{_TTY_WIDTH}} | {size:<{_SIZE_WIDTH}} | "
+        f"{size:<{_SIZE_WIDTH}} | "
         f"{_active_summary(location):<{_ACTIVE_WIDTH}}"
     )
 
@@ -161,7 +168,7 @@ def _render_show_table(rows: list[tuple[PaneLocation, str]]) -> None:
     header = (
         f"{'Kitty WinID':>10} | {'Tab':>5} | {'Title':<{_TITLE_WIDTH}} | "
         f"{'Command':<{_CMD_WIDTH}} | {'CWD':<{_CWD_WIDTH}} | {'PID':>5} | "
-        f"{'FG':<{_FG_WIDTH}} | {'TTY':<{_TTY_WIDTH}} | {'SIZE':<{_SIZE_WIDTH}} | "
+        f"{'FG':<{_FG_WIDTH}} | {'SIZE':<{_SIZE_WIDTH}} | "
         f"{'Active':<{_ACTIVE_WIDTH}}"
     )
     click.secho(header, fg="cyan", bold=True)
