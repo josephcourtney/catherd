@@ -48,10 +48,25 @@ def _state() -> KittyState:
                                 title_overridden=False,
                                 needs_attention=True,
                                 has_activity_since_last_focus=True,
+                                tab_index=1,
+                                tab_count=2,
+                                group_index=1,
+                                group_count=2,
+                                neighbors_right=("2",),
                                 cols=120,
                                 rows=40,
                             ),
-                            Pane(id="2", title="tests", cwd="/code/project", foreground_cmd="pytest"),
+                            Pane(
+                                id="2",
+                                title="tests",
+                                cwd="/code/project",
+                                foreground_cmd="pytest",
+                                tab_index=2,
+                                tab_count=2,
+                                group_index=2,
+                                group_count=2,
+                                neighbors_left=("1",),
+                            ),
                         ),
                     ),
                     Tab(id="11", title="shell", panes=(Pane(id="3", title="zsh"),)),
@@ -99,6 +114,20 @@ class FakeBackend:
 
     def move_pane(self, pane_id: str, target_tab_id: str) -> None:
         self.calls.append(("move_pane", pane_id, target_tab_id))
+        location = self.state.find_pane(pane_id)
+        if location is None:
+            return
+        moved = location.pane
+        os_windows: list[OsWindow] = []
+        for os_window in self.state.os_windows:
+            tabs: list[Tab] = []
+            for tab in os_window.tabs:
+                panes = tuple(pane for pane in tab.panes if pane.id != pane_id)
+                if tab.id == target_tab_id:
+                    panes += (moved,)
+                tabs.append(replace(tab, panes=panes))
+            os_windows.append(replace(os_window, tabs=tuple(tabs)))
+        self.state = KittyState(tuple(os_windows))
 
     def detach_pane_to_new_tab(self, pane_id: str) -> None:
         self.calls.append(("detach_pane_to_new_tab", pane_id))
@@ -206,6 +235,8 @@ def test_selected_details_for_pane_with_activity() -> None:
     assert "Current command: uv run pytest" in details.plain
     assert "Foreground process: nvim" in details.plain
     assert "Root process: /bin/zsh -l" in details.plain
+    assert "Position: pane 1/2 · group 1/2" in details.plain  # ruff: ignore[ambiguous-unicode-character-string]
+    assert "Neighbors: R:2" in details.plain
     assert "Size: 120×40" in details.plain  # ruff: ignore[ambiguous-unicode-character-string]
     assert "Needs attention: yes" in details.plain
     assert "Atuin session: session-1" in details.plain
@@ -308,7 +339,7 @@ async def test_reorder_routes_to_backend_and_preserves_selection() -> None:
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
         pane_ref = NodeRef("pane", "2")
         tree.move_cursor(_find_node(tree, pane_ref))
-        await pilot.press("shift+j")
+        await pilot.press("J")
         await app.workers.wait_for_complete()
         await pilot.pause()
         assert tree.cursor_node is not None
@@ -370,6 +401,30 @@ async def test_rename_dialog_routes_to_backend() -> None:
     assert ("rename_pane", "2", "test runner") in backend.calls
 
 
+async def test_os_window_rename_updates_tree_label() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        os_ref = NodeRef("os_window", "100")
+        tree.move_cursor(_find_node(tree, os_ref))
+        await pilot.press("r")
+        await pilot.pause()
+        rename_input = app.screen.query_one("#rename-input", Input)
+        rename_input.value = "research"
+        await pilot.press("enter")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        renamed = _find_node(tree, os_ref)
+        assert isinstance(renamed.label, Text)
+        assert "research" in renamed.label.plain
+
+    assert ("rename_os_window", "100", "research") in backend.calls
+
+
 async def test_move_dialog_routes_to_backend() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
@@ -382,6 +437,14 @@ async def test_move_dialog_routes_to_backend() -> None:
         await pilot.pause()
         await pilot.press("enter")
         await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        pane_ref = NodeRef("pane", "1")
+        assert tree.cursor_node is not None
+        assert tree.cursor_node.data == pane_ref
+        moved_node = _find_node(tree, pane_ref)
+        assert moved_node.parent is not None
+        assert moved_node.parent.data == NodeRef("tab", "11")
 
     assert ("move_pane", "1", "11") in backend.calls
 
@@ -394,7 +457,7 @@ async def test_merge_dialog_routes_to_backend() -> None:
         await pilot.pause()
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
         tree.move_cursor(_find_node(tree, NodeRef("pane", "1")))
-        await pilot.press("shift+m")
+        await pilot.press("M")
         await pilot.pause()
         await pilot.press("enter")
         await app.workers.wait_for_complete()
