@@ -138,6 +138,29 @@ def test_parse_kitty_state_preserves_neighbors_and_group_order():
     assert right.neighbors_left == ("1",)
 
 
+def test_parse_kitty_state_orders_panes_by_layout_groups():
+    state = parse_kitty_state([
+        {
+            "tabs": [
+                {
+                    "groups": [
+                        {"id": 2, "windows": [2]},
+                        {"id": 1, "windows": [1]},
+                    ],
+                    "windows": [
+                        {"id": 1, "title": "first", "env": {}},
+                        {"id": 2, "title": "second", "env": {}},
+                    ],
+                }
+            ]
+        }
+    ])
+
+    panes = state.os_windows[0].tabs[0].panes
+    assert [pane.id for pane in panes] == ["2", "1"]
+    assert [pane.tab_index for pane in panes] == [1, 2]
+
+
 def test_parse_kitty_state_tolerates_non_mapping_entries():
     state = parse_kitty_state([None, "x", {"tabs": [None, {"windows": [None]}]}])
     assert len(state.os_windows) == 1
@@ -370,6 +393,27 @@ def test_client_reorder_operations_focus_before_move(monkeypatch):
         ("/usr/bin/kitty", "@", "action", "--match", "id:1", "move_tab_forward"),
         ("/usr/bin/kitty", "@", "focus-tab", "--match", "id:10"),
         ("/usr/bin/kitty", "@", "action", "--match", "id:1", "move_tab_backward"),
+    ]
+
+
+def test_client_merge_tabs_moves_all_source_panes(monkeypatch):
+    calls = _record_remote_calls(monkeypatch)
+    state = _operation_state()
+    monkeypatch.setattr(KittyClient, "snapshot", lambda _self: state)
+    client = KittyClient(executable="/usr/bin/kitty")
+
+    client.merge_tabs("10", "20")
+
+    assert calls == [
+        (
+            "/usr/bin/kitty",
+            "@",
+            "detach-window",
+            "--match",
+            "id:1",
+            "--target-tab",
+            "id:20",
+        )
     ]
 
 
