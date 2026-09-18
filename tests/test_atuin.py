@@ -5,9 +5,9 @@ import pytest
 from catherd import atuin
 from catherd.atuin import get_atuin_history_db_path, get_last_command_for_atuin_session
 
-pytestmark = pytest.mark.small
 
 
+@pytest.mark.medium
 def test_atuin_history_db_path(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     path = get_atuin_history_db_path()
@@ -15,11 +15,13 @@ def test_atuin_history_db_path(monkeypatch, tmp_path):
     assert str(path).startswith(str(tmp_path))
 
 
+@pytest.mark.medium
 def test_get_last_command_no_db(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     assert get_last_command_for_atuin_session("foo", verbose=True) == "(no history db)"
 
 
+@pytest.mark.medium
 def test_get_last_command_with_db(tmp_path, monkeypatch):
     dbdir = tmp_path / "atuin"
     dbdir.mkdir()
@@ -34,6 +36,7 @@ def test_get_last_command_with_db(tmp_path, monkeypatch):
     assert get_last_command_for_atuin_session("nope") == "(no command)"
 
 
+@pytest.mark.medium
 def test_get_last_command_db_error(monkeypatch, tmp_path):
     # Create a "corrupt" history.db that isn't actually a DB
     dbdir = tmp_path / "atuin"
@@ -46,6 +49,7 @@ def test_get_last_command_db_error(monkeypatch, tmp_path):
     assert result == "(sqlite error)"
 
 
+@pytest.mark.medium
 def test_get_last_command_closes_connection(monkeypatch, tmp_path):
     dbfile = tmp_path / "history.db"
     dbfile.touch()
