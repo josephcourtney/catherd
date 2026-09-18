@@ -3,6 +3,7 @@ import pytest
 from catherd import activity
 
 
+
 @pytest.mark.medium
 def test_get_atuin_session_for_window_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(activity, "get_session_file", lambda _window_id: tmp_path / "missing")
