@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import shlex
-import subprocess
+import subprocess  # noqa: S404 -- fixed macOS system appearance query
 import sys
 from dataclasses import dataclass
 from functools import partial
@@ -155,7 +155,7 @@ def _preferred_textual_theme() -> str | None:
         return override
     if sys.platform == "darwin":
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # noqa: S603, S607 -- fixed macOS system command and arguments
                 ["defaults", "read", "-g", "AppleInterfaceStyle"],
                 check=False,
                 capture_output=True,
