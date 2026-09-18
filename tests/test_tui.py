@@ -251,7 +251,8 @@ async def test_refresh_preserves_selection_and_reveals_it() -> None:
         tab_ref = NodeRef("tab", "11")
         tree.move_cursor(_find_node(tree, tab_ref))
         await pilot.pause()
-        _find_node(tree, NodeRef("os_window", "100")).collapse()
+        other_os_ref = NodeRef("os_window", "200")
+        _find_node(tree, other_os_ref).collapse()
 
         os_windows = list(backend.state.os_windows)
         os_windows[1] = replace(os_windows[1], title="renamed")
@@ -261,7 +262,7 @@ async def test_refresh_preserves_selection_and_reveals_it() -> None:
 
         assert tree.cursor_node is not None
         assert tree.cursor_node.data == tab_ref
-        assert _find_node(tree, NodeRef("os_window", "100")).is_expanded
+        assert _find_node(tree, other_os_ref).is_collapsed
 
 
 async def test_enter_focuses_selected_pane() -> None:
