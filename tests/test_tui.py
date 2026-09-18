@@ -9,9 +9,9 @@ import pytest
 from rich.text import Text
 from textual.widgets import Input, Static, Tree
 
+import catherd.tui as tui_module
 from catherd.activity import PaneActivity
 from catherd.model import KittyState, OsWindow, Pane, Tab
-import catherd.tui as tui_module
 from catherd.tui import (
     Destination,
     KittyManagerApp,
@@ -19,6 +19,7 @@ from catherd.tui import (
     _active_marker,
     _compact_hint,
     _compact_process_hint,
+    _pane_activity_hint,
     _preferred_textual_theme,
     containing_os_window_id,
     merge_os_window_destinations,
@@ -558,6 +559,17 @@ def test_compact_hint_normalizes_and_truncates() -> None:
     assert hint is not None
     assert len(hint) == 36
     assert hint.endswith("...")
+
+
+@pytest.mark.small
+def test_shell_wrapper_is_omitted_from_pane_activity_hint() -> None:
+    pane = replace(
+        _state().find_pane("2").pane,
+        current_command=None,
+        foreground_cmd="/Users/me/.local/bin/atuin-patched pty-proxy --shell /bin/zsh",
+    )
+
+    assert _pane_activity_hint(pane) is None
 
 
 @pytest.mark.small
