@@ -15,6 +15,7 @@ from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Footer, Input, Label, OptionList, Static, Tree
 from textual.widgets.option_list import Option
+
 from .kitty import KittyClient, KittyClientError
 from .model import KittyState
 
@@ -147,10 +148,8 @@ def _pane_destinations(state: KittyState, pane_id: str) -> tuple[Destination, ..
         for os_window, tab in state.iter_tabs()
         if tab.id is not None and tab.id != source_tab_id
     ]
-    destinations.extend((
-        Destination("new_tab", None, "New tab"),
-        Destination("new_os_window", None, "New OS window"),
-    ))
+    destinations.append(Destination("new_tab", None, "New tab"))
+    destinations.append(Destination("new_os_window", None, "New OS window"))
     return tuple(destinations)
 
 
