@@ -250,6 +250,7 @@ async def test_refresh_preserves_selection_and_reveals_it() -> None:
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
         tab_ref = NodeRef("tab", "11")
         tree.move_cursor(_find_node(tree, tab_ref))
+        await pilot.pause()
         _find_node(tree, NodeRef("os_window", "100")).collapse()
 
         os_windows = list(backend.state.os_windows)
