@@ -610,6 +610,12 @@ test strict="true" fast="false" dev="false" quiet="" logs="" debug="" failing="f
   exit 0
 
 
+# Run the headless Textual acceptance suite for the Kitty organizer.
+[group('testing')]
+test-tui:
+  {{PYTEST}} --timeout={{PYTEST_TIMEOUT}} --no-cov {{ROOT_DIR}}/tests/test_tui.py
+
+
 # ======================================================================
 # Test quality
 # ======================================================================
