@@ -208,6 +208,26 @@ def _append_detail(details: Text, label: str, value: object | None) -> None:
     details.append("\n")
 
 
+def _pane_position(pane: Pane) -> str | None:
+    parts: list[str] = []
+    if pane.tab_index is not None and pane.tab_count is not None:
+        parts.append(f"pane {pane.tab_index}/{pane.tab_count}")
+    if pane.group_index is not None and pane.group_count is not None:
+        parts.append(f"group {pane.group_index}/{pane.group_count}")
+    return " · ".join(parts) or None
+
+
+def _pane_neighbors(pane: Pane) -> str | None:
+    items = (
+        ("L", pane.neighbors_left),
+        ("T", pane.neighbors_top),
+        ("R", pane.neighbors_right),
+        ("B", pane.neighbors_bottom),
+    )
+    parts = [f"{label}:{','.join(ids)}" for label, ids in items if ids]
+    return "  ".join(parts) or None
+
+
 def selected_details(
     state: KittyState,
     ref: NodeRef,
@@ -258,6 +278,8 @@ def selected_details(
     _append_detail(details, "Foreground process", pane.foreground_cmd)
     _append_detail(details, "Foreground PID", pane.pid)
     _append_detail(details, "Root process", pane.root_cmdline)
+    _append_detail(details, "Position", _pane_position(pane))
+    _append_detail(details, "Neighbors", _pane_neighbors(pane))
     size = f"{pane.cols}×{pane.rows}" if pane.cols is not None and pane.rows is not None else None  # ruff: ignore[ambiguous-unicode-character-string]
     _append_detail(details, "Size", size)
     _append_detail(details, "At prompt", pane.at_prompt)
