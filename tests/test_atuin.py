@@ -2,6 +2,7 @@ import sqlite3
 
 import pytest
 
+from catherd import atuin
 from catherd.atuin import get_atuin_history_db_path, get_last_command_for_atuin_session
 
 pytestmark = pytest.mark.small
@@ -43,3 +44,30 @@ def test_get_last_command_db_error(monkeypatch, tmp_path):
     # Should hit the except block and return "(sqlite error)"
     result = get_last_command_for_atuin_session("sess", verbose=True)
     assert result == "(sqlite error)"
+
+
+def test_get_last_command_closes_connection(monkeypatch, tmp_path):
+    dbfile = tmp_path / "history.db"
+    dbfile.touch()
+    closed = False
+
+    class FakeCursor:
+        def execute(self, *_args):
+            return None
+
+        def fetchone(self):
+            return ("echo closed",)
+
+    class FakeConnection:
+        def cursor(self):
+            return FakeCursor()
+
+        def close(self):
+            nonlocal closed
+            closed = True
+
+    monkeypatch.setattr(atuin, "get_atuin_history_db_path", lambda: dbfile)
+    monkeypatch.setattr(atuin.sqlite3, "connect", lambda _path: FakeConnection())
+
+    assert get_last_command_for_atuin_session("session") == "echo closed"
+    assert closed
