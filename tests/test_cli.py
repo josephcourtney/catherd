@@ -121,8 +121,15 @@ def test_inspect_outputs_full_metadata(tmp_path, monkeypatch):
             title="title",
             pid=1234,
             cwd=str(tmp_path),
-            foreground_cmd="bash",
-            tty="/dev/pts/42",
+            foreground_cmd="python -m pytest",
+            root_cmdline="/bin/zsh -l",
+            current_command="uv run pytest",
+            at_prompt=False,
+            title_overridden=True,
+            needs_attention=True,
+            has_activity_since_last_focus=True,
+            cols=132,
+            rows=43,
         ),
         tab_id="tab",
         os_id="os-1",
@@ -140,8 +147,15 @@ def test_inspect_outputs_full_metadata(tmp_path, monkeypatch):
     assert payload[0]["os_window_id"] == "os-1"
     assert payload[0]["pid"] == 1234
     assert payload[0]["cwd"] == str(tmp_path)
-    assert payload[0]["foreground_cmd"] == "bash"
-    assert payload[0]["tty"] == "/dev/pts/42"
+    assert payload[0]["foreground_cmd"] == "python -m pytest"
+    assert payload[0]["root_cmdline"] == "/bin/zsh -l"
+    assert payload[0]["current_command"] == "uv run pytest"
+    assert payload[0]["at_prompt"] is False
+    assert payload[0]["title_overridden"] is True
+    assert payload[0]["needs_attention"] is True
+    assert payload[0]["has_activity_since_last_focus"] is True
+    assert payload[0]["cols"] == 132
+    assert payload[0]["rows"] == 43
     assert payload[0]["atuin_session_id"] == "sessA"
     assert payload[0]["session_content"] == "sessA win"
 
@@ -152,6 +166,27 @@ def test_show_env_verbose(monkeypatch):
     monkeypatch.setattr(cli, "get_atuin_session_for_window", lambda *_args, **_kwargs: None)
     result = CliRunner().invoke(cli.main, ["show", "-v"])
     assert "(no command)" in result.output
+
+
+def test_show_prefers_running_command(monkeypatch):
+    state = _state(
+        Pane(
+            id="w",
+            title="tit",
+            current_command="uv run pytest",
+            foreground_cmd="python -m pytest",
+        )
+    )
+    monkeypatch.setattr(cli, "get_kitty_state", lambda *_args, **_kwargs: state)
+    monkeypatch.setattr(cli, "get_atuin_session_for_window", lambda *_args, **_kwargs: "s")
+    monkeypatch.setattr(cli, "get_last_command_for_atuin_session", lambda *_args, **_kwargs: "git status")
+
+    result = CliRunner().invoke(cli.main, ["show", "--json"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload[0]["last_command"] == "uv run pytest"
+    assert payload[0]["current_command"] == "uv run pytest"
 
 
 def test_preflight_only_on_show(tmp_path, monkeypatch):
