@@ -25,17 +25,34 @@ def _payload():
                         {
                             "id": 11,
                             "title": "w1",
+                            "title_overridden": True,
                             "is_focused": True,
-                            "has_bell": False,
-                            "is_urgent": True,
+                            "pid": 100,
+                            "cwd": "/shell/cwd",
+                            "cmdline": ["/bin/zsh", "-l"],
+                            "last_reported_cmdline": "uv run pytest",
+                            "at_prompt": False,
+                            "lines": 24,
+                            "columns": 80,
+                            "needs_attention": True,
+                            "has_activity_since_last_focus": True,
+                            "foreground_processes": [
+                                {
+                                    "pid": 201,
+                                    "cwd": "/safe/cwd",
+                                    "cmdline": ["python", "-m", "pytest"],
+                                }
+                            ],
+                            "env": {},
+                        },
+                        {
+                            "id": 12,
+                            "title": "Rename tab",
+                            "pid": 202,
                             "cwd": "/safe/cwd",
-                            "tty": "/dev/pts/1",
-                            "cols": 80,
-                            "rows": 24,
-                            "x": 10,
-                            "y": 5,
-                            "foreground_process": {"argv0": "bash", "pid": 100},
-                        }
+                            "cmdline": ["kitten", "__run__"],
+                            "env": {"KITTEN_RUNNING_AS_UI": "1"},
+                        },
                     ],
                 }
             ],
@@ -64,15 +81,18 @@ def test_parse_kitty_state_preserves_hierarchy_and_metadata():
     assert pane.id == "11"
     assert pane.title == "w1"
     assert pane.is_active is True
-    assert pane.foreground_cmd == "bash"
-    assert pane.pid == 100
+    assert len(tab.panes) == 1
+    assert pane.foreground_cmd == "python -m pytest"
+    assert pane.pid == 201
     assert pane.cwd == "/safe/cwd"
-    assert pane.tty == "/dev/pts/1"
+    assert pane.root_cmdline == "/bin/zsh -l"
+    assert pane.current_command == "uv run pytest"
+    assert pane.at_prompt is False
+    assert pane.title_overridden is True
+    assert pane.needs_attention is True
+    assert pane.has_activity_since_last_focus is True
     assert pane.cols == 80
     assert pane.rows == 24
-    assert pane.x == 10
-    assert pane.y == 5
-    assert pane.has_bell is False
     assert pane.is_urgent is True
 
 
@@ -93,8 +113,8 @@ def test_parse_kitty_state_tolerates_unsupported_integer_metadata():
                             "id": 1,
                             "title": "pane",
                             "pid": {},
-                            "cols": [],
-                            "rows": 24.5,
+                            "columns": [],
+                            "lines": 24.5,
                         }
                     ]
                 }
@@ -291,6 +311,7 @@ def test_client_move_and_detach_operations(monkeypatch):
 
 def test_client_reorder_operations_focus_before_move(monkeypatch):
     calls = _record_remote_calls(monkeypatch)
+    monkeypatch.setattr(KittyClient, "snapshot", lambda _self: _operation_state())
     client = KittyClient(executable="/usr/bin/kitty")
 
     client.reorder_pane("1", "forward")
@@ -300,13 +321,13 @@ def test_client_reorder_operations_focus_before_move(monkeypatch):
 
     assert calls == [
         ("/usr/bin/kitty", "@", "focus-window", "--match", "id:1"),
-        ("/usr/bin/kitty", "@", "action", "move_window_forward"),
+        ("/usr/bin/kitty", "@", "action", "--match", "id:1", "move_window_forward"),
         ("/usr/bin/kitty", "@", "focus-window", "--match", "id:1"),
-        ("/usr/bin/kitty", "@", "action", "move_window_backward"),
+        ("/usr/bin/kitty", "@", "action", "--match", "id:1", "move_window_backward"),
         ("/usr/bin/kitty", "@", "focus-tab", "--match", "id:10"),
-        ("/usr/bin/kitty", "@", "action", "move_tab_forward"),
+        ("/usr/bin/kitty", "@", "action", "--match", "id:1", "move_tab_forward"),
         ("/usr/bin/kitty", "@", "focus-tab", "--match", "id:10"),
-        ("/usr/bin/kitty", "@", "action", "move_tab_backward"),
+        ("/usr/bin/kitty", "@", "action", "--match", "id:1", "move_tab_backward"),
     ]
 
 
