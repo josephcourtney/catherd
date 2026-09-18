@@ -21,6 +21,7 @@ def _payload():
                     "title": "tab",
                     "layout": "splits",
                     "is_focused": True,
+                    "groups": [{"id": 1, "windows": [11, 12]}],
                     "windows": [
                         {
                             "id": 11,
@@ -91,9 +92,50 @@ def test_parse_kitty_state_preserves_hierarchy_and_metadata():
     assert pane.title_overridden is True
     assert pane.needs_attention is True
     assert pane.has_activity_since_last_focus is True
+    assert pane.tab_index == 1
+    assert pane.tab_count == 1
+    assert pane.group_index == 1
+    assert pane.group_count == 1
     assert pane.cols == 80
     assert pane.rows == 24
     assert pane.is_urgent is True
+
+
+def test_parse_kitty_state_preserves_neighbors_and_group_order():
+    state = parse_kitty_state([
+        {
+            "tabs": [
+                {
+                    "groups": [
+                        {"id": 1, "windows": [1]},
+                        {"id": 2, "windows": [2]},
+                    ],
+                    "windows": [
+                        {
+                            "id": 1,
+                            "title": "left",
+                            "neighbors": {"right": [2]},
+                        },
+                        {
+                            "id": 2,
+                            "title": "right",
+                            "neighbors": {"left": [1]},
+                        },
+                    ],
+                }
+            ]
+        }
+    ])
+
+    left, right = state.os_windows[0].tabs[0].panes
+    assert left.tab_index == 1
+    assert left.tab_count == 2
+    assert left.group_index == 1
+    assert left.group_count == 2
+    assert left.neighbors_right == ("2",)
+    assert right.tab_index == 2
+    assert right.group_index == 2
+    assert right.neighbors_left == ("1",)
 
 
 def test_parse_kitty_state_tolerates_non_mapping_entries():
