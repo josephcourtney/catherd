@@ -492,6 +492,52 @@ class RenameScreen(ModalScreen[str | None]):
         self.dismiss(None)
 
 
+class FilterScreen(ModalScreen[str | None]):
+    """Modal tree filter."""
+
+    BINDINGS: ClassVar[list[BindingType]] = [Binding("escape", "cancel", "Cancel", show=False)]
+
+    CSS = """
+    FilterScreen {
+        align: center middle;
+    }
+
+    FilterScreen > #filter-dialog {
+        width: 64;
+        height: auto;
+        padding: 1 2;
+        border: round $primary;
+        background: $surface;
+    }
+
+    FilterScreen Input {
+        margin-top: 1;
+    }
+    """
+
+    def __init__(self, value: str) -> None:
+        super().__init__()
+        self._value = value
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Label("Filter tree:"),
+            Input(value=self._value, placeholder="title, id, path, or command", id="filter-input"),
+            id="filter-dialog",
+        )
+
+    def on_mount(self) -> None:
+        input_widget = self.query_one("#filter-input", Input)
+        input_widget.focus()
+        input_widget.action_end()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        self.dismiss(event.value.strip())
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
 class DestinationScreen(ModalScreen[Destination | None]):
     """Modal destination picker."""
 
@@ -554,6 +600,8 @@ class KittyManagerApp(App[None]):
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("q", "quit", "Quit"),
+        Binding("/", "filter_tree", "Filter"),
+        Binding("a", "jump_active", "Active"),
         Binding("r", "rename_selected", "Rename"),
         Binding("m", "move_selected", "Move"),
         Binding("M,shift+m", "merge_selected", "Merge"),
@@ -568,14 +616,16 @@ class KittyManagerApp(App[None]):
     }
 
     #kitty-tree {
-        width: 2fr;
+        width: 1fr;
+        min-width: 30;
     }
 
     #details {
-        width: 1fr;
-        min-width: 28;
+        width: 48;
+        min-width: 38;
+        max-width: 54;
         padding: 1 2;
-        border-left: solid $primary;
+        border-left: solid #444444;
         overflow-y: auto;
     }
 
@@ -585,8 +635,10 @@ class KittyManagerApp(App[None]):
         color: $text-muted;
     }
 
-    Footer {
+    #actions {
         height: 1;
+        padding: 0 1;
+        color: $text-muted;
     }
     """
 
@@ -604,6 +656,7 @@ class KittyManagerApp(App[None]):
         self.state = KittyState(os_windows=())
         self._display_names: dict[NodeRef, str] = {}
         self._logical_selection: NodeRef | None = None
+        self._filter_query = ""
         self._manager_pane_id = os.environ.get("KITTY_WINDOW_ID")
         self._mutation_active = False
 
@@ -617,7 +670,10 @@ class KittyManagerApp(App[None]):
             id="main",
         )
         yield Static("Loading Kitty state…", id="status")
-        yield Footer()
+        yield Static(
+            "Enter Focus  r Rename  m Move  M Merge  J/K Reorder  / Filter  a Active  ^R Refresh  q Quit",
+            id="actions",
+        )
 
     async def on_mount(self) -> None:
         await self.refresh_state()
