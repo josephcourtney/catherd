@@ -172,7 +172,8 @@ async def test_refresh_preserves_selection_and_reveals_it() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None)
 
-    async with app.run_test():
+    async with app.run_test() as pilot:
+        await pilot.pause()
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
         tab_ref = NodeRef("tab", "11")
         tree.move_cursor(_find_node(tree, tab_ref))
@@ -194,6 +195,7 @@ async def test_enter_focuses_selected_pane() -> None:
     app = KittyManagerApp(backend, poll_interval=None)
 
     async with app.run_test() as pilot:
+        await pilot.pause()
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
         tree.move_cursor(_find_node(tree, NodeRef("pane", "2")))
         await pilot.press("enter")
@@ -207,6 +209,7 @@ async def test_reorder_routes_to_backend_and_preserves_selection() -> None:
     app = KittyManagerApp(backend, poll_interval=None)
 
     async with app.run_test() as pilot:
+        await pilot.pause()
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
         pane_ref = NodeRef("pane", "2")
         tree.move_cursor(_find_node(tree, pane_ref))
@@ -217,7 +220,6 @@ async def test_reorder_routes_to_backend_and_preserves_selection() -> None:
         assert tree.cursor_node.data == pane_ref
 
     assert ("reorder_pane", "2", "forward") in backend.calls
-
 
 
 async def test_reorder_restores_manager_focus(monkeypatch) -> None:
@@ -258,6 +260,7 @@ async def test_move_dialog_routes_to_backend() -> None:
     app = KittyManagerApp(backend, poll_interval=None)
 
     async with app.run_test() as pilot:
+        await pilot.pause()
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
         tree.move_cursor(_find_node(tree, NodeRef("pane", "1")))
         await pilot.press("m")
@@ -272,6 +275,7 @@ async def test_merge_dialog_routes_to_backend() -> None:
     app = KittyManagerApp(backend, poll_interval=None)
 
     async with app.run_test() as pilot:
+        await pilot.pause()
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
         tree.move_cursor(_find_node(tree, NodeRef("os_window", "100")))
         await pilot.press("shift+m")
