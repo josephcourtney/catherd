@@ -11,11 +11,12 @@ from typing import TYPE_CHECKING, Literal, Protocol
 from rich.text import Text
 from textual.app import App
 from textual.binding import Binding
-from textual.containers import Vertical
+from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Footer, Input, Label, OptionList, Static, Tree
 from textual.widgets.option_list import Option
 
+from .activity import PaneActivity, get_pane_activity
 from .kitty import KittyClient, KittyClientError
 from .model import KittyState
 
@@ -189,6 +190,84 @@ def selected_title(state: KittyState, ref: NodeRef) -> str:
     return os_window.title or ""
 
 
+def _detail_value(value: object | None) -> str:
+    if value is None or value == "":
+        return "—"
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    return str(value)
+
+
+def _append_detail(details: Text, label: str, value: object | None) -> None:
+    details.append(f"{label}: ", style="bold")
+    details.append(_detail_value(value))
+    details.append("\n")
+
+
+def selected_details(
+    state: KittyState,
+    ref: NodeRef,
+    *,
+    activity: PaneActivity | None = None,
+    activity_loading: bool = False,
+) -> Text:
+    """Render details for an object in the current Kitty snapshot."""
+    details = Text()
+    if ref.kind == "os_window":
+        os_window = state.find_os_window(ref.id)
+        if os_window is None:
+            return Text("OS window no longer exists", style="dim")
+        details.append("OS window\n", style="bold underline")
+        _append_detail(details, "ID", os_window.id)
+        _append_detail(details, "Title", os_window.title)
+        _append_detail(details, "Active", os_window.is_active)
+        _append_detail(details, "Tabs", len(os_window.tabs))
+        _append_detail(details, "Panes", sum(len(tab.panes) for tab in os_window.tabs))
+        return details
+
+    if ref.kind == "tab":
+        found = state.find_tab(ref.id)
+        if found is None:
+            return Text("Tab no longer exists", style="dim")
+        os_window, tab = found
+        details.append("Tab\n", style="bold underline")
+        _append_detail(details, "ID", tab.id)
+        _append_detail(details, "Title", tab.title)
+        _append_detail(details, "OS window", os_window.id)
+        _append_detail(details, "Layout", tab.layout)
+        _append_detail(details, "Active", tab.is_active)
+        _append_detail(details, "Panes", len(tab.panes))
+        return details
+
+    location = state.find_pane(ref.id)
+    if location is None:
+        return Text("Pane no longer exists", style="dim")
+    pane = location.pane
+    details.append("Pane\n", style="bold underline")
+    _append_detail(details, "ID", pane.id)
+    _append_detail(details, "Title", pane.title)
+    _append_detail(details, "OS window", location.os_window.id)
+    _append_detail(details, "Tab", location.tab.id)
+    _append_detail(details, "CWD", pane.cwd)
+    _append_detail(details, "Foreground", pane.foreground_cmd)
+    _append_detail(details, "PID", pane.pid)
+    _append_detail(details, "TTY", pane.tty)
+    size = f"{pane.cols}×{pane.rows}" if pane.cols is not None and pane.rows is not None else None
+    position = f"{pane.x},{pane.y}" if pane.x is not None and pane.y is not None else None
+    _append_detail(details, "Size", size)
+    _append_detail(details, "Position", position)
+    _append_detail(details, "Bell", pane.has_bell)
+    _append_detail(details, "Urgent", pane.is_urgent)
+    _append_detail(details, "Active", pane.is_active)
+    if activity_loading:
+        _append_detail(details, "Atuin session", "loading…")
+        _append_detail(details, "Last command", "loading…")
+    else:
+        _append_detail(details, "Atuin session", activity.session_id if activity is not None else None)
+        _append_detail(details, "Last command", activity.last_command if activity is not None else None)
+    return details
+
+
 def _walk_nodes(node: TreeNode[NodeRef]) -> Iterator[TreeNode[NodeRef]]:
     yield node
     for child in node.children:
@@ -352,8 +431,20 @@ class KittyManagerApp(App[None]):
     ]
 
     CSS = """
-    #kitty-tree {
+    #main {
         height: 1fr;
+    }
+
+    #kitty-tree {
+        width: 2fr;
+    }
+
+    #details {
+        width: 1fr;
+        min-width: 28;
+        padding: 1 2;
+        border-left: solid $primary;
+        overflow-y: auto;
     }
 
     #status {
@@ -372,10 +463,12 @@ class KittyManagerApp(App[None]):
         client: KittyBackend | None = None,
         *,
         poll_interval: float | None = 2.0,
+        activity_provider: Callable[[str], PaneActivity] | None = None,
     ) -> None:
         super().__init__()
         self.client: KittyBackend = client if client is not None else KittyClient.discover()
         self.poll_interval = poll_interval
+        self._activity_provider = activity_provider if activity_provider is not None else get_pane_activity
         self.state = KittyState(os_windows=())
         self._manager_pane_id = os.environ.get("KITTY_WINDOW_ID")
         self._mutation_active = False
@@ -383,7 +476,11 @@ class KittyManagerApp(App[None]):
     def compose(self) -> ComposeResult:
         tree: KittyTree = KittyTree(self.TREE_LABEL, id="kitty-tree")
         tree.root.expand()
-        yield tree
+        yield Horizontal(
+            tree,
+            Static("Select an OS window, tab, or pane", id="details"),
+            id="main",
+        )
         yield Static("Loading Kitty state…", id="status")
         yield Footer()
 
@@ -401,6 +498,34 @@ class KittyManagerApp(App[None]):
 
     def _status(self, message: str) -> None:
         self.query_one("#status", Static).update(message)
+
+    def _details(self) -> Static:
+        return self.query_one("#details", Static)
+
+    def _show_details(self, ref: NodeRef | None) -> None:
+        if ref is None:
+            self._details().update("Select an OS window, tab, or pane")
+            return
+        if ref.kind != "pane":
+            self._details().update(selected_details(self.state, ref))
+            return
+        self._details().update(selected_details(self.state, ref, activity_loading=True))
+        self.run_worker(
+            self._load_pane_activity(ref),
+            group="pane-details",
+            exclusive=True,
+        )
+
+    async def _load_pane_activity(self, ref: NodeRef) -> None:
+        try:
+            activity = await asyncio.to_thread(self._activity_provider, ref.id)
+        except OSError as exc:
+            if self._selected_ref() == ref:
+                self._details().update(selected_details(self.state, ref))
+                self._status(f"Activity lookup failed: {exc}")
+            return
+        if self._selected_ref() == ref:
+            self._details().update(selected_details(self.state, ref, activity=activity))
 
     def _selected_ref(self) -> NodeRef | None:
         node = self._tree().cursor_node
@@ -508,6 +633,9 @@ class KittyManagerApp(App[None]):
             self._status("A Kitty operation is still running")
             return
         self.run_worker(self.refresh_state(), group="kitty-refresh", exclusive=True)
+
+    def on_tree_node_highlighted(self, event: Tree.NodeHighlighted[NodeRef]) -> None:
+        self._show_details(event.node.data)
 
     def on_tree_node_selected(self, event: Tree.NodeSelected[NodeRef]) -> None:
         ref = event.node.data
