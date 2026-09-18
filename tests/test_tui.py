@@ -13,7 +13,8 @@ from catherd.tui import (
     KittyManagerApp,
     NodeRef,
     containing_os_window_id,
-    merge_destinations,
+    merge_os_window_destinations,
+    merge_tab_destinations,
     move_destinations,
     selected_details,
     selected_title,
@@ -147,6 +148,9 @@ class FakeBackend:
     def reorder_tab(self, tab_id: str, direction: str) -> None:
         self.calls.append(("reorder_tab", tab_id, direction))
 
+    def merge_tabs(self, source_tab_id: str, target_tab_id: str) -> None:
+        self.calls.append(("merge_tabs", source_tab_id, target_tab_id))
+
     def merge_os_windows(self, source_os_window_id: str, target_os_window_id: str) -> None:
         self.calls.append(("merge_os_windows", source_os_window_id, target_os_window_id))
 
@@ -186,8 +190,18 @@ def test_move_destinations_for_tab() -> None:
     )
 
 
-def test_merge_destinations_exclude_source() -> None:
-    assert merge_destinations(_state(), "100") == (Destination("os_window", "200", "OS 200 — notes"),)
+def test_merge_os_window_destinations_exclude_source() -> None:
+    assert merge_os_window_destinations(_state(), "100") == (
+        Destination("os_window", "200", "OS 200 — notes"),
+    )
+
+
+def test_merge_tab_destinations_exclude_source() -> None:
+    destinations = merge_tab_destinations(_state(), "10")
+
+    assert Destination("tab", "10", "irrelevant") not in destinations
+    assert Destination("tab", "11", "OS 100 — work / shell [11]") in destinations
+    assert Destination("tab", "20", "OS 200 — notes / notes [20]") in destinations
 
 
 def test_containing_os_window_id_resolves_all_node_kinds() -> None:
@@ -235,7 +249,7 @@ def test_selected_details_for_pane_with_activity() -> None:
     assert "Current command: uv run pytest" in details.plain
     assert "Foreground process: nvim" in details.plain
     assert "Root process: /bin/zsh -l" in details.plain
-    assert "Position: pane 1/2 / group 1/2" in details.plain
+    assert "Position in tab: 1 of 2" in details.plain
     assert "Neighbors: R:2" in details.plain
     assert "Size: 120×40" in details.plain  # ruff: ignore[ambiguous-unicode-character-string]
     assert "Needs attention: yes" in details.plain
@@ -314,6 +328,25 @@ async def test_refresh_preserves_selection_and_reveals_it() -> None:
         assert tree.cursor_node is not None
         assert tree.cursor_node.data == tab_ref
         assert _find_node(tree, other_os_ref).is_collapsed
+
+
+async def test_tree_selection_does_not_focus_kitty_until_explicit_action() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        target = _find_node(tree, NodeRef("pane", "2"))
+        tree.select_node(target)
+        await pilot.pause()
+
+        assert ("focus_pane", "2") not in backend.calls
+
+        await pilot.press("f")
+        await app.workers.wait_for_complete()
+
+    assert ("focus_pane", "2") in backend.calls
 
 
 async def test_enter_focuses_selected_pane() -> None:
@@ -461,6 +494,36 @@ async def test_move_dialog_routes_to_backend() -> None:
         assert moved_node.parent.data == NodeRef("tab", "11")
 
     assert ("move_pane", "1", "11") in backend.calls
+
+
+async def test_merge_on_pane_is_rejected() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        tree.move_cursor(_find_node(tree, NodeRef("pane", "1")))
+        await pilot.press("M")
+        await pilot.pause()
+
+    assert not any(call[0] in {"merge_tabs", "merge_os_windows"} for call in backend.calls)
+
+
+async def test_merge_tab_dialog_routes_to_backend() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        tree.move_cursor(_find_node(tree, NodeRef("tab", "10")))
+        await pilot.press("M")
+        await pilot.pause()
+        await pilot.press("enter")
+        await app.workers.wait_for_complete()
+
+    assert ("merge_tabs", "10", "11") in backend.calls
 
 
 async def test_merge_dialog_routes_to_backend() -> None:
