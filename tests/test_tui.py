@@ -356,10 +356,24 @@ async def test_tab_reorder_routes_to_backend() -> None:
         await pilot.pause()
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
         tree.move_cursor(_find_node(tree, NodeRef("tab", "10")))
-        await pilot.press("shift+j")
+        await pilot.press("J")
         await app.workers.wait_for_complete()
 
     assert ("reorder_tab", "10", "forward") in backend.calls
+
+
+async def test_uppercase_k_routes_backward_reorder() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        tree.move_cursor(_find_node(tree, NodeRef("pane", "2")))
+        await pilot.press("K")
+        await app.workers.wait_for_complete()
+
+    assert ("reorder_pane", "2", "backward") in backend.calls
 
 
 async def test_reorder_restores_manager_focus(monkeypatch) -> None:
@@ -371,7 +385,7 @@ async def test_reorder_restores_manager_focus(monkeypatch) -> None:
         await pilot.pause()
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
         tree.move_cursor(_find_node(tree, NodeRef("pane", "2")))
-        await pilot.press("shift+j")
+        await pilot.press("J")
         await app.workers.wait_for_complete()
 
     reorder_index = backend.calls.index(("reorder_pane", "2", "forward"))
