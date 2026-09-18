@@ -190,7 +190,6 @@ def test_get_kitty_state_verbose_branch(monkeypatch, capsys):
     assert "Raw output" in out
 
 
-
 def _operation_state() -> KittyState:
     return KittyState(
         os_windows=(
