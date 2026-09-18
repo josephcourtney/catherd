@@ -250,6 +250,18 @@ def _representative_pane_id(os_window: OsWindow) -> str:
     raise KittyStateError(msg)
 
 
+def _representative_pane_id_for_tab(state: KittyState, tab_id: str) -> str:
+    found = state.find_tab(tab_id)
+    if found is None:
+        msg = "tab"
+        raise KittyObjectNotFoundError(msg, tab_id)
+    for pane in found[1].panes:
+        if pane.id:
+            return pane.id
+    msg = f"Tab {tab_id!r} has no addressable pane"
+    raise KittyStateError(msg)
+
+
 @dataclass(frozen=True, slots=True)
 class KittyClient:
     """Thin synchronous adapter around Kitty's supported remote-control CLI."""
@@ -348,16 +360,17 @@ class KittyClient:
         self._run_remote("detach-tab", "--match", f"id:{tab_id}")
 
     def reorder_pane(self, pane_id: str, direction: Literal["forward", "backward"]) -> None:
-        """Move a pane one sibling position, focusing it first as Kitty requires."""
+        """Move a pane one sibling position, focusing and matching it explicitly."""
         self.focus_pane(pane_id)
         action = "move_window_forward" if direction == "forward" else "move_window_backward"
-        self._run_remote("action", action)
+        self._run_remote("action", "--match", f"id:{pane_id}", action)
 
     def reorder_tab(self, tab_id: str, direction: Literal["forward", "backward"]) -> None:
-        """Move a tab one sibling position, focusing it first as Kitty requires."""
+        """Move a tab one sibling position using one of its panes as action context."""
+        pane_id = _representative_pane_id_for_tab(self.snapshot(), tab_id)
         self.focus_tab(tab_id)
         action = "move_tab_forward" if direction == "forward" else "move_tab_backward"
-        self._run_remote("action", action)
+        self._run_remote("action", "--match", f"id:{pane_id}", action)
 
     def merge_os_windows(self, source_os_window_id: str, target_os_window_id: str) -> None:
         """Move every tab from one OS window into another."""
