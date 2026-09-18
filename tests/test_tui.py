@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
 from dataclasses import replace
 from threading import Event
 
@@ -113,7 +112,7 @@ class FakeBackend:
         )
         return replace(tab, panes=panes)
 
-    def _map_tabs(self, transform: Callable[[Tab], Tab]) -> None:
+    def _map_tabs(self, transform) -> None:
         self.state = KittyState(
             tuple(
                 replace(os_window, tabs=tuple(transform(tab) for tab in os_window.tabs))
