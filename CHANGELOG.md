@@ -3,6 +3,7 @@
 ### Added
 - add a Textual TUI for navigating, focusing, renaming, moving, reordering, and merging Kitty OS windows, tabs, and panes.
 - add automatic state refresh that preserves tree selection and expansion state.
+- add a selected-object details panel with Kitty metadata and asynchronous Atuin session/command enrichment for panes.
 
 ## [0.16.0] - 2026-09-18
 
