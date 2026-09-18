@@ -129,6 +129,7 @@ def test_inspect_outputs_full_metadata(tmp_path, monkeypatch):
     )
 
     monkeypatch.setattr(cli, "get_kitty_state", lambda **_kwargs: state)
+    monkeypatch.setattr(cli, "get_atuin_session_for_window", lambda *_args, **_kwargs: "sessA")
     monkeypatch.setattr(cli, "get_session_file", lambda *_args, **_kwargs: session_file)
     monkeypatch.setattr(cli, "get_last_command_for_atuin_session", lambda *_args, **_kwargs: "echo hi")
 
