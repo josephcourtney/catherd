@@ -401,8 +401,11 @@ def test_print_kitty_session_diagnostics_none_synced(monkeypatch, capsys):
     assert "sync is not active in any open windows" in out
 
 
-def test_main_invocation(runner):
-    result = runner.invoke(["-m", "catherd"])
+def test_main_invocation(runner, monkeypatch):
+    monkeypatch.setattr(cli, "get_kitty_state", lambda **_kwargs: KittyState(os_windows=()))
+
+    result = runner.invoke(cli.main, [])
+
     assert result.exit_code == 0
 
 
