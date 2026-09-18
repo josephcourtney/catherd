@@ -83,6 +83,8 @@ class KittyBackend(Protocol):
 
     def reorder_tab(self, tab_id: str, direction: ReorderDirection) -> None: ...
 
+    def merge_tabs(self, source_tab_id: str, target_tab_id: str) -> None: ...
+
     def merge_os_windows(self, source_os_window_id: str, target_os_window_id: str) -> None: ...
 
 
@@ -169,12 +171,21 @@ def _tab_destinations(state: KittyState, tab_id: str) -> tuple[Destination, ...]
     return tuple(destinations)
 
 
-def merge_destinations(state: KittyState, source_os_window_id: str) -> tuple[Destination, ...]:
+def merge_os_window_destinations(state: KittyState, source_os_window_id: str) -> tuple[Destination, ...]:
     """Return OS windows into which the selected OS window may be merged."""
     return tuple(
         Destination("os_window", os_window.id, _os_window_name(os_window))
         for os_window in state.os_windows
         if os_window.id is not None and os_window.id != source_os_window_id
+    )
+
+
+def merge_tab_destinations(state: KittyState, source_tab_id: str) -> tuple[Destination, ...]:
+    """Return tabs into which the selected tab may be merged."""
+    return tuple(
+        Destination("tab", tab.id, _tab_name(os_window, tab))
+        for os_window, tab in state.iter_tabs()
+        if tab.id is not None and tab.id != source_tab_id
     )
 
 
@@ -209,12 +220,9 @@ def _append_detail(details: Text, label: str, value: object | None) -> None:
 
 
 def _pane_position(pane: Pane) -> str | None:
-    parts: list[str] = []
-    if pane.tab_index is not None and pane.tab_count is not None:
-        parts.append(f"pane {pane.tab_index}/{pane.tab_count}")
-    if pane.group_index is not None and pane.group_count is not None:
-        parts.append(f"group {pane.group_index}/{pane.group_count}")
-    return " / ".join(parts) or None
+    if pane.tab_index is None or pane.tab_count is None:
+        return None
+    return f"{pane.tab_index} of {pane.tab_count}"
 
 
 def _pane_neighbors(pane: Pane) -> str | None:
@@ -278,7 +286,7 @@ def selected_details(
     _append_detail(details, "Foreground process", pane.foreground_cmd)
     _append_detail(details, "Foreground PID", pane.pid)
     _append_detail(details, "Root process", pane.root_cmdline)
-    _append_detail(details, "Position", _pane_position(pane))
+    _append_detail(details, "Position in tab", _pane_position(pane))
     _append_detail(details, "Neighbors", _pane_neighbors(pane))
     size = (
         f"{pane.cols}×{pane.rows}"  # ruff: ignore[ambiguous-unicode-character-string]
@@ -469,6 +477,7 @@ class KittyManagerApp(App[None]):
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("q", "quit", "Quit"),
+        Binding("enter,f,F", "focus_selected", "Focus", priority=True),
         Binding("r", "rename_selected", "Rename"),
         Binding("m", "move_selected", "Move"),
         Binding("M,shift+m", "merge_selected", "Merge"),
@@ -524,6 +533,7 @@ class KittyManagerApp(App[None]):
 
     def compose(self) -> ComposeResult:
         tree: KittyTree = KittyTree(self.TREE_LABEL, id="kitty-tree")
+        tree.auto_expand = False
         tree.root.expand()
         yield Horizontal(
             tree,
@@ -728,13 +738,15 @@ class KittyManagerApp(App[None]):
     async def refresh_state(self, preferred: NodeRef | None = None) -> None:
         """Reload Kitty state and redraw while preserving navigation state."""
         tree = self._tree()
-        selected = preferred or self._logical_selection or self._selected_ref()
-        expanded = self._expanded_refs() if tree.root.children else None
         try:
             state = await asyncio.to_thread(self.client.snapshot)
         except KittyClientError as exc:
             self._status(f"Kitty error: {exc}")
             return
+        if self._mutation_active and preferred is None:
+            return
+        selected = preferred or self._logical_selection or self._selected_ref()
+        expanded = self._expanded_refs() if tree.root.children else None
         self._render_state(state, preferred=selected, expanded=expanded)
         self._status(
             f"{len(state.os_windows)} OS windows · {sum(1 for _ in state.iter_tabs())} tabs · {state.pane_count} panes"
@@ -752,14 +764,20 @@ class KittyManagerApp(App[None]):
         self._show_details(event.node.data)
 
     def on_tree_node_selected(self, event: Tree.NodeSelected[NodeRef]) -> None:
-        ref = event.node.data
-        if ref is not None:
-            self._start_mutation(
-                "Focused",
-                self._focus_operation(ref),
-                preferred=ref,
-                restore_manager_focus=False,
-            )
+        """Treat mouse/Tree selection as selection inside catherd only."""
+        if event.node.data is not None:
+            self._logical_selection = event.node.data
+
+    def action_focus_selected(self) -> None:
+        ref = self._selected_ref()
+        if ref is None:
+            return
+        self._start_mutation(
+            "Focused",
+            self._focus_operation(ref),
+            preferred=ref,
+            restore_manager_focus=False,
+        )
 
     def action_rename_selected(self) -> None:
         ref = self._selected_ref()
@@ -778,6 +796,7 @@ class KittyManagerApp(App[None]):
             "Renamed",
             self._rename_operation(ref, title),
             preferred=ref,
+            restore_manager_focus=False,
             on_success=partial(self._record_display_name, ref, title),
         )
 
@@ -807,25 +826,34 @@ class KittyManagerApp(App[None]):
         ref = self._selected_ref()
         if ref is None:
             return
-        source_os_window_id = containing_os_window_id(self.state, ref)
-        if source_os_window_id is None:
-            self._status("Selected object no longer exists")
+        if ref.kind == "pane":
+            self._status("Panes are moved, not merged; use m")
             return
-        destinations = merge_destinations(self.state, source_os_window_id)
+        if ref.kind == "tab":
+            destinations = merge_tab_destinations(self.state, ref.id)
+            prompt = "Merge tab into:"
+        else:
+            destinations = merge_os_window_destinations(self.state, ref.id)
+            prompt = "Merge OS window into:"
         if not destinations:
-            self._status("No other OS window is available")
+            self._status("No compatible merge destination is available")
             return
-        source = NodeRef("os_window", source_os_window_id)
         self.push_screen(
-            DestinationScreen("Merge OS window into:", destinations),
-            partial(self._complete_merge, source),
+            DestinationScreen(prompt, destinations),
+            partial(self._complete_merge, ref),
         )
 
     def _complete_merge(self, source: NodeRef, destination: Destination | None) -> None:
         if destination is None or destination.id is None:
             return
-        target = NodeRef("os_window", destination.id)
-        operation = partial(self.client.merge_os_windows, source.id, destination.id)
+        target = NodeRef(destination.kind, destination.id)
+        if source.kind == "tab" and destination.kind == "tab":
+            operation = partial(self.client.merge_tabs, source.id, destination.id)
+        elif source.kind == "os_window" and destination.kind == "os_window":
+            operation = partial(self.client.merge_os_windows, source.id, destination.id)
+        else:
+            self._status("That merge is not supported")
+            return
         self._start_mutation("Merged", operation, preferred=target)
 
     def action_reorder_forward(self) -> None:
