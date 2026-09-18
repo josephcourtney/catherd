@@ -533,7 +533,7 @@ async def test_merge_dialog_routes_to_backend() -> None:
     async with app.run_test() as pilot:
         await pilot.pause()
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
-        tree.move_cursor(_find_node(tree, NodeRef("pane", "1")))
+        tree.move_cursor(_find_node(tree, NodeRef("os_window", "100")))
         await pilot.press("M")
         await pilot.pause()
         await pilot.press("enter")
