@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import replace
 from threading import Event
+from typing import TYPE_CHECKING
 
 import pytest
 from rich.text import Text
@@ -21,6 +22,10 @@ from catherd.tui import (
     selected_details,
     selected_title,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 
 pytestmark = pytest.mark.small
 
@@ -112,7 +117,7 @@ class FakeBackend:
         )
         return replace(tab, panes=panes)
 
-    def _map_tabs(self, transform) -> None:
+    def _map_tabs(self, transform: Callable[[Tab], Tab]) -> None:
         self.state = KittyState(
             tuple(
                 replace(os_window, tabs=tuple(transform(tab) for tab in os_window.tabs))
@@ -332,7 +337,7 @@ def _find_node(tree: Tree[NodeRef], ref: NodeRef):
 
 
 def _child_refs(tree: Tree[NodeRef], ref: NodeRef) -> list[NodeRef]:
-    return [child.data for child in _find_node(tree, ref).children if child.data is not None]
+    return [data for child in _find_node(tree, ref).children if (data := child.data) is not None]
 
 
 def _line_for_ref(tree: Tree[NodeRef], ref: NodeRef) -> int:
@@ -549,7 +554,10 @@ async def test_enter_focuses_selected_pane() -> None:
         (NodeRef("os_window", "200"), ("focus_os_window", "200")),
     ],
 )
-async def test_explicit_focus_routes_selected_container(ref, expected_call) -> None:
+async def test_explicit_focus_routes_selected_container(
+    ref: NodeRef,
+    expected_call: tuple[object, ...],
+) -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
 
