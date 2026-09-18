@@ -515,15 +515,15 @@ def test_active_marker_does_not_reuse_tree_disclosure_triangle() -> None:
 
 @pytest.mark.small
 def test_preferred_theme_honors_override(monkeypatch) -> None:
-    monkeypatch.setenv("CATHERD_THEME", "textual-light")
+    monkeypatch.setenv("CATHERD_THEME", "ansi-light")
 
-    assert _preferred_textual_theme() == "textual-light"
+    assert _preferred_textual_theme() == "ansi-light"
 
 
 @pytest.mark.small
 @pytest.mark.parametrize(
     ("appearance", "expected"),
-    [("Dark\n", "textual-dark"), ("", "textual-light")],
+    [("Dark\n", "ansi-dark"), ("", "ansi-light")],
 )
 def test_preferred_theme_uses_macos_appearance(monkeypatch, appearance, expected) -> None:
     monkeypatch.delenv("CATHERD_THEME", raising=False)
@@ -544,12 +544,12 @@ async def test_explicit_theme_name_is_applied() -> None:
         backend,
         poll_interval=None,
         activity_provider=_activity,
-        theme_name="textual-light",
+        theme_name="ansi-light",
     )
 
     async with app.run_test() as pilot:
         await pilot.pause()
-        assert app.theme == "textual-light"
+        assert app.theme == "ansi-light"
 
 
 @pytest.mark.small
