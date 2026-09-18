@@ -235,7 +235,7 @@ def test_selected_details_for_pane_with_activity() -> None:
     assert "Current command: uv run pytest" in details.plain
     assert "Foreground process: nvim" in details.plain
     assert "Root process: /bin/zsh -l" in details.plain
-    assert "Position: pane 1/2 · group 1/2" in details.plain  # ruff: ignore[ambiguous-unicode-character-string]
+    assert "Position: pane 1/2 / group 1/2" in details.plain
     assert "Neighbors: R:2" in details.plain
     assert "Size: 120×40" in details.plain  # ruff: ignore[ambiguous-unicode-character-string]
     assert "Needs attention: yes" in details.plain
