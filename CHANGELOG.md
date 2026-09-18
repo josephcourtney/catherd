@@ -4,6 +4,8 @@
 - simplify TUI tree rows to identity plus a concise activity/layout hint and distinguish Kitty-active objects from catherd selection.
 - reorganize the details pane into a fixed-width grouped inspector with breadcrumbs and exceptional-state emphasis.
 - replace the colorful binding footer with a restrained command strip and add tree filtering plus jump-to-active navigation.
+- replace the triangle-like active indicator with a circular marker, follow macOS light/dark appearance, and use theme-aware borders.
+- strengthen visual grouping with section rules and hierarchy weight while suppressing repetitive shell-wrapper hints.
 
 ## [0.18.0] - 2026-09-18
 
