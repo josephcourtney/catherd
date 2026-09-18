@@ -4,6 +4,7 @@
 - add a Textual TUI for navigating, focusing, renaming, moving, reordering, and merging Kitty OS windows, tabs, and panes.
 - add automatic state refresh that preserves tree selection and expansion state.
 - add a selected-object details panel with Kitty metadata and asynchronous Atuin session/command enrichment for panes.
+- add a stateful headless Textual acceptance harness covering TUI structural operations, mouse/keyboard focus semantics, and asynchronous refresh races.
 
 ### Fixed
 - update Kitty state parsing for the current `ls` schema, including foreground processes, terminal size, command state, and attention state.
@@ -12,6 +13,7 @@
 - distinguish the currently running Kitty shell-integration command from the most recently completed Atuin command.
 - handle uppercase terminal key events for `J`, `K`, and `M`, preserve logical selection across structural refreshes, and show pane position/neighbors from Kitty's layout metadata.
 - make pane tree order follow Kitty's visual layout order, separate mouse selection from explicit Kitty focus, and support tab-to-tab merges while rejecting merge on individual panes.
+- close Atuin SQLite connections explicitly instead of relying on the connection context manager's transaction-only cleanup.
 
 ## [0.16.0] - 2026-09-18
 
