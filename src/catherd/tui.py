@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import os
 import shlex
+import subprocess
+import sys
 from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Literal, Protocol
@@ -97,7 +99,7 @@ _TREE_HINT_MAX = 36
 
 
 def _active_marker(*, active: bool | None) -> str:
-    return "▶ " if active else "  "
+    return "● " if active else "  "
 
 
 def _compact_hint(value: str | None, max_len: int = _TREE_HINT_MAX) -> str | None:
@@ -141,7 +143,37 @@ def _compact_process_hint(value: str | None) -> str | None:
 def _pane_activity_hint(pane: Pane) -> str | None:
     if pane.current_command:
         return _compact_hint(pane.current_command)
-    return _compact_process_hint(pane.foreground_cmd)
+    foreground = pane.foreground_cmd
+    if foreground and "pty-proxy" in foreground and "--shell" in foreground:
+        return None
+    return _compact_process_hint(foreground)
+
+
+def _preferred_textual_theme() -> str | None:
+    override = os.environ.get("CATHERD_THEME")
+    if override in {"textual-light", "textual-dark"}:
+        return override
+    if sys.platform == "darwin":
+        try:
+            result = subprocess.run(
+                ["defaults", "read", "-g", "AppleInterfaceStyle"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=0.5,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        else:
+            return "textual-dark" if result.stdout.strip().casefold() == "dark" else "textual-light"
+    colorfgbg = os.environ.get("COLORFGBG")
+    if colorfgbg:
+        background = colorfgbg.rsplit(";", 1)[-1]
+        if background == "0":
+            return "textual-dark"
+        if background in {"7", "15"}:
+            return "textual-light"
+    return None
 
 
 def _os_window_label(os_window: OsWindow, display_title: str | None = None) -> Text:
@@ -272,7 +304,10 @@ def _detail_value(value: object | None) -> str:
 
 def _append_section(details: Text, title: str) -> None:
     details.append("\n")
-    details.append(title.upper(), style="dim bold")
+    label = title.upper()
+    details.append(label, style="bold")
+    details.append(" ")
+    details.append("─" * max(2, 32 - len(label)), style="dim")
     details.append("\n")
 
 
@@ -721,7 +756,7 @@ class KittyManagerApp(App[None]):
         min-width: 38;
         max-width: 54;
         padding: 1 2;
-        border-left: solid #444444;
+        border-left: solid $border-blurred;
         overflow-y: auto;
     }
 
@@ -744,8 +779,11 @@ class KittyManagerApp(App[None]):
         *,
         poll_interval: float | None = 2.0,
         activity_provider: Callable[[str], PaneActivity] | None = None,
+        theme_name: str | None = None,
     ) -> None:
         super().__init__()
+        if theme_name is not None:
+            self.theme = theme_name
         self.client: KittyBackend = client if client is not None else KittyClient.discover()
         self.poll_interval = poll_interval
         self._activity_provider = activity_provider if activity_provider is not None else get_pane_activity
@@ -1332,4 +1370,4 @@ class KittyManagerApp(App[None]):
 
 def run_tui() -> None:
     """Run the interactive Kitty organizer."""
-    KittyManagerApp().run()
+    KittyManagerApp(theme_name=_preferred_textual_theme()).run()
