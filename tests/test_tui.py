@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import replace
 
 import pytest
-from textual.widgets import Input, Tree
+from rich.text import Text
+from textual.widgets import Input, Static, Tree
 
 from catherd.activity import PaneActivity
 from catherd.model import KittyState, OsWindow, Pane, Tab
@@ -200,6 +201,31 @@ def test_selected_details_for_pane_loading() -> None:
 
     assert "Atuin session: loading…" in details.plain
     assert "Last command: loading…" in details.plain
+
+
+async def test_details_panel_loads_activity_for_highlighted_pane() -> None:
+    calls: list[str] = []
+
+    def activity_provider(pane_id: str) -> PaneActivity:
+        calls.append(pane_id)
+        return PaneActivity(session_id="session-live", last_command="uv run pytest")
+
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(
+        backend,
+        poll_interval=None,
+        activity_provider=activity_provider,
+    )
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        details = app.query_one("#details", Static)
+        assert isinstance(details.content, Text)
+        assert "Atuin session: session-live" in details.content.plain
+        assert "Last command: uv run pytest" in details.content.plain
+
+    assert "1" in calls
 
 
 async def test_tui_renders_hierarchy_and_selects_active_pane() -> None:
