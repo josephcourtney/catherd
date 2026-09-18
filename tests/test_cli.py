@@ -10,7 +10,6 @@ from catherd.cli import _collect_kitty_session_diagnostics, print_kitty_session_
 from catherd.model import KittyState, OsWindow, Pane, Tab
 
 
-
 def _state(
     *panes: Pane,
     tab_id: str = "t",
