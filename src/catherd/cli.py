@@ -52,7 +52,7 @@ def get_shell_info(force_shell: str | None = None) -> str:
 
 @click.group(invoke_without_command=True)
 @click.pass_context
-def main(ctx: click.Context) -> None:
+def cli(ctx: click.Context) -> None:
     """catherd: herd your Kitty windows and Atuin history."""
     if ctx.invoked_subcommand is None:
         ctx.invoke(show)
@@ -199,7 +199,7 @@ def _render_show_table(rows: list[tuple[KittyWindow, str]]) -> None:
                 _print_show_row(win, display_cmd)
 
 
-@main.command()
+@cli.command()
 @click.option("-v", "--verbose", is_flag=True, help="Show verbose/debug output")
 @click.option("--json", "as_json", is_flag=True, help="Output in JSON format")
 def show(*, verbose: bool, as_json: bool) -> None:
@@ -229,7 +229,7 @@ def show(*, verbose: bool, as_json: bool) -> None:
     _render_show_table(rows)
 
 
-@main.command()
+@cli.command()
 @click.option("-v", "--verbose", is_flag=True, help="Show verbose/debug output")
 @click.option("--pretty", is_flag=True, help="Pretty-print the JSON output")
 def inspect(*, verbose: bool, pretty: bool) -> None:
@@ -262,7 +262,7 @@ def inspect(*, verbose: bool, pretty: bool) -> None:
     click.echo(json.dumps(payloads, indent=2 if pretty else None))
 
 
-@main.command("install")
+@cli.command("install")
 @click.option("--shell", "force_shell", help="Force install for this shell (zsh, bash, fish, csh)")
 @click.option("--dry-run", is_flag=True)
 def install_shell_snippet(*, force_shell: str | None = None, dry_run: bool) -> None:
@@ -308,7 +308,7 @@ def install_shell_snippet(*, force_shell: str | None = None, dry_run: bool) -> N
     )
 
 
-@main.command("uninstall")
+@cli.command("uninstall")
 @click.option("--shell", "force_shell", help="Force uninstall for this shell (zsh, bash, fish, csh)")
 @click.option("--dry-run", is_flag=True)
 def uninstall(*, force_shell: str | None = None, dry_run: bool) -> None:
@@ -531,7 +531,7 @@ def print_kitty_session_diagnostics(windows: list[KittyWindow], *, verbose: bool
         )
 
 
-@main.command()
+@cli.command()
 @click.option("-v", "--verbose", is_flag=True, help="Show verbose/debug output")
 def doctor(*, verbose: bool = False) -> None:
     """Diagnose catherd/Kitty/Atuin integration issues."""
@@ -560,4 +560,4 @@ def doctor(*, verbose: bool = False) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    cli()
