@@ -360,8 +360,8 @@ class KittyTree(Tree[NodeRef]):
             return
         self.move_cursor(node.children[0])
 
-    def action_focus_kitty(self) -> None:
-        self.app.action_focus_selected()
+    async def action_focus_kitty(self) -> None:
+        await self.app.run_action("focus_selected")
 
 
 class VimOptionList(OptionList):
