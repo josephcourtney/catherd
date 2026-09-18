@@ -6,6 +6,7 @@ from catherd import atuin
 from catherd.atuin import get_atuin_history_db_path, get_last_command_for_atuin_session
 
 
+
 @pytest.mark.medium
 def test_atuin_history_db_path(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
