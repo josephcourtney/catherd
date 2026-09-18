@@ -445,9 +445,9 @@ class KittyManagerApp(App[None]):
         Binding("q", "quit", "Quit"),
         Binding("r", "rename_selected", "Rename"),
         Binding("m", "move_selected", "Move"),
-        Binding("shift+m", "merge_selected", "Merge"),
-        Binding("shift+j", "reorder_forward", "Move down"),
-        Binding("shift+k", "reorder_backward", "Move up"),
+        Binding("M,shift+m", "merge_selected", "Merge"),
+        Binding("J,shift+j", "reorder_forward", "Move down"),
+        Binding("K,shift+k", "reorder_backward", "Move up"),
         Binding("ctrl+r", "refresh", "Refresh"),
     ]
 
@@ -492,6 +492,7 @@ class KittyManagerApp(App[None]):
         self._activity_provider = activity_provider if activity_provider is not None else get_pane_activity
         self.state = KittyState(os_windows=())
         self._display_names: dict[NodeRef, str] = {}
+        self._logical_selection: NodeRef | None = None
         self._manager_pane_id = os.environ.get("KITTY_WINDOW_ID")
         self._mutation_active = False
 
@@ -565,7 +566,9 @@ class KittyManagerApp(App[None]):
 
     def _selected_ref(self) -> NodeRef | None:
         node = self._tree().cursor_node
-        return node.data if node is not None else None
+        if node is not None and node.data is not None:
+            return node.data
+        return self._logical_selection
 
     def _selected_title(self, ref: NodeRef) -> str:
         return self._display_names.get(ref, selected_title(self.state, ref))
@@ -575,6 +578,27 @@ class KittyManagerApp(App[None]):
             self._display_names[ref] = title
         else:
             self._display_names.pop(ref, None)
+        self._update_node_label(ref)
+        self._show_details(ref)
+
+    def _update_node_label(self, ref: NodeRef) -> None:
+        node = next((item for item in _walk_nodes(self._tree().root) if item.data == ref), None)
+        if node is None:
+            return
+        display_title = self._display_names.get(ref)
+        if ref.kind == "os_window":
+            os_window = self.state.find_os_window(ref.id)
+            if os_window is not None:
+                node.set_label(_os_window_label(os_window, display_title))
+            return
+        if ref.kind == "tab":
+            found = self.state.find_tab(ref.id)
+            if found is not None:
+                node.set_label(_tab_label(found[1], display_title))
+            return
+        location = self.state.find_pane(ref.id)
+        if location is not None:
+            node.set_label(_pane_label(location.pane, display_title))
 
     def _expanded_refs(self) -> set[NodeRef]:
         expanded: set[NodeRef] = set()
@@ -612,9 +636,15 @@ class KittyManagerApp(App[None]):
         for os_window in state.os_windows:
             self._add_os_window(tree.root, os_window, nodes, expanded)
         self.state = state
-        target = preferred or self._initial_ref(state)
+        target = preferred or self._logical_selection or self._initial_ref(state)
         if target is not None and target in nodes:
+            self._logical_selection = target
             self._schedule_cursor_restore(tree, nodes[target])
+            return
+        fallback = self._initial_ref(state)
+        self._logical_selection = fallback
+        if fallback is not None and fallback in nodes:
+            self._schedule_cursor_restore(tree, nodes[fallback])
         elif tree.root.children:
             self._schedule_cursor_restore(tree, tree.root.children[0])
 
@@ -672,7 +702,7 @@ class KittyManagerApp(App[None]):
     async def refresh_state(self, preferred: NodeRef | None = None) -> None:
         """Reload Kitty state and redraw while preserving navigation state."""
         tree = self._tree()
-        selected = preferred or self._selected_ref()
+        selected = preferred or self._logical_selection or self._selected_ref()
         expanded = self._expanded_refs() if tree.root.children else None
         try:
             state = await asyncio.to_thread(self.client.snapshot)
@@ -691,6 +721,8 @@ class KittyManagerApp(App[None]):
         self.run_worker(self.refresh_state(), group="kitty-refresh", exclusive=True)
 
     def on_tree_node_highlighted(self, event: Tree.NodeHighlighted[NodeRef]) -> None:
+        if event.node.data is not None:
+            self._logical_selection = event.node.data
         self._show_details(event.node.data)
 
     def on_tree_node_selected(self, event: Tree.NodeSelected[NodeRef]) -> None:
@@ -846,6 +878,7 @@ class KittyManagerApp(App[None]):
         if self._mutation_active:
             self._status("Another Kitty operation is still running")
             return
+        self._logical_selection = preferred
         self._mutation_active = True
         self.run_worker(
             self._run_mutation(
