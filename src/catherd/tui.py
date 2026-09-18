@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Literal, Protocol
@@ -378,6 +379,7 @@ class KittyManagerApp(App[None]):
         self.client: KittyBackend = client if client is not None else KittyClient.discover()
         self.poll_interval = poll_interval
         self.state = KittyState(os_windows=())
+        self._manager_pane_id = os.environ.get("KITTY_WINDOW_ID")
         self._mutation_active = False
 
     def compose(self) -> ComposeResult:
@@ -415,7 +417,12 @@ class KittyManagerApp(App[None]):
 
     def _initial_ref(self, state: KittyState) -> NodeRef | None:
         for location in state.iter_panes():
-            if location.pane.is_active and location.pane.id:
+            if (
+                location.os_window.is_active
+                and location.tab.is_active
+                and location.pane.is_active
+                and location.pane.id
+            ):
                 return NodeRef("pane", location.pane.id)
         first_pane = next(state.iter_panes(), None)
         if first_pane is not None:
@@ -512,7 +519,12 @@ class KittyManagerApp(App[None]):
     def on_tree_node_selected(self, event: Tree.NodeSelected[NodeRef]) -> None:
         ref = event.node.data
         if ref is not None:
-            self._start_mutation("Focused", self._focus_operation(ref), preferred=ref)
+            self._start_mutation(
+                "Focused",
+                self._focus_operation(ref),
+                preferred=ref,
+                restore_manager_focus=False,
+            )
 
     def action_rename_selected(self) -> None:
         ref = self._selected_ref()
@@ -642,13 +654,19 @@ class KittyManagerApp(App[None]):
         operation: Callable[[], None],
         *,
         preferred: NodeRef,
+        restore_manager_focus: bool = True,
     ) -> None:
         if self._mutation_active:
             self._status("Another Kitty operation is still running")
             return
         self._mutation_active = True
         self.run_worker(
-            self._run_mutation(success_message, operation, preferred),
+            self._run_mutation(
+                success_message,
+                operation,
+                preferred,
+                restore_manager_focus=restore_manager_focus,
+            ),
             group="kitty-mutation",
             exclusive=True,
         )
@@ -658,9 +676,13 @@ class KittyManagerApp(App[None]):
         success_message: str,
         operation: Callable[[], None],
         preferred: NodeRef,
+        *,
+        restore_manager_focus: bool,
     ) -> None:
         try:
             await asyncio.to_thread(operation)
+            if restore_manager_focus and self._manager_pane_id is not None:
+                await asyncio.to_thread(self.client.focus_pane, self._manager_pane_id)
             await self.refresh_state(preferred)
         except KittyClientError as exc:
             self._status(f"Kitty error: {exc}")
