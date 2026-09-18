@@ -494,7 +494,7 @@ class KittyManagerApp(App[None]):
             if parent.is_collapsed:
                 parent.expand()
             parent = parent.parent
-        tree.call_after_refresh(tree.move_cursor, node, False)
+        tree.call_after_refresh(tree.move_cursor, node, animate=False)
 
     async def refresh_state(self, preferred: NodeRef | None = None) -> None:
         """Reload Kitty state and redraw while preserving navigation state."""
