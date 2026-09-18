@@ -180,11 +180,11 @@ def _os_window_label(os_window: OsWindow, display_title: str | None = None) -> T
     label = Text()
     label.append(_active_marker(active=os_window.is_active), style="bold" if os_window.is_active else "")
     label.append("OS ", style="dim")
-    label.append(_display_name(os_window.id, "?"))
+    label.append(_display_name(os_window.id, "?"), style="bold")
     title = display_title if display_title is not None else os_window.title
     if title:
         label.append("  ")
-        label.append(title)
+        label.append(title, style="bold")
     pane_count = sum(len(tab.panes) for tab in os_window.tabs)
     label.append(f"  {len(os_window.tabs)}t/{pane_count}p", style="dim")
     return label
@@ -194,7 +194,7 @@ def _tab_label(tab: Tab, display_title: str | None = None) -> Text:
     label = Text()
     label.append(_active_marker(active=tab.is_active), style="bold" if tab.is_active else "")
     title = display_title if display_title is not None else tab.title
-    label.append(_display_name(title, "(untitled)"))
+    label.append(_display_name(title, "(untitled)"), style="bold")
     if tab.id:
         label.append(f"  [{tab.id}]", style="dim")
     if tab.layout:
