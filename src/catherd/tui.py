@@ -109,6 +109,24 @@ def _compact_hint(value: str | None, max_len: int = _TREE_HINT_MAX) -> str | Non
     return normalized[: max_len - 3].rstrip() + "..."
 
 
+def _compact_tokens(parts: list[str], max_len: int = _TREE_HINT_MAX) -> str | None:
+    if not parts:
+        return None
+    full = " ".join(parts)
+    if len(full) <= max_len:
+        return full
+    suffix = " ..."
+    kept: list[str] = []
+    for part in parts:
+        candidate = " ".join((*kept, part))
+        if len(candidate) + len(suffix) > max_len:
+            break
+        kept.append(part)
+    if kept:
+        return " ".join(kept) + suffix
+    return _compact_hint(parts[0], max_len=max_len)
+
+
 def _compact_process_hint(value: str | None) -> str | None:
     if not value:
         return None
@@ -117,7 +135,7 @@ def _compact_process_hint(value: str | None) -> str | None:
     except ValueError:
         return _compact_hint(value)
     compact = [os.path.basename(part) if part.startswith("/") else part for part in parts]
-    return _compact_hint(" ".join(compact))
+    return _compact_tokens(compact)
 
 
 def _pane_activity_hint(pane: Pane) -> str | None:
