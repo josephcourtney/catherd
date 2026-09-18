@@ -17,7 +17,7 @@ The TUI displays Kitty's hierarchy as OS windows → tabs → panes. The tree is
 | `j` / `k` | move through the tree |
 | `h` / `l` | collapse / expand |
 | `Enter` / `f` | focus selected OS window, tab, or pane in Kitty |
-| `/` | filter the tree by title, ID, path, or command; submit an empty filter to clear |
+| `/` | filter the tree by title, ID, path, or command; submit empty or press `Esc` to clear |
 | `a` | clear filtering and jump to the active Kitty pane |
 | `r` | rename selected object |
 | `m` | move a pane or tab |
