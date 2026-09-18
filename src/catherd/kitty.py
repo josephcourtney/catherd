@@ -124,12 +124,38 @@ def _id_tuple(value: object, visible_ids: set[str]) -> tuple[str, ...]:
     return ids
 
 
-def _group_positions(tab_data: dict[str, object], visible_ids: set[str]) -> dict[str, tuple[int, int]]:
-    visible_groups: list[tuple[str, ...]] = []
+def _visible_groups(tab_data: dict[str, object], visible_ids: set[str]) -> tuple[tuple[str, ...], ...]:
+    groups: list[tuple[str, ...]] = []
     for group in _as_object_list(tab_data.get("groups")):
         ids = _id_tuple(group.get("windows"), visible_ids)
         if ids:
-            visible_groups.append(ids)
+            groups.append(ids)
+    return tuple(groups)
+
+
+def _ordered_pane_data(
+    pane_data_items: list[dict[str, object]],
+    visible_groups: tuple[tuple[str, ...], ...],
+) -> list[dict[str, object]]:
+    by_id = {
+        pane_id: pane_data
+        for pane_data in pane_data_items
+        if (pane_id := _safe_str(pane_data.get("id"))) is not None
+    }
+    ordered_ids = [pane_id for group in visible_groups for pane_id in group]
+    ordered = [by_id[pane_id] for pane_id in ordered_ids if pane_id in by_id]
+    ordered_set = set(ordered_ids)
+    ordered.extend(
+        pane_data
+        for pane_data in pane_data_items
+        if (pane_id := _safe_str(pane_data.get("id"))) is None or pane_id not in ordered_set
+    )
+    return ordered
+
+
+def _group_positions(
+    visible_groups: tuple[tuple[str, ...], ...],
+) -> dict[str, tuple[int, int]]:
     group_count = len(visible_groups)
     return {
         pane_id: (group_index, group_count)
@@ -147,7 +173,9 @@ def _parse_panes(tab_data: dict[str, object], tab_title: str | None) -> tuple[Pa
     visible_ids = {
         pane_id for pane_data in pane_data_items if (pane_id := _safe_str(pane_data.get("id"))) is not None
     }
-    group_positions = _group_positions(tab_data, visible_ids)
+    visible_groups = _visible_groups(tab_data, visible_ids)
+    pane_data_items = _ordered_pane_data(pane_data_items, visible_groups)
+    group_positions = _group_positions(visible_groups)
     pane_count = len(pane_data_items)
     panes: list[Pane] = []
     for tab_index, pane_data in enumerate(pane_data_items, start=1):
@@ -409,6 +437,20 @@ class KittyClient:
         self.focus_tab(tab_id)
         action = "move_tab_forward" if direction == "forward" else "move_tab_backward"
         self._run_remote("action", "--match", f"id:{pane_id}", action)
+
+    def merge_tabs(self, source_tab_id: str, target_tab_id: str) -> None:
+        """Move every pane from one tab into another."""
+        if source_tab_id == target_tab_id:
+            return
+        state = self.snapshot()
+        found = state.find_tab(source_tab_id)
+        if found is None:
+            raise KittyObjectNotFoundError("tab", source_tab_id)
+        if state.find_tab(target_tab_id) is None:
+            raise KittyObjectNotFoundError("tab", target_tab_id)
+        for pane in found[1].panes:
+            if pane.id:
+                self.move_pane(pane.id, target_tab_id)
 
     def merge_os_windows(self, source_os_window_id: str, target_os_window_id: str) -> None:
         """Move every tab from one OS window into another."""
