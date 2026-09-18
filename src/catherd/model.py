@@ -14,6 +14,13 @@ class Pane:
     pid: int | None = None
     cwd: str | None = None
     foreground_cmd: str | None = None
+    root_cmdline: str | None = None
+    current_command: str | None = None
+    at_prompt: bool | None = None
+    title_overridden: bool | None = None
+    needs_attention: bool | None = None
+    has_activity_since_last_focus: bool | None = None
+    is_self: bool | None = None
     tty: str | None = None
     cols: int | None = None
     rows: int | None = None
