@@ -1,4 +1,4 @@
-## [0.17.0] - 2026-09-18
+## [0.18.0] - 2026-09-18
 
 ### Added
 - add a Textual TUI for navigating, focusing, renaming, moving, reordering, and merging Kitty OS windows, tabs, and panes.
@@ -14,6 +14,7 @@
 - handle uppercase terminal key events for `J`, `K`, and `M`, preserve logical selection across structural refreshes, and show pane position/neighbors from Kitty's layout metadata.
 - make pane tree order follow Kitty's visual layout order, separate mouse selection from explicit Kitty focus, and support tab-to-tab merges while rejecting merge on individual panes.
 - close Atuin SQLite connections explicitly instead of relying on the connection context manager's transaction-only cleanup.
+- make explicit `Enter`/`f` focus take precedence over Textual Tree selection while mouse interaction remains selection-only.
 
 ## [0.16.0] - 2026-09-18
 
