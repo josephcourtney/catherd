@@ -24,7 +24,7 @@ The TUI displays Kitty's hierarchy as OS windows → tabs → panes. Pane order 
 | `Ctrl-R` | refresh |
 | `q` | quit |
 
-The TUI intentionally does not close processes or create new shells in this version.
+The 0.18.0 TUI intentionally does not close processes or create new shells.
 
 ### TUI testing
 
@@ -34,7 +34,7 @@ The interaction layer is exercised headlessly with Textual's testing harness and
 just test-tui
 ```
 
-These tests cover keyboard and mouse selection, explicit focus, rename, move/detach, pane/tab reordering, tab and OS-window merging, details updates, selection preservation, polling races, and stale asynchronous activity results. Manual acceptance is reserved for behavior that requires a real Kitty/macOS process boundary.
+These tests cover keyboard and mouse selection, explicit focus, rename, move/detach, pane/tab reordering, tab and OS-window merging, details updates, selection preservation, polling races, and stale asynchronous activity results. The headless suite is complemented by a small real-Kitty/macOS acceptance rehearsal for remote-control and native-window behavior.
 
 ## Existing commands
 
