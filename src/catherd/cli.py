@@ -1,7 +1,7 @@
 import json
 import os
 import shutil
-from itertools import groupby
+from itertools import groupby, starmap
 from pathlib import Path
 from typing import Final
 
@@ -225,7 +225,7 @@ def show(*, verbose: bool, as_json: bool) -> None:
         return
 
     if as_json:
-        click.echo(json.dumps([_serialize_pane(location, command) for location, command in rows], indent=2))
+        click.echo(json.dumps(list(starmap(_serialize_pane, rows)), indent=2))
         return
 
     _render_show_table(rows)
@@ -276,10 +276,7 @@ def install_shell_snippet(*, force_shell: str | None = None, dry_run: bool) -> N
         rc_path = get_shell_rc_path(shell)
         snippet_marker = "# catherd atuin/kitty sync snippet"
         snippet_block = (
-            snippet_marker
-            + "\n"
-            + load_snippet_for_shell(shell).rstrip()
-            + "\n# end catherd atuin/kitty sync\n"
+            snippet_marker + "\n" + load_snippet_for_shell(shell).rstrip() + "\n# end catherd atuin/kitty sync\n"
         )
         if rc_path.exists():
             contents = rc_path.read_text(encoding="utf-8")
@@ -366,9 +363,7 @@ def print_shell_snippet(shell: str) -> None:
         click.echo(snippet)
         click.echo("\nOr run 'catherd install' to do it automatically.")
     except ValueError:
-        click.echo(
-            "[INFO] Unknown shell. See the README or scripts/catherd_rc_snippet.* for setup instructions.\n"
-        )
+        click.echo("[INFO] Unknown shell. See the README or scripts/catherd_rc_snippet.* for setup instructions.\n")
 
 
 def print_env_diagnostics():
@@ -409,8 +404,7 @@ def _collect_kitty_session_diagnostics(
                     declared_window = tokens[1]
                     if declared_window != pane.id:
                         notes.append(
-                            f"session file {session_path} references window {declared_window} "
-                            f"but we expected {pane.id}"
+                            f"session file {session_path} references window {declared_window} but we expected {pane.id}"
                         )
                 last_cmd = get_last_command_for_atuin_session(session_id, verbose=verbose)
                 if _is_missing_or_error_command(last_cmd):
@@ -481,9 +475,7 @@ def _print_missing_files(missing_file: list[PaneLocation]) -> None:
         click.echo(f"  - WinID: {pane.id}, TabID: {location.tab.id}, Title: {pane.title[:30]}")
         _print_kitty_window_metadata(pane)
     click.echo("    -> The Atuin/Kitty sync snippet is NOT active in these windows/tabs.")
-    click.echo(
-        "    -> To activate: Ensure your shell sources the sync snippet and RESTART this Kitty tab/window."
-    )
+    click.echo("    -> To activate: Ensure your shell sources the sync snippet and RESTART this Kitty tab/window.")
 
 
 def _print_corrupt_windows(corrupt_file: list[tuple[PaneLocation, str]]) -> None:
@@ -520,9 +512,7 @@ def _print_sync_notes(notes: list[str]) -> None:
 
 
 def print_kitty_session_diagnostics(state: KittyState, *, verbose: bool = False) -> None:
-    ok, missing_file, corrupt_file, missing_command, notes = _collect_kitty_session_diagnostics(
-        state, verbose=verbose
-    )
+    ok, missing_file, corrupt_file, missing_command, notes = _collect_kitty_session_diagnostics(state, verbose=verbose)
     total = state.pane_count
     click.secho(f"[OK] Found {total} Kitty window(s).\n", fg="green")
 
@@ -563,9 +553,7 @@ def doctor(*, verbose: bool = False) -> None:
 
     state = get_kitty_state(verbose=verbose)
     if state is None or state.pane_count == 0:
-        click.secho(
-            "[FAIL] No Kitty windows found. Is Kitty running and are there open windows/tabs?", fg="red"
-        )
+        click.secho("[FAIL] No Kitty windows found. Is Kitty running and are there open windows/tabs?", fg="red")
         raise SystemExit(1)
 
     print_kitty_session_diagnostics(state, verbose=verbose)

@@ -26,9 +26,7 @@ def test_get_last_command_with_db(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     con = sqlite3.connect(str(dbfile))
     con.execute("CREATE TABLE history (session TEXT, command TEXT, timestamp INTEGER)")
-    con.execute(
-        "INSERT INTO history (session, command, timestamp) VALUES (?, ?, ?)", ("sess1", "ls -l", 12345)
-    )
+    con.execute("INSERT INTO history (session, command, timestamp) VALUES (?, ?, ?)", ("sess1", "ls -l", 12345))
     con.commit()
     con.close()
     assert get_last_command_for_atuin_session("sess1") == "ls -l"

@@ -85,7 +85,7 @@ def test_parse_kitty_state_tolerates_non_mapping_entries():
 
 @patch("shutil.which", return_value="/usr/bin/kitty")
 @patch("subprocess.run")
-def test_get_kitty_state_json_parsing(mock_run, mock_which):  # noqa: ARG001
+def test_get_kitty_state_json_parsing(mock_run, mock_which):
     mock_run.return_value = MagicMock(returncode=0, stdout=json.dumps(_payload()), stderr="")
     state = get_kitty_state()
     assert state is not None
@@ -108,7 +108,8 @@ def test_get_kitty_state_subprocess_error(monkeypatch):
     monkeypatch.setattr("shutil.which", lambda _x: "/usr/bin/kitty")
 
     def raise_exc(*_a, **_k):
-        raise FileNotFoundError("fail")
+        msg = "fail"
+        raise FileNotFoundError(msg)
 
     monkeypatch.setattr("subprocess.run", raise_exc)
     assert get_kitty_state() is None

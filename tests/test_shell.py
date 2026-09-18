@@ -8,9 +8,9 @@ pytestmark = pytest.mark.small
 
 
 def test_get_shell_rc_path_zsh(monkeypatch):
-    monkeypatch.setenv("ZDOTDIR", "/tmp/zdot")  # noqa: S108
+    monkeypatch.setenv("ZDOTDIR", "/tmp/zdot")  # ruff: ignore[hardcoded-temp-file]
     rc = get_shell_rc_path("zsh")
-    assert rc == Path("/tmp/zdot/.zshrc")  # noqa: S108
+    assert rc == Path("/tmp/zdot/.zshrc")  # ruff: ignore[hardcoded-temp-file]
 
 
 def test_get_shell_rc_path_bash():
@@ -19,7 +19,7 @@ def test_get_shell_rc_path_bash():
 
 
 def test_get_shell_rc_path_fish(monkeypatch):
-    monkeypatch.setenv("XDG_CONFIG_HOME", "/tmp/xconfig")  # noqa: S108
+    monkeypatch.setenv("XDG_CONFIG_HOME", "/tmp/xconfig")  # ruff: ignore[hardcoded-temp-file]
     rc = get_shell_rc_path("fish")
     assert str(rc).endswith("fish/config.fish")
 

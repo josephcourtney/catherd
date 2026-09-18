@@ -73,5 +73,5 @@ class KittyState:
 
     @property
     def pane_count(self) -> int:
-        """Return the total number of panes in the snapshot."""
+        """The total number of panes in the snapshot."""
         return sum(len(tab.panes) for _, tab in self.iter_tabs())

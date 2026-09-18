@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pytest
 from click.testing import CliRunner
 
-import catherd.__main__  # noqa: F401
+import catherd.__main__  # ruff: ignore[unused-import]
 from catherd import cli
 from catherd.cli import _collect_kitty_session_diagnostics, print_kitty_session_diagnostics
 from catherd.model import KittyState, OsWindow, Pane, Tab
@@ -306,8 +306,8 @@ def test__collect_kitty_session_diagnostics_branches(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "get_last_command_for_atuin_session", fake_last)
 
     ok, missing, corrupt, missing_cmd, notes = _collect_kitty_session_diagnostics(state, verbose=True)
-    assert ["a"] == [location.pane.id for location in missing]
-    assert ["b"] == [location.pane.id for location, _ in corrupt]
+    assert [location.pane.id for location in missing] == ["a"]
+    assert [location.pane.id for location, _ in corrupt] == ["b"]
     assert len(missing_cmd) == 1
     assert missing_cmd[0][0].pane.id == "c"
     assert len(ok) == 1

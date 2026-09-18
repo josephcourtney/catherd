@@ -2,7 +2,7 @@
 
 import json
 import shutil
-import subprocess  # noqa: S404
+import subprocess  # ruff: ignore[suspicious-subprocess-import]
 import sys
 from dataclasses import dataclass
 from typing import cast
@@ -67,9 +67,7 @@ def _normalize_foreground(window: dict[str, object]) -> tuple[str | None, int | 
         proc_map = cast("dict[str, object]", proc)
         pid = _safe_int(proc_map.get("pid"))
         cmd = (
-            _safe_str(proc_map.get("argv0"))
-            or _safe_str(proc_map.get("command"))
-            or _safe_str(proc_map.get("cmdline"))
+            _safe_str(proc_map.get("argv0")) or _safe_str(proc_map.get("command")) or _safe_str(proc_map.get("cmdline"))
         )
         if not cmd:
             cmdline = proc_map.get("cmdline")
@@ -78,9 +76,7 @@ def _normalize_foreground(window: dict[str, object]) -> tuple[str | None, int | 
         return cmd, pid
 
     cmd = (
-        _safe_str(window.get("foreground_cmd"))
-        or _safe_str(window.get("argv0"))
-        or _safe_str(window.get("foreground"))
+        _safe_str(window.get("foreground_cmd")) or _safe_str(window.get("argv0")) or _safe_str(window.get("foreground"))
     )
     pid = _safe_int(window.get("pid")) or _safe_int(window.get("foreground_pid"))
     return cmd, pid
@@ -194,7 +190,7 @@ class KittyClient:
         """Return raw JSON from kitty @ ls."""
         command = (self.executable, "@", "ls")
         try:
-            result = subprocess.run(command, capture_output=True, text=True, check=False)  # noqa: S603
+            result = subprocess.run(command, capture_output=True, text=True, check=False)  # ruff: ignore[subprocess-without-shell-equals-true]
         except (FileNotFoundError, subprocess.SubprocessError) as exc:
             raise KittyInvocationError(command, exc) from exc
         if result.returncode != 0:
