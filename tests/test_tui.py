@@ -563,6 +563,27 @@ async def test_filter_tree_keeps_matching_ancestors_and_prunes_siblings() -> Non
 
 
 @pytest.mark.medium
+async def test_escape_clears_tree_filter() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("/")
+        filter_input = app.screen.query_one("#filter-input", Input)
+        filter_input.value = "pytest"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        await pilot.press("escape")
+        await pilot.pause()
+
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        assert app._filter_query == ""
+        assert len(tree.root.children) == 2
+
+
+@pytest.mark.medium
 async def test_jump_active_clears_filter_and_selects_active_pane() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
