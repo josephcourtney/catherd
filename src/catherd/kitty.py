@@ -117,6 +117,83 @@ def _is_kitty_ui_window(window: dict[str, object]) -> bool:
     return value is not None and value.casefold() not in {"", "0", "false", "no"}
 
 
+def _id_tuple(value: object, visible_ids: set[str]) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    ids = tuple(item for raw in value if (item := _safe_str(raw)) is not None and item in visible_ids)
+    return ids
+
+
+def _group_positions(tab_data: dict[str, object], visible_ids: set[str]) -> dict[str, tuple[int, int]]:
+    visible_groups: list[tuple[str, ...]] = []
+    for group in _as_object_list(tab_data.get("groups")):
+        ids = _id_tuple(group.get("windows"), visible_ids)
+        if ids:
+            visible_groups.append(ids)
+    group_count = len(visible_groups)
+    return {
+        pane_id: (group_index, group_count)
+        for group_index, pane_ids in enumerate(visible_groups, start=1)
+        for pane_id in pane_ids
+    }
+
+
+def _parse_panes(tab_data: dict[str, object], tab_title: str | None) -> tuple[Pane, ...]:
+    pane_data_items = [
+        pane_data
+        for pane_data in _as_object_list(tab_data.get("windows"))
+        if not _is_kitty_ui_window(pane_data)
+    ]
+    visible_ids = {
+        pane_id for pane_data in pane_data_items if (pane_id := _safe_str(pane_data.get("id"))) is not None
+    }
+    group_positions = _group_positions(tab_data, visible_ids)
+    pane_count = len(pane_data_items)
+    panes: list[Pane] = []
+    for tab_index, pane_data in enumerate(pane_data_items, start=1):
+        pane_id = _safe_str(pane_data.get("id")) or ""
+        foreground_cmd, pid, foreground_cwd = _normalize_foreground(pane_data)
+        at_prompt = _safe_bool(pane_data.get("at_prompt"))
+        last_reported_cmdline = _safe_str(pane_data.get("last_reported_cmdline"))
+        needs_attention = _safe_bool(pane_data.get("needs_attention"))
+        legacy_urgent = _safe_bool(pane_data.get("is_urgent"))
+        group_index, group_count = group_positions.get(pane_id, (None, None))
+        neighbors = _as_object(pane_data.get("neighbors")) or {}
+        panes.append(
+            Pane(
+                id=pane_id,
+                title=_safe_str(pane_data.get("title")) or tab_title or "",
+                is_active=_extract_active_flag(pane_data),
+                pid=pid,
+                cwd=foreground_cwd or _safe_str(pane_data.get("cwd")),
+                foreground_cmd=foreground_cmd,
+                root_cmdline=_cmdline_text(pane_data.get("cmdline")),
+                current_command=last_reported_cmdline if at_prompt is False else None,
+                at_prompt=at_prompt,
+                title_overridden=_safe_bool(pane_data.get("title_overridden")),
+                needs_attention=needs_attention,
+                has_activity_since_last_focus=_safe_bool(pane_data.get("has_activity_since_last_focus")),
+                is_self=_safe_bool(pane_data.get("is_self")),
+                tab_index=tab_index,
+                tab_count=pane_count,
+                group_index=group_index,
+                group_count=group_count,
+                neighbors_left=_id_tuple(neighbors.get("left"), visible_ids),
+                neighbors_top=_id_tuple(neighbors.get("top"), visible_ids),
+                neighbors_right=_id_tuple(neighbors.get("right"), visible_ids),
+                neighbors_bottom=_id_tuple(neighbors.get("bottom"), visible_ids),
+                tty=_safe_str(pane_data.get("tty")),
+                cols=_safe_int(pane_data.get("columns")) or _safe_int(pane_data.get("cols")),
+                rows=_safe_int(pane_data.get("lines")) or _safe_int(pane_data.get("rows")),
+                x=_safe_int(pane_data.get("x")),
+                y=_safe_int(pane_data.get("y")),
+                has_bell=_safe_bool(pane_data.get("has_bell")),
+                is_urgent=legacy_urgent if legacy_urgent is not None else needs_attention,
+            )
+        )
+    return tuple(panes)
+
+
 def parse_kitty_state(data: object) -> KittyState:
     """Parse kitty @ ls JSON data into the canonical hierarchy."""
     os_windows: list[OsWindow] = []
@@ -124,44 +201,11 @@ def parse_kitty_state(data: object) -> KittyState:
         tabs: list[Tab] = []
         for tab_data in _as_object_list(os_data.get("tabs")):
             tab_title = _safe_str(tab_data.get("title"))
-            panes: list[Pane] = []
-            for pane_data in _as_object_list(tab_data.get("windows")):
-                if _is_kitty_ui_window(pane_data):
-                    continue
-                foreground_cmd, pid, foreground_cwd = _normalize_foreground(pane_data)
-                at_prompt = _safe_bool(pane_data.get("at_prompt"))
-                last_reported_cmdline = _safe_str(pane_data.get("last_reported_cmdline"))
-                needs_attention = _safe_bool(pane_data.get("needs_attention"))
-                legacy_urgent = _safe_bool(pane_data.get("is_urgent"))
-                panes.append(
-                    Pane(
-                        id=_safe_str(pane_data.get("id")) or "",
-                        title=_safe_str(pane_data.get("title")) or tab_title or "",
-                        is_active=_extract_active_flag(pane_data),
-                        pid=pid,
-                        cwd=foreground_cwd or _safe_str(pane_data.get("cwd")),
-                        foreground_cmd=foreground_cmd,
-                        root_cmdline=_cmdline_text(pane_data.get("cmdline")),
-                        current_command=last_reported_cmdline if at_prompt is False else None,
-                        at_prompt=at_prompt,
-                        title_overridden=_safe_bool(pane_data.get("title_overridden")),
-                        needs_attention=needs_attention,
-                        has_activity_since_last_focus=_safe_bool(pane_data.get("has_activity_since_last_focus")),
-                        is_self=_safe_bool(pane_data.get("is_self")),
-                        tty=_safe_str(pane_data.get("tty")),
-                        cols=_safe_int(pane_data.get("columns")) or _safe_int(pane_data.get("cols")),
-                        rows=_safe_int(pane_data.get("lines")) or _safe_int(pane_data.get("rows")),
-                        x=_safe_int(pane_data.get("x")),
-                        y=_safe_int(pane_data.get("y")),
-                        has_bell=_safe_bool(pane_data.get("has_bell")),
-                        is_urgent=legacy_urgent if legacy_urgent is not None else needs_attention,
-                    )
-                )
             tabs.append(
                 Tab(
                     id=_safe_str(tab_data.get("id")),
                     title=tab_title,
-                    panes=tuple(panes),
+                    panes=_parse_panes(tab_data, tab_title),
                     is_active=_extract_active_flag(tab_data),
                     layout=_safe_str(tab_data.get("layout")),
                 )
