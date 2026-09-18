@@ -83,6 +83,30 @@ def test_parse_kitty_state_tolerates_non_mapping_entries():
     assert state.pane_count == 0
 
 
+def test_parse_kitty_state_tolerates_unsupported_integer_metadata():
+    state = parse_kitty_state([
+        {
+            "tabs": [
+                {
+                    "windows": [
+                        {
+                            "id": 1,
+                            "title": "pane",
+                            "pid": {},
+                            "cols": [],
+                            "rows": 24.5,
+                        }
+                    ]
+                }
+            ]
+        }
+    ])
+    pane = state.os_windows[0].tabs[0].panes[0]
+    assert pane.pid is None
+    assert pane.cols is None
+    assert pane.rows == 24
+
+
 @patch("shutil.which", return_value="/usr/bin/kitty")
 @patch("subprocess.run")
 def test_get_kitty_state_json_parsing(mock_run, mock_which):
