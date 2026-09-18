@@ -1,6 +1,10 @@
 import sqlite3
 
+import pytest
+
 from catherd.atuin import get_atuin_history_db_path, get_last_command_for_atuin_session
+
+pytestmark = pytest.mark.small
 
 
 def test_atuin_history_db_path(monkeypatch, tmp_path):

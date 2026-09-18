@@ -1,7 +1,11 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from catherd.kitty import KittyWindow, get_kitty_windows
+
+pytestmark = pytest.mark.small
 
 
 def test_kittywindow_dataclass():
@@ -9,6 +13,9 @@ def test_kittywindow_dataclass():
     assert w.id == "w"
     assert w.tab == "t"
     assert w.title == "foo"
+    assert w.os_window_id is None
+    assert w.pid is None
+    assert w.foreground_cmd is None
 
 
 @patch("shutil.which", return_value="/usr/bin/kitty")
@@ -17,13 +24,57 @@ def test_get_kitty_windows_json_parsing(mock_run, mock_which):  # noqa: ARG001
     # Use a fake kitty ls output
     mock_run.return_value = MagicMock(
         returncode=0,
-        stdout=json.dumps([{"tabs": [{"id": 1, "title": "tab", "windows": [{"id": 11, "title": "w1"}]}]}]),
+        stdout=json.dumps([
+            {
+                "id": 42,
+                "is_focused": True,
+                "tabs": [
+                    {
+                        "id": "tabA",
+                        "title": "tab",
+                        "is_focused": True,
+                        "windows": [
+                            {
+                                "id": 11,
+                                "title": "w1",
+                                "is_focused": True,
+                                "has_bell": False,
+                                "is_urgent": True,
+                                "cwd": "/safe/cwd",
+                                "tty": "/dev/pts/1",
+                                "cols": 80,
+                                "rows": 24,
+                                "x": 10,
+                                "y": 5,
+                                "foreground_process": {"argv0": "bash", "pid": 100},
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]),
         stderr="",
     )
     windows = get_kitty_windows()
     assert isinstance(windows, list)
     assert isinstance(windows[0], KittyWindow)
     assert windows[0].id == "11"
+    assert windows[0].os_window_id == "42"
+    assert windows[0].tab == "tabA"
+    assert windows[0].tab_title == "tab"
+    assert windows[0].is_active_os_window is True
+    assert windows[0].is_active_tab is True
+    assert windows[0].is_active_window is True
+    assert windows[0].foreground_cmd == "bash"
+    assert windows[0].pid == 100
+    assert windows[0].cwd == "/safe/cwd"
+    assert windows[0].tty == "/dev/pts/1"
+    assert windows[0].cols == 80
+    assert windows[0].rows == 24
+    assert windows[0].x == 10
+    assert windows[0].y == 5
+    assert windows[0].has_bell is False
+    assert windows[0].is_urgent is True
 
 
 def test_kittywindow_repr_and_fields():

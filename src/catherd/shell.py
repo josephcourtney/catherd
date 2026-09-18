@@ -12,9 +12,9 @@ _EMBEDDED_SNIPPETS: Final[dict[str, str]] = {
     ),
     "zsh": (
         'if [[ -n "$KITTY_WINDOW_ID" && -n "$ATUIN_SESSION" ]]; then\n'
-        '    mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}/catherd"\n'
-        '    echo "$ATUIN_SESSION $KITTY_WINDOW_ID" > '
-        '"${XDG_CACHE_HOME:-$HOME/.cache}/catherd/atuin_kitty_${KITTY_WINDOW_ID}"\n'
+        '  local _catherd_dir="${XDG_CACHE_HOME:-$HOME/.cache}/catherd\n'
+        '  mkdir -p -- "$_catherd_dir\n'
+        '  print -r -- "$ATUIN_SESSION $KITTY_WINDOW_ID" > "$_catherd_dir/atuin_kitty_${KITTY_WINDOW_ID}\n'
         "fi\n"
     ),
     "fish": (

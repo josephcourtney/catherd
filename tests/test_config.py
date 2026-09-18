@@ -1,4 +1,8 @@
+import pytest
+
 from catherd import config
+
+pytestmark = pytest.mark.small
 
 
 def test_get_xdg_cache_dir(monkeypatch, tmp_path):

@@ -4,6 +4,8 @@ import pytest
 
 from catherd.shell import get_shell_rc_path, load_snippet_for_shell
 
+pytestmark = pytest.mark.small
+
 
 def test_get_shell_rc_path_zsh(monkeypatch):
     monkeypatch.setenv("ZDOTDIR", "/tmp/zdot")  # noqa: S108

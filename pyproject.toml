@@ -17,8 +17,8 @@
   ]
   requires-python = ">=3.12,<3.14"
   dependencies = [
-  "click>=8.3.1",
-]
+    "click>=8.3.1",
+  ]
 
   [project.scripts]
     catherd = "catherd.cli:main"
@@ -41,7 +41,7 @@
     "pytest-json-report>=1.5.0",
     "pytest-randomly>=4.0.1",
     "pytest-socket>=0.7.0",
-    "pytest-test-categories>=1.2.0",
+    "pytest-test-categories>=1.2.2",
     "pytest-timeout>=2.4.0",
     "radon>=6.0.1",
     "ruff>=0.14.7",
@@ -62,10 +62,11 @@
 [tool.uv]
   default-groups = ["dev"]
   [tool.uv.sources]
-    showcov  = { git = "https://github.com/josephcourtney/showcov.git", rev = "main" }
-    nootnoot = { git = "https://github.com/josephcourtney/nootnoot.git", rev = "main" }
+    showcov                = { git = "https://github.com/josephcourtney/showcov.git", rev = "main" }
+    nootnoot               = { git = "https://github.com/josephcourtney/nootnoot.git", rev = "main" }
+    pytest-test-categories = { git = "https://github.com/mikelane/pytest-test-categories", rev = "6218300a45c525edb89cd7a1a26ee17c9c2095af" }
 
-# ==================================== lint ====================================
+# =================================== lint =====================================
 [tool.ruff]
   extend = "./ruff.default.toml"
 
@@ -120,6 +121,7 @@
     # "error::DeprecationWarning:catherd\\.",
     # "ignore::DeprecationWarning:some_known_third_party",
     # "ignore:distutils Version classes are deprecated.*:DeprecationWarning:pytest_freezegun",
+    "ignore:unclosed database:ResourceWarning",
   ]
   markers = [
     "unit: Fast, isolated tests of individual functions/classes. No real I/O.",

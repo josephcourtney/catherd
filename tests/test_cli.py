@@ -1,6 +1,7 @@
 import json
 from unittest.mock import patch
 
+import pytest
 from click.testing import CliRunner
 
 import catherd.__main__  # noqa: F401
@@ -10,6 +11,8 @@ from catherd.cli import (
     print_kitty_session_diagnostics,
 )
 from catherd.kitty import KittyWindow
+
+pytestmark = pytest.mark.small
 
 
 def setup_sync_env(tmp_path, monkeypatch):
@@ -57,13 +60,8 @@ def test_show_none_warns():
 
 def test_json_output(tmp_path, monkeypatch):
     setup_sync_env(tmp_path, monkeypatch)
-
-    class FakeWin:
-        id = "1"
-        tab = "t"
-        title = "T"
-
-    monkeypatch.setattr(cli, "get_kitty_windows", lambda **_kwargs: [FakeWin()])
+    win = KittyWindow(id="1", tab="t", title="T")
+    monkeypatch.setattr(cli, "get_kitty_windows", lambda **_kwargs: [win])
     monkeypatch.setattr(cli, "get_atuin_session_for_window", lambda *_args, **_kwargs: "s")
     monkeypatch.setattr(cli, "get_last_command_for_atuin_session", lambda *_args, **_kwargs: "ls")
 
@@ -79,17 +77,44 @@ def test_json_output(tmp_path, monkeypatch):
     assert item["last_command"] == "ls"
 
 
-def test_show_env_verbose(monkeypatch):
-    class FakeWin:
-        def __init__(self):
-            self.id = "w"
-            self.tab = "t"
-            self.title = "tit"
+def test_inspect_outputs_full_metadata(tmp_path, monkeypatch):
+    session_file = tmp_path / "atuin_kitty_win"
+    session_file.write_text("sessA win")
 
-    monkeypatch.setattr(cli, "get_kitty_windows", lambda *_args, **_kwargs: [FakeWin()])
+    info = KittyWindow(
+        id="win",
+        tab="tab",
+        title="title",
+        os_window_id="os-1",
+        pid=1234,
+        cwd=str(tmp_path),
+        foreground_cmd="bash",
+        tty="/dev/pts/42",
+    )
+
+    monkeypatch.setattr(cli, "get_kitty_windows", lambda **_kwargs: [info])
+    monkeypatch.setattr(cli, "get_session_file", lambda *_args, **_kwargs: session_file)
+    monkeypatch.setattr(cli, "get_last_command_for_atuin_session", lambda *_args, **_kwargs: "echo hi")
+
+    result = CliRunner().invoke(cli.main, ["inspect"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload[0]["window_id"] == "win"
+    assert payload[0]["os_window_id"] == "os-1"
+    assert payload[0]["pid"] == 1234
+    assert payload[0]["cwd"] == str(tmp_path)
+    assert payload[0]["foreground_cmd"] == "bash"
+    assert payload[0]["tty"] == "/dev/pts/42"
+    assert payload[0]["atuin_session_id"] == "sessA"
+    assert payload[0]["session_content"] == "sessA win"
+
+
+def test_show_env_verbose(monkeypatch):
+    win = KittyWindow(id="w", tab="t", title="tit")
+    monkeypatch.setattr(cli, "get_kitty_windows", lambda *_args, **_kwargs: [win])
     monkeypatch.setattr(cli, "get_atuin_session_for_window", lambda *_args, **_kwargs: None)
     result = CliRunner().invoke(cli.main, ["show", "-v"])
-    assert "no session info" in result.output
+    assert "(no command)" in result.output
 
 
 def test_preflight_only_on_show(tmp_path, monkeypatch):
@@ -235,8 +260,9 @@ def test__collect_kitty_session_diagnostics(monkeypatch, tmp_path):
     session_file.write_text("sessid")
     monkeypatch.setattr(cli, "get_session_file", lambda *_args, **_kwargs: session_file)
     monkeypatch.setattr(cli, "get_last_command_for_atuin_session", lambda *_args, **_kwargs: "cmd")
-    ok, missing, corrupt, missing_cmd = _collect_kitty_session_diagnostics([win], verbose=True)
+    ok, missing, corrupt, missing_cmd, notes = _collect_kitty_session_diagnostics([win], verbose=True)
     assert ok or missing or corrupt or missing_cmd
+    assert notes == []
 
 
 def test__collect_kitty_session_diagnostics_branches(tmp_path, monkeypatch):
@@ -265,7 +291,7 @@ def test__collect_kitty_session_diagnostics_branches(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cli, "get_last_command_for_atuin_session", fake_last)
 
-    ok, missing, corrupt, missing_cmd = _collect_kitty_session_diagnostics(
+    ok, missing, corrupt, missing_cmd, notes = _collect_kitty_session_diagnostics(
         [w_no_file, w_corrupt, w_nocommand, w_ok], verbose=True
     )
     assert [w_no_file] == missing
@@ -274,6 +300,7 @@ def test__collect_kitty_session_diagnostics_branches(tmp_path, monkeypatch):
     assert missing_cmd[0][0] == w_nocommand
     assert len(ok) == 1
     assert ok[0][0] == w_ok
+    assert notes == []
 
 
 def test_print_kitty_session_diagnostics_all_branches(monkeypatch, capsys):
@@ -290,7 +317,7 @@ def test_print_kitty_session_diagnostics_all_branches(monkeypatch, capsys):
     monkeypatch.setattr(
         cli,
         "_collect_kitty_session_diagnostics",
-        lambda *_args, **_kwargs: (ok, missing_file, corrupt_file, missing_command),
+        lambda *_args, **_kwargs: (ok, missing_file, corrupt_file, missing_command, []),
     )
     print_kitty_session_diagnostics([w_ok, w_missing, w_corrupt, w_cmd], verbose=True)
     out = capsys.readouterr().out
@@ -306,7 +333,7 @@ def test_print_kitty_session_diagnostics_none_synced(monkeypatch, capsys):
     monkeypatch.setattr(
         cli,
         "_collect_kitty_session_diagnostics",
-        lambda *_args, **_kwargs: ([], [w], [], []),
+        lambda *_args, **_kwargs: ([], [w], [], [], []),
     )
     print_kitty_session_diagnostics([w], verbose=True)
     out = capsys.readouterr().out
