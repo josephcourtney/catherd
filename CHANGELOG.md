@@ -1,3 +1,12 @@
+## [0.16.0] - 2026-09-18
+
+### Added
+- add supported Kitty operations for focusing, renaming, moving, detaching, reordering, and merging OS windows, tabs, and panes.
+- add hierarchy lookup helpers used by interactive frontends.
+
+### Fixed
+- remove the unused `pytest-freezegun` plugin dependency that emitted `distutils` deprecation warnings under current pytest.
+
 ## [0.15.1] - 2026-09-18
 
 ### Changed
