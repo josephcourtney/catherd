@@ -19,3 +19,9 @@ def test_state_preserves_hierarchy_and_traversal_order():
     assert all(location.os_window is os_window for location in locations)
     assert all(location.tab is tab_a for location in locations)
     assert state.pane_count == 2
+    assert state.find_os_window("100") is os_window
+    assert state.find_os_window("missing") is None
+    assert state.find_tab("10") == (os_window, tab_a)
+    assert state.find_tab("missing") is None
+    assert state.find_pane("2") == locations[1]
+    assert state.find_pane("missing") is None
