@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Callable
 from dataclasses import replace
+from threading import Event
 
 import pytest
 from rich.text import Text
@@ -91,6 +94,33 @@ class FakeBackend:
         self.state = state
         self.calls: list[tuple[object, ...]] = []
 
+    @staticmethod
+    def _normalize_tab(tab: Tab) -> Tab:
+        pane_count = len(tab.panes)
+        panes = tuple(
+            replace(
+                pane,
+                tab_index=index,
+                tab_count=pane_count,
+                group_index=index,
+                group_count=pane_count,
+                neighbors_left=(tab.panes[index - 2].id,) if index > 1 else (),
+                neighbors_right=(tab.panes[index].id,) if index < pane_count else (),
+                neighbors_top=(),
+                neighbors_bottom=(),
+            )
+            for index, pane in enumerate(tab.panes, start=1)
+        )
+        return replace(tab, panes=panes)
+
+    def _map_tabs(self, transform: Callable[[Tab], Tab]) -> None:
+        self.state = KittyState(
+            tuple(
+                replace(os_window, tabs=tuple(transform(tab) for tab in os_window.tabs))
+                for os_window in self.state.os_windows
+            )
+        )
+
     def snapshot(self) -> KittyState:
         self.calls.append(("snapshot",))
         return self.state
@@ -107,11 +137,24 @@ class FakeBackend:
     def rename_pane(self, pane_id: str, title: str) -> None:
         self.calls.append(("rename_pane", pane_id, title))
 
+        def rename(tab: Tab) -> Tab:
+            panes = tuple(replace(pane, title=title) if pane.id == pane_id else pane for pane in tab.panes)
+            return replace(tab, panes=panes)
+
+        self._map_tabs(rename)
+
     def rename_tab(self, tab_id: str, title: str) -> None:
         self.calls.append(("rename_tab", tab_id, title))
+        self._map_tabs(lambda tab: replace(tab, title=title) if tab.id == tab_id else tab)
 
     def rename_os_window(self, os_window_id: str, title: str) -> None:
         self.calls.append(("rename_os_window", os_window_id, title))
+        self.state = KittyState(
+            tuple(
+                replace(os_window, title=title) if os_window.id == os_window_id else os_window
+                for os_window in self.state.os_windows
+            )
+        )
 
     def move_pane(self, pane_id: str, target_tab_id: str) -> None:
         self.calls.append(("move_pane", pane_id, target_tab_id))
@@ -119,40 +162,160 @@ class FakeBackend:
         if location is None:
             return
         moved = location.pane
+
+        def move(tab: Tab) -> Tab:
+            panes = tuple(pane for pane in tab.panes if pane.id != pane_id)
+            if tab.id == target_tab_id:
+                panes += (moved,)
+            return self._normalize_tab(replace(tab, panes=panes))
+
+        self._map_tabs(move)
+
+    def detach_pane_to_new_tab(self, pane_id: str) -> None:
+        self.calls.append(("detach_pane_to_new_tab", pane_id))
+        location = self.state.find_pane(pane_id)
+        if location is None:
+            return
+        self.move_pane(pane_id, "__detached__")
+        new_tab = self._normalize_tab(Tab(id=f"new-tab-{pane_id}", title=location.pane.title, panes=(location.pane,)))
+        self.state = KittyState(
+            tuple(
+                replace(os_window, tabs=os_window.tabs + (new_tab,))
+                if os_window.id == location.os_window.id
+                else os_window
+                for os_window in self.state.os_windows
+            )
+        )
+
+    def detach_pane_to_new_os_window(self, pane_id: str) -> None:
+        self.calls.append(("detach_pane_to_new_os_window", pane_id))
+        location = self.state.find_pane(pane_id)
+        if location is None:
+            return
+        self.move_pane(pane_id, "__detached__")
+        new_tab = self._normalize_tab(Tab(id=f"new-tab-{pane_id}", title=location.pane.title, panes=(location.pane,)))
+        new_os_window = OsWindow(id=f"new-os-{pane_id}", title=None, tabs=(new_tab,))
+        self.state = KittyState(self.state.os_windows + (new_os_window,))
+
+    def move_tab(self, tab_id: str, target_os_window_id: str) -> None:
+        self.calls.append(("move_tab", tab_id, target_os_window_id))
+        found = self.state.find_tab(tab_id)
+        if found is None:
+            return
+        moved = found[1]
+        os_windows: list[OsWindow] = []
+        for os_window in self.state.os_windows:
+            tabs = tuple(tab for tab in os_window.tabs if tab.id != tab_id)
+            if os_window.id == target_os_window_id:
+                tabs += (moved,)
+            if tabs:
+                os_windows.append(replace(os_window, tabs=tabs))
+        self.state = KittyState(tuple(os_windows))
+
+    def detach_tab_to_new_os_window(self, tab_id: str) -> None:
+        self.calls.append(("detach_tab_to_new_os_window", tab_id))
+        found = self.state.find_tab(tab_id)
+        if found is None:
+            return
+        moved = found[1]
+        source_os_id = found[0].id
+        os_windows = [
+            replace(os_window, tabs=tuple(tab for tab in os_window.tabs if tab.id != tab_id))
+            if os_window.id == source_os_id
+            else os_window
+            for os_window in self.state.os_windows
+        ]
+        os_windows = [os_window for os_window in os_windows if os_window.tabs]
+        os_windows.append(OsWindow(id=f"new-os-tab-{tab_id}", title=None, tabs=(moved,)))
+        self.state = KittyState(tuple(os_windows))
+
+    def reorder_pane(self, pane_id: str, direction: str) -> None:
+        self.calls.append(("reorder_pane", pane_id, direction))
+        location = self.state.find_pane(pane_id)
+        if location is None:
+            return
+
+        def reorder(tab: Tab) -> Tab:
+            if tab.id != location.tab.id:
+                return tab
+            panes = list(tab.panes)
+            index = next(index for index, pane in enumerate(panes) if pane.id == pane_id)
+            target = index + (1 if direction == "forward" else -1)
+            if 0 <= target < len(panes):
+                panes[index], panes[target] = panes[target], panes[index]
+            return self._normalize_tab(replace(tab, panes=tuple(panes)))
+
+        self._map_tabs(reorder)
+
+    def reorder_tab(self, tab_id: str, direction: str) -> None:
+        self.calls.append(("reorder_tab", tab_id, direction))
+        found = self.state.find_tab(tab_id)
+        if found is None:
+            return
+        parent_id = found[0].id
+        os_windows: list[OsWindow] = []
+        for os_window in self.state.os_windows:
+            if os_window.id != parent_id:
+                os_windows.append(os_window)
+                continue
+            tabs = list(os_window.tabs)
+            index = next(index for index, tab in enumerate(tabs) if tab.id == tab_id)
+            target = index + (1 if direction == "forward" else -1)
+            if 0 <= target < len(tabs):
+                tabs[index], tabs[target] = tabs[target], tabs[index]
+            os_windows.append(replace(os_window, tabs=tuple(tabs)))
+        self.state = KittyState(tuple(os_windows))
+
+    def merge_tabs(self, source_tab_id: str, target_tab_id: str) -> None:
+        self.calls.append(("merge_tabs", source_tab_id, target_tab_id))
+        source = self.state.find_tab(source_tab_id)
+        target = self.state.find_tab(target_tab_id)
+        if source is None or target is None:
+            return
+        source_panes = source[1].panes
         os_windows: list[OsWindow] = []
         for os_window in self.state.os_windows:
             tabs: list[Tab] = []
             for tab in os_window.tabs:
-                panes = tuple(pane for pane in tab.panes if pane.id != pane_id)
+                if tab.id == source_tab_id:
+                    continue
                 if tab.id == target_tab_id:
-                    panes += (moved,)
-                tabs.append(replace(tab, panes=panes))
-            os_windows.append(replace(os_window, tabs=tuple(tabs)))
+                    tab = self._normalize_tab(replace(tab, panes=tab.panes + source_panes))
+                tabs.append(tab)
+            if tabs:
+                os_windows.append(replace(os_window, tabs=tuple(tabs)))
         self.state = KittyState(tuple(os_windows))
-
-    def detach_pane_to_new_tab(self, pane_id: str) -> None:
-        self.calls.append(("detach_pane_to_new_tab", pane_id))
-
-    def detach_pane_to_new_os_window(self, pane_id: str) -> None:
-        self.calls.append(("detach_pane_to_new_os_window", pane_id))
-
-    def move_tab(self, tab_id: str, target_os_window_id: str) -> None:
-        self.calls.append(("move_tab", tab_id, target_os_window_id))
-
-    def detach_tab_to_new_os_window(self, tab_id: str) -> None:
-        self.calls.append(("detach_tab_to_new_os_window", tab_id))
-
-    def reorder_pane(self, pane_id: str, direction: str) -> None:
-        self.calls.append(("reorder_pane", pane_id, direction))
-
-    def reorder_tab(self, tab_id: str, direction: str) -> None:
-        self.calls.append(("reorder_tab", tab_id, direction))
-
-    def merge_tabs(self, source_tab_id: str, target_tab_id: str) -> None:
-        self.calls.append(("merge_tabs", source_tab_id, target_tab_id))
 
     def merge_os_windows(self, source_os_window_id: str, target_os_window_id: str) -> None:
         self.calls.append(("merge_os_windows", source_os_window_id, target_os_window_id))
+        source = self.state.find_os_window(source_os_window_id)
+        if source is None:
+            return
+        self.state = KittyState(
+            tuple(
+                replace(os_window, tabs=os_window.tabs + source.tabs)
+                if os_window.id == target_os_window_id
+                else os_window
+                for os_window in self.state.os_windows
+                if os_window.id != source_os_window_id
+            )
+        )
+
+
+class BlockingSnapshotBackend(FakeBackend):
+    def __init__(self, state: KittyState) -> None:
+        super().__init__(state)
+        self.block_next_snapshot = False
+        self.snapshot_started = Event()
+        self.snapshot_release = Event()
+
+    def snapshot(self) -> KittyState:
+        self.calls.append(("snapshot",))
+        if self.block_next_snapshot:
+            self.block_next_snapshot = False
+            self.snapshot_started.set()
+            self.snapshot_release.wait(timeout=2)
+        return self.state
 
 
 def _find_node(tree: Tree[NodeRef], ref: NodeRef):
