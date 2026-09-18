@@ -12,6 +12,7 @@ from catherd.tui import (
     Destination,
     KittyManagerApp,
     NodeRef,
+    containing_os_window_id,
     merge_destinations,
     move_destinations,
     selected_details,
@@ -41,6 +42,14 @@ def _state() -> KittyState:
                                 is_active=True,
                                 cwd="/code/project",
                                 foreground_cmd="nvim",
+                                root_cmdline="/bin/zsh -l",
+                                current_command="uv run pytest",
+                                at_prompt=False,
+                                title_overridden=False,
+                                needs_attention=True,
+                                has_activity_since_last_focus=True,
+                                cols=120,
+                                rows=40,
                             ),
                             Pane(id="2", title="tests", cwd="/code/project", foreground_cmd="pytest"),
                         ),
@@ -152,6 +161,14 @@ def test_merge_destinations_exclude_source() -> None:
     assert merge_destinations(_state(), "100") == (Destination("os_window", "200", "OS 200 — notes"),)
 
 
+def test_containing_os_window_id_resolves_all_node_kinds() -> None:
+    state = _state()
+
+    assert containing_os_window_id(state, NodeRef("os_window", "100")) == "100"
+    assert containing_os_window_id(state, NodeRef("tab", "10")) == "100"
+    assert containing_os_window_id(state, NodeRef("pane", "1")) == "100"
+
+
 def test_selected_title_uses_hierarchy() -> None:
     state = _state()
 
@@ -187,9 +204,13 @@ def test_selected_details_for_pane_with_activity() -> None:
 
     assert "Pane" in details.plain
     assert "CWD: /code/project" in details.plain
-    assert "Foreground: nvim" in details.plain
+    assert "Current command: uv run pytest" in details.plain
+    assert "Foreground process: nvim" in details.plain
+    assert "Root process: /bin/zsh -l" in details.plain
+    assert "Size: 120×40" in details.plain
+    assert "Needs attention: yes" in details.plain
     assert "Atuin session: session-1" in details.plain
-    assert "Last command: pytest -q" in details.plain
+    assert "Last completed command: pytest -q" in details.plain
 
 
 def test_selected_details_for_pane_loading() -> None:
@@ -200,7 +221,7 @@ def test_selected_details_for_pane_loading() -> None:
     )
 
     assert "Atuin session: loading…" in details.plain
-    assert "Last command: loading…" in details.plain
+    assert "Last completed command: loading…" in details.plain
 
 
 async def test_details_panel_loads_activity_for_highlighted_pane() -> None:
@@ -223,7 +244,7 @@ async def test_details_panel_loads_activity_for_highlighted_pane() -> None:
         details = app.query_one("#details", Static)
         assert isinstance(details.content, Text)
         assert "Atuin session: session-live" in details.content.plain
-        assert "Last command: uv run pytest" in details.content.plain
+        assert "Last completed command: uv run pytest" in details.content.plain
 
     assert "1" in calls
 
@@ -297,6 +318,20 @@ async def test_reorder_routes_to_backend_and_preserves_selection() -> None:
     assert ("reorder_pane", "2", "forward") in backend.calls
 
 
+async def test_tab_reorder_routes_to_backend() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        tree.move_cursor(_find_node(tree, NodeRef("tab", "10")))
+        await pilot.press("shift+j")
+        await app.workers.wait_for_complete()
+
+    assert ("reorder_tab", "10", "forward") in backend.calls
+
+
 async def test_reorder_restores_manager_focus(monkeypatch) -> None:
     monkeypatch.setenv("KITTY_WINDOW_ID", "99")
     backend = FakeBackend(_state())
@@ -328,6 +363,10 @@ async def test_rename_dialog_routes_to_backend() -> None:
         rename_input.value = "test runner"
         await pilot.press("enter")
         await app.workers.wait_for_complete()
+        await pilot.pause()
+        renamed = _find_node(tree, NodeRef("pane", "2"))
+        assert isinstance(renamed.label, Text)
+        assert "test runner" in renamed.label.plain
 
     assert ("rename_pane", "2", "test runner") in backend.calls
 
@@ -355,7 +394,7 @@ async def test_merge_dialog_routes_to_backend() -> None:
     async with app.run_test() as pilot:
         await pilot.pause()
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
-        tree.move_cursor(_find_node(tree, NodeRef("os_window", "100")))
+        tree.move_cursor(_find_node(tree, NodeRef("pane", "1")))
         await pilot.press("shift+m")
         await pilot.pause()
         await pilot.press("enter")
