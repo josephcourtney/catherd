@@ -71,6 +71,18 @@ class KittyState:
             for pane in tab.panes:
                 yield PaneLocation(os_window=os_window, tab=tab, pane=pane)
 
+    def find_os_window(self, os_window_id: str) -> OsWindow | None:
+        """Return an OS window by Kitty ID."""
+        return next((item for item in self.os_windows if item.id == os_window_id), None)
+
+    def find_tab(self, tab_id: str) -> tuple[OsWindow, Tab] | None:
+        """Return a tab and its parent OS window by Kitty ID."""
+        return next(((os_window, tab) for os_window, tab in self.iter_tabs() if tab.id == tab_id), None)
+
+    def find_pane(self, pane_id: str) -> PaneLocation | None:
+        """Return a pane and its parents by Kitty ID."""
+        return next((location for location in self.iter_panes() if location.pane.id == pane_id), None)
+
     @property
     def pane_count(self) -> int:
         """The total number of panes in the snapshot."""
