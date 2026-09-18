@@ -1,6 +1,7 @@
 """Kitty remote-control client and state parsing."""
 
 import json
+import shlex
 import shutil
 import subprocess  # ruff: ignore[suspicious-subprocess-import]
 import sys
@@ -64,25 +65,40 @@ def _extract_active_flag(source: dict[str, object]) -> bool | None:
     return None
 
 
-def _normalize_foreground(window: dict[str, object]) -> tuple[str | None, int | None]:
-    proc = window.get("foreground_process")
-    if isinstance(proc, dict):
-        proc_map = cast("dict[str, object]", proc)
-        pid = _safe_int(proc_map.get("pid"))
+def _cmdline_text(value: object) -> str | None:
+    if isinstance(value, list):
+        parts = [text for item in value if (text := _safe_str(item)) is not None]
+        return shlex.join(parts) if parts else None
+    return _safe_str(value)
+
+
+def _normalize_foreground(window: dict[str, object]) -> tuple[str | None, int | None, str | None]:
+    processes = _as_object_list(window.get("foreground_processes"))
+    if processes:
+        proc = max(processes, key=lambda item: _safe_int(item.get("pid")) or -1)
+        pid = _safe_int(proc.get("pid"))
+        cmd = _cmdline_text(proc.get("cmdline")) or _safe_str(proc.get("argv0"))
+        cwd = _safe_str(proc.get("cwd"))
+        return cmd, pid, cwd
+
+    proc = _as_object(window.get("foreground_process"))
+    if proc is not None:
+        pid = _safe_int(proc.get("pid"))
         cmd = (
-            _safe_str(proc_map.get("argv0")) or _safe_str(proc_map.get("command")) or _safe_str(proc_map.get("cmdline"))
+            _cmdline_text(proc.get("cmdline"))
+            or _safe_str(proc.get("argv0"))
+            or _safe_str(proc.get("command"))
         )
-        if not cmd:
-            cmdline = proc_map.get("cmdline")
-            if isinstance(cmdline, list):
-                cmd = " ".join(str(part) for part in cmdline if part is not None).strip() or None
-        return cmd, pid
+        return cmd, pid, _safe_str(proc.get("cwd"))
 
     cmd = (
-        _safe_str(window.get("foreground_cmd")) or _safe_str(window.get("argv0")) or _safe_str(window.get("foreground"))
+        _cmdline_text(window.get("cmdline"))
+        or _safe_str(window.get("foreground_cmd"))
+        or _safe_str(window.get("argv0"))
+        or _safe_str(window.get("foreground"))
     )
     pid = _safe_int(window.get("pid")) or _safe_int(window.get("foreground_pid"))
-    return cmd, pid
+    return cmd, pid, _safe_str(window.get("cwd"))
 
 
 def _as_object(value: object) -> dict[str, object] | None:
@@ -97,6 +113,14 @@ def _as_object_list(value: object) -> list[dict[str, object]]:
     return [obj for item in value if (obj := _as_object(item)) is not None]
 
 
+def _is_kitty_ui_window(window: dict[str, object]) -> bool:
+    env = _as_object(window.get("env"))
+    if env is None:
+        return False
+    value = _safe_str(env.get("KITTEN_RUNNING_AS_UI"))
+    return value not in {None, "", "0", "false", "False"}
+
+
 def parse_kitty_state(data: object) -> KittyState:
     """Parse kitty @ ls JSON data into the canonical hierarchy."""
     os_windows: list[OsWindow] = []
@@ -106,22 +130,37 @@ def parse_kitty_state(data: object) -> KittyState:
             tab_title = _safe_str(tab_data.get("title"))
             panes: list[Pane] = []
             for pane_data in _as_object_list(tab_data.get("windows")):
-                foreground_cmd, pid = _normalize_foreground(pane_data)
+                if _is_kitty_ui_window(pane_data):
+                    continue
+                foreground_cmd, pid, foreground_cwd = _normalize_foreground(pane_data)
+                at_prompt = _safe_bool(pane_data.get("at_prompt"))
+                last_reported_cmdline = _safe_str(pane_data.get("last_reported_cmdline"))
+                needs_attention = _safe_bool(pane_data.get("needs_attention"))
+                legacy_urgent = _safe_bool(pane_data.get("is_urgent"))
                 panes.append(
                     Pane(
                         id=_safe_str(pane_data.get("id")) or "",
                         title=_safe_str(pane_data.get("title")) or tab_title or "",
                         is_active=_extract_active_flag(pane_data),
                         pid=pid,
-                        cwd=_safe_str(pane_data.get("cwd")),
+                        cwd=foreground_cwd or _safe_str(pane_data.get("cwd")),
                         foreground_cmd=foreground_cmd,
+                        root_cmdline=_cmdline_text(pane_data.get("cmdline")),
+                        current_command=last_reported_cmdline if at_prompt is False else None,
+                        at_prompt=at_prompt,
+                        title_overridden=_safe_bool(pane_data.get("title_overridden")),
+                        needs_attention=needs_attention,
+                        has_activity_since_last_focus=_safe_bool(
+                            pane_data.get("has_activity_since_last_focus")
+                        ),
+                        is_self=_safe_bool(pane_data.get("is_self")),
                         tty=_safe_str(pane_data.get("tty")),
-                        cols=_safe_int(pane_data.get("cols")),
-                        rows=_safe_int(pane_data.get("rows")),
+                        cols=_safe_int(pane_data.get("columns")) or _safe_int(pane_data.get("cols")),
+                        rows=_safe_int(pane_data.get("lines")) or _safe_int(pane_data.get("rows")),
                         x=_safe_int(pane_data.get("x")),
                         y=_safe_int(pane_data.get("y")),
                         has_bell=_safe_bool(pane_data.get("has_bell")),
-                        is_urgent=_safe_bool(pane_data.get("is_urgent")),
+                        is_urgent=legacy_urgent if legacy_urgent is not None else needs_attention,
                     )
                 )
             tabs.append(
