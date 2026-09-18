@@ -10,7 +10,7 @@ Run:
 catherd tui
 ```
 
-The TUI displays Kitty's hierarchy as OS windows → tabs → panes. Operations are immediate and use Kitty's supported remote-control interface.
+The TUI displays Kitty's hierarchy as OS windows → tabs → panes. A details panel shows metadata for the highlighted object; panes also show the associated Atuin session and latest command when available. Operations are immediate and use Kitty's supported remote-control interface.
 
 | Key | Action |
 | --- | --- |
