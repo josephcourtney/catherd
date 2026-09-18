@@ -27,7 +27,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
-pytestmark = pytest.mark.small
 
 
 def _state() -> KittyState:
@@ -351,6 +350,7 @@ def _line_for_ref(tree: Tree[NodeRef], ref: NodeRef) -> int:
     raise AssertionError(msg)
 
 
+@pytest.mark.small
 def test_move_destinations_for_pane() -> None:
     destinations = move_destinations(_state(), NodeRef("pane", "1"))
 
@@ -363,6 +363,7 @@ def test_move_destinations_for_pane() -> None:
     )
 
 
+@pytest.mark.small
 def test_move_destinations_for_tab() -> None:
     destinations = move_destinations(_state(), NodeRef("tab", "10"))
 
@@ -372,10 +373,12 @@ def test_move_destinations_for_tab() -> None:
     )
 
 
+@pytest.mark.small
 def test_merge_os_window_destinations_exclude_source() -> None:
     assert merge_os_window_destinations(_state(), "100") == (Destination("os_window", "200", "OS 200 — notes"),)
 
 
+@pytest.mark.small
 def test_merge_tab_destinations_exclude_source() -> None:
     destinations = merge_tab_destinations(_state(), "10")
 
@@ -384,6 +387,7 @@ def test_merge_tab_destinations_exclude_source() -> None:
     assert Destination("tab", "20", "OS 200 — notes / notes [20]") in destinations
 
 
+@pytest.mark.small
 def test_containing_os_window_id_resolves_all_node_kinds() -> None:
     state = _state()
 
@@ -392,6 +396,7 @@ def test_containing_os_window_id_resolves_all_node_kinds() -> None:
     assert containing_os_window_id(state, NodeRef("pane", "1")) == "100"
 
 
+@pytest.mark.small
 def test_selected_title_uses_hierarchy() -> None:
     state = _state()
 
@@ -401,6 +406,7 @@ def test_selected_title_uses_hierarchy() -> None:
     assert selected_title(state, NodeRef("pane", "missing")) == ""
 
 
+@pytest.mark.small
 def test_selected_details_for_os_window() -> None:
     details = selected_details(_state(), NodeRef("os_window", "100"))
 
@@ -409,6 +415,7 @@ def test_selected_details_for_os_window() -> None:
     assert "Panes: 3" in details.plain
 
 
+@pytest.mark.small
 def test_selected_details_for_tab() -> None:
     details = selected_details(_state(), NodeRef("tab", "10"))
 
@@ -417,6 +424,7 @@ def test_selected_details_for_tab() -> None:
     assert "Panes: 2" in details.plain
 
 
+@pytest.mark.small
 def test_selected_details_for_pane_with_activity() -> None:
     details = selected_details(
         _state(),
@@ -437,6 +445,7 @@ def test_selected_details_for_pane_with_activity() -> None:
     assert "Last completed command: pytest -q" in details.plain
 
 
+@pytest.mark.small
 def test_selected_details_for_pane_loading() -> None:
     details = selected_details(
         _state(),
@@ -448,6 +457,7 @@ def test_selected_details_for_pane_loading() -> None:
     assert "Last completed command: loading…" in details.plain
 
 
+@pytest.mark.medium
 async def test_details_panel_loads_activity_for_highlighted_pane() -> None:
     calls: list[str] = []
 
@@ -473,6 +483,7 @@ async def test_details_panel_loads_activity_for_highlighted_pane() -> None:
     assert "1" in calls
 
 
+@pytest.mark.medium
 async def test_tui_renders_hierarchy_and_selects_active_pane() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
@@ -486,6 +497,7 @@ async def test_tui_renders_hierarchy_and_selects_active_pane() -> None:
         assert _find_node(tree, NodeRef("tab", "10")).is_expanded
 
 
+@pytest.mark.medium
 async def test_refresh_preserves_selection_and_reveals_it() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
@@ -510,6 +522,7 @@ async def test_refresh_preserves_selection_and_reveals_it() -> None:
         assert _find_node(tree, other_os_ref).is_collapsed
 
 
+@pytest.mark.medium
 async def test_tree_click_selects_without_focusing_kitty_until_explicit_action() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
@@ -533,6 +546,7 @@ async def test_tree_click_selects_without_focusing_kitty_until_explicit_action()
     assert ("focus_pane", "2") in backend.calls
 
 
+@pytest.mark.medium
 async def test_enter_focuses_selected_pane() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
@@ -554,6 +568,7 @@ async def test_enter_focuses_selected_pane() -> None:
         (NodeRef("os_window", "200"), ("focus_os_window", "200")),
     ],
 )
+@pytest.mark.medium
 async def test_explicit_focus_routes_selected_container(
     ref: NodeRef,
     expected_call: tuple[object, ...],
@@ -571,6 +586,7 @@ async def test_explicit_focus_routes_selected_container(
     assert expected_call in backend.calls
 
 
+@pytest.mark.medium
 async def test_reorder_pane_updates_tree_order_and_preserves_selection() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
@@ -594,6 +610,7 @@ async def test_reorder_pane_updates_tree_order_and_preserves_selection() -> None
     assert ("reorder_pane", "1", "forward") in backend.calls
 
 
+@pytest.mark.medium
 async def test_reorder_tab_updates_tree_order() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
@@ -617,6 +634,7 @@ async def test_reorder_tab_updates_tree_order() -> None:
     assert ("reorder_tab", "10", "forward") in backend.calls
 
 
+@pytest.mark.medium
 async def test_uppercase_k_reorders_backward() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
@@ -637,6 +655,7 @@ async def test_uppercase_k_reorders_backward() -> None:
     assert ("reorder_pane", "2", "backward") in backend.calls
 
 
+@pytest.mark.medium
 async def test_reorder_restores_manager_focus(monkeypatch) -> None:
     monkeypatch.setenv("KITTY_WINDOW_ID", "99")
     backend = FakeBackend(_state())
@@ -654,6 +673,7 @@ async def test_reorder_restores_manager_focus(monkeypatch) -> None:
     assert restore_index > reorder_index
 
 
+@pytest.mark.medium
 async def test_rename_dialog_routes_to_backend() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
@@ -676,6 +696,7 @@ async def test_rename_dialog_routes_to_backend() -> None:
     assert ("rename_pane", "2", "test runner") in backend.calls
 
 
+@pytest.mark.medium
 async def test_os_window_rename_updates_tree_label() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
@@ -700,6 +721,7 @@ async def test_os_window_rename_updates_tree_label() -> None:
     assert ("rename_os_window", "100", "research") in backend.calls
 
 
+@pytest.mark.medium
 async def test_move_dialog_routes_to_backend() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
@@ -724,6 +746,7 @@ async def test_move_dialog_routes_to_backend() -> None:
     assert ("move_pane", "1", "11") in backend.calls
 
 
+@pytest.mark.medium
 async def test_move_pane_to_new_tab_updates_hierarchy() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
@@ -749,6 +772,7 @@ async def test_move_pane_to_new_tab_updates_hierarchy() -> None:
         assert tree.cursor_node.data == pane_ref
 
 
+@pytest.mark.medium
 async def test_move_pane_to_new_os_window_updates_hierarchy() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
@@ -772,6 +796,7 @@ async def test_move_pane_to_new_os_window_updates_hierarchy() -> None:
         assert tree.cursor_node.data == pane_ref
 
 
+@pytest.mark.medium
 async def test_move_tab_to_existing_os_window_updates_hierarchy() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
@@ -797,6 +822,7 @@ async def test_move_tab_to_existing_os_window_updates_hierarchy() -> None:
         assert tree.cursor_node.data == tab_ref
 
 
+@pytest.mark.medium
 async def test_detach_tab_to_new_os_window_updates_hierarchy() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
@@ -820,6 +846,7 @@ async def test_detach_tab_to_new_os_window_updates_hierarchy() -> None:
         assert tree.cursor_node.data == tab_ref
 
 
+@pytest.mark.medium
 async def test_merge_on_pane_is_rejected() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
@@ -834,6 +861,7 @@ async def test_merge_on_pane_is_rejected() -> None:
     assert not any(call[0] in {"merge_tabs", "merge_os_windows"} for call in backend.calls)
 
 
+@pytest.mark.medium
 async def test_merge_tab_updates_hierarchy() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
@@ -860,6 +888,7 @@ async def test_merge_tab_updates_hierarchy() -> None:
     assert ("merge_tabs", "10", "11") in backend.calls
 
 
+@pytest.mark.medium
 async def test_merge_os_windows_updates_hierarchy() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
@@ -886,6 +915,7 @@ async def test_merge_os_windows_updates_hierarchy() -> None:
     assert ("merge_os_windows", "100", "200") in backend.calls
 
 
+@pytest.mark.medium
 async def test_in_flight_refresh_does_not_restore_stale_selection() -> None:
     backend = BlockingSnapshotBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
@@ -911,6 +941,7 @@ async def test_in_flight_refresh_does_not_restore_stale_selection() -> None:
         assert tree.cursor_node.data == target_ref
 
 
+@pytest.mark.medium
 async def test_stale_activity_result_does_not_overwrite_new_selection() -> None:
     pane_one_started = Event()
     pane_one_release = Event()
