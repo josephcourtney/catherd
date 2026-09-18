@@ -273,7 +273,11 @@ class KittyCommandError(KittyClientError):
         self.command = command
         self.returncode = returncode
         self.stderr = stderr
-        super().__init__(f"command failed with exit code {returncode}: {' '.join(command)}")
+        detail = stderr.strip()
+        message = f"command failed with exit code {returncode}: {' '.join(command)}"
+        if detail:
+            message = f"{message}: {detail}"
+        super().__init__(message)
 
 
 class KittyOutputError(KittyClientError):
