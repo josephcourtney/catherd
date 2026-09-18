@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from catherd.kitty import KittyClient, get_kitty_state, parse_kitty_state
+from catherd.kitty import KittyClient, KittyObjectNotFoundError, get_kitty_state, parse_kitty_state
 from catherd.model import KittyState, OsWindow, Pane, Tab
 
 pytestmark = pytest.mark.small
@@ -188,3 +188,171 @@ def test_get_kitty_state_verbose_branch(monkeypatch, capsys):
     get_kitty_state(verbose=True)
     out = capsys.readouterr().out
     assert "Raw output" in out
+
+
+
+def _operation_state() -> KittyState:
+    return KittyState(
+        os_windows=(
+            OsWindow(
+                id="100",
+                title="source",
+                tabs=(
+                    Tab(id="10", title="one", panes=(Pane(id="1", title="one"),)),
+                    Tab(id="11", title="two", panes=(Pane(id="2", title="two"),)),
+                ),
+            ),
+            OsWindow(
+                id="200",
+                title="target",
+                tabs=(Tab(id="20", title="three", panes=(Pane(id="3", title="three"),)),),
+            ),
+        )
+    )
+
+
+def _record_remote_calls(monkeypatch):
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(command, **_kwargs):
+        calls.append(tuple(command))
+        return MagicMock(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    return calls
+
+
+def test_client_focus_and_rename_operations(monkeypatch):
+    calls = _record_remote_calls(monkeypatch)
+    state = _operation_state()
+    monkeypatch.setattr(KittyClient, "snapshot", lambda _self: state)
+    client = KittyClient(executable="/usr/bin/kitty")
+
+    client.focus_pane("1")
+    client.focus_tab("10")
+    client.focus_os_window("200")
+    client.rename_pane("1", "editor")
+    client.rename_tab("10", "work")
+    client.rename_os_window("200", "project")
+
+    assert calls == [
+        ("/usr/bin/kitty", "@", "focus-window", "--match", "id:1"),
+        ("/usr/bin/kitty", "@", "focus-tab", "--match", "id:10"),
+        ("/usr/bin/kitty", "@", "focus-window", "--match", "id:3"),
+        ("/usr/bin/kitty", "@", "set-window-title", "--match", "id:1", "editor"),
+        ("/usr/bin/kitty", "@", "set-tab-title", "--match", "id:10", "work"),
+        ("/usr/bin/kitty", "@", "set-os-window-title", "--match", "id:3", "project"),
+    ]
+
+
+def test_client_move_and_detach_operations(monkeypatch):
+    calls = _record_remote_calls(monkeypatch)
+    state = _operation_state()
+    monkeypatch.setattr(KittyClient, "snapshot", lambda _self: state)
+    client = KittyClient(executable="/usr/bin/kitty")
+
+    client.move_pane("1", "20")
+    client.detach_pane_to_new_tab("1")
+    client.detach_pane_to_new_os_window("1")
+    client.move_tab("10", "200")
+    client.detach_tab_to_new_os_window("10")
+
+    assert calls == [
+        (
+            "/usr/bin/kitty",
+            "@",
+            "detach-window",
+            "--match",
+            "id:1",
+            "--target-tab",
+            "id:20",
+        ),
+        (
+            "/usr/bin/kitty",
+            "@",
+            "detach-window",
+            "--match",
+            "id:1",
+            "--target-tab",
+            "new",
+        ),
+        ("/usr/bin/kitty", "@", "detach-window", "--match", "id:1"),
+        (
+            "/usr/bin/kitty",
+            "@",
+            "detach-tab",
+            "--match",
+            "id:10",
+            "--target-tab",
+            "id:20",
+        ),
+        ("/usr/bin/kitty", "@", "detach-tab", "--match", "id:10"),
+    ]
+
+
+def test_client_reorder_operations_focus_before_move(monkeypatch):
+    calls = _record_remote_calls(monkeypatch)
+    client = KittyClient(executable="/usr/bin/kitty")
+
+    client.reorder_pane("1", "forward")
+    client.reorder_pane("1", "backward")
+    client.reorder_tab("10", "forward")
+    client.reorder_tab("10", "backward")
+
+    assert calls == [
+        ("/usr/bin/kitty", "@", "focus-window", "--match", "id:1"),
+        ("/usr/bin/kitty", "@", "action", "move_window_forward"),
+        ("/usr/bin/kitty", "@", "focus-window", "--match", "id:1"),
+        ("/usr/bin/kitty", "@", "action", "move_window_backward"),
+        ("/usr/bin/kitty", "@", "focus-tab", "--match", "id:10"),
+        ("/usr/bin/kitty", "@", "action", "move_tab_forward"),
+        ("/usr/bin/kitty", "@", "focus-tab", "--match", "id:10"),
+        ("/usr/bin/kitty", "@", "action", "move_tab_backward"),
+    ]
+
+
+def test_client_merge_os_windows_moves_all_source_tabs(monkeypatch):
+    calls = _record_remote_calls(monkeypatch)
+    state = _operation_state()
+    monkeypatch.setattr(KittyClient, "snapshot", lambda _self: state)
+    client = KittyClient(executable="/usr/bin/kitty")
+
+    client.merge_os_windows("100", "200")
+
+    assert calls == [
+        (
+            "/usr/bin/kitty",
+            "@",
+            "detach-tab",
+            "--match",
+            "id:10",
+            "--target-tab",
+            "id:20",
+        ),
+        (
+            "/usr/bin/kitty",
+            "@",
+            "detach-tab",
+            "--match",
+            "id:11",
+            "--target-tab",
+            "id:20",
+        ),
+    ]
+
+
+def test_client_merge_same_os_window_is_noop(monkeypatch):
+    calls = _record_remote_calls(monkeypatch)
+    client = KittyClient(executable="/usr/bin/kitty")
+
+    client.merge_os_windows("100", "100")
+
+    assert calls == []
+
+
+def test_client_operation_reports_missing_os_window(monkeypatch):
+    monkeypatch.setattr(KittyClient, "snapshot", lambda _self: _operation_state())
+    client = KittyClient(executable="/usr/bin/kitty")
+
+    with pytest.raises(KittyObjectNotFoundError, match="OS window"):
+        client.move_tab("10", "missing")
