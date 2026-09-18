@@ -26,7 +26,7 @@ The TUI displays Kitty's hierarchy as OS windows → tabs → panes. The tree is
 | `Ctrl-R` | refresh |
 | `q` | quit |
 
-The TUI follows macOS light/dark appearance when launched, falling back to terminal color hints on other platforms. Set `CATHERD_THEME=textual-light` or `CATHERD_THEME=textual-dark` to override detection. The 0.18.0 TUI intentionally does not close processes or create new shells.
+The TUI follows macOS light/dark appearance when launched, falling back to terminal color hints on other platforms. Set `CATHERD_THEME=ansi-light` or `CATHERD_THEME=ansi-dark` to override detection. The older `textual-light` / `textual-dark` names are accepted as aliases but map to the terminal-native ANSI themes. The 0.18.0 TUI intentionally does not close processes or create new shells.
 
 ### TUI testing
 
