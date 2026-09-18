@@ -11,12 +11,15 @@ from textual.widgets import Input, Static, Tree
 
 from catherd.activity import PaneActivity
 from catherd.model import KittyState, OsWindow, Pane, Tab
+import catherd.tui as tui_module
 from catherd.tui import (
     Destination,
     KittyManagerApp,
     NodeRef,
+    _active_marker,
     _compact_hint,
     _compact_process_hint,
+    _preferred_textual_theme,
     containing_os_window_id,
     merge_os_window_destinations,
     merge_tab_destinations,
@@ -446,17 +449,18 @@ def test_selected_details_for_pane_with_activity() -> None:
     assert "nvim  [1]" in details.plain
     assert "OS 100 > editor [10]" in details.plain
     assert "LOCATION" in details.plain
+    assert "LOCATION ─" in details.plain
     assert "/code/project" in details.plain
     assert "1 of 2" in details.plain
     assert "R:2" in details.plain
     assert "120×40" in details.plain  # ruff: ignore[ambiguous-unicode-character-string]
-    assert "PROCESS" in details.plain
+    assert "PROCESS ─" in details.plain
     assert "uv run pytest" in details.plain
     assert "/bin/zsh -l" in details.plain
-    assert "STATE" in details.plain
+    assert "STATE ─" in details.plain
     assert "command running" in details.plain
     assert "Attention" in details.plain
-    assert "ATUIN" in details.plain
+    assert "ATUIN ─" in details.plain
     assert "session-1" in details.plain
     assert "pytest -q" in details.plain
     assert "Title locked" not in details.plain
@@ -503,6 +507,51 @@ async def test_details_panel_loads_activity_for_highlighted_pane() -> None:
 
 
 @pytest.mark.small
+def test_active_marker_does_not_reuse_tree_disclosure_triangle() -> None:
+    assert _active_marker(active=True) == "● "
+    assert _active_marker(active=False) == "  "
+
+
+@pytest.mark.small
+def test_preferred_theme_honors_override(monkeypatch) -> None:
+    monkeypatch.setenv("CATHERD_THEME", "textual-light")
+
+    assert _preferred_textual_theme() == "textual-light"
+
+
+@pytest.mark.small
+@pytest.mark.parametrize(
+    ("appearance", "expected"),
+    [("Dark\n", "textual-dark"), ("", "textual-light")],
+)
+def test_preferred_theme_uses_macos_appearance(monkeypatch, appearance, expected) -> None:
+    monkeypatch.delenv("CATHERD_THEME", raising=False)
+    monkeypatch.setattr(tui_module.sys, "platform", "darwin")
+    monkeypatch.setattr(
+        tui_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: type("Result", (), {"stdout": appearance})(),
+    )
+
+    assert _preferred_textual_theme() == expected
+
+
+@pytest.mark.medium
+async def test_explicit_theme_name_is_applied() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(
+        backend,
+        poll_interval=None,
+        activity_provider=_activity,
+        theme_name="textual-light",
+    )
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert app.theme == "textual-light"
+
+
+@pytest.mark.small
 def test_compact_hint_normalizes_and_truncates() -> None:
     assert _compact_hint("  uv   run   pytest  ") == "uv run pytest"
     hint = _compact_hint("x" * 80)
@@ -531,7 +580,7 @@ async def test_tree_rows_are_compact_and_mark_kitty_active() -> None:
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
         pane = _find_node(tree, NodeRef("pane", "1"))
         assert isinstance(pane.label, Text)
-        assert "▶ " in pane.label.plain
+        assert "● " in pane.label.plain
         assert "nvim" in pane.label.plain
         assert "[1]" in pane.label.plain
         assert "uv run pytest" in pane.label.plain
@@ -539,7 +588,7 @@ async def test_tree_rows_are_compact_and_mark_kitty_active() -> None:
 
         inactive = _find_node(tree, NodeRef("pane", "2"))
         assert isinstance(inactive.label, Text)
-        assert "▶ " not in inactive.label.plain
+        assert "● " not in inactive.label.plain
 
 
 @pytest.mark.medium
