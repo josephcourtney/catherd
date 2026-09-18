@@ -12,7 +12,12 @@ catherd uses three complementary test layers:
 2. **Headless TUI acceptance tests** run the Textual application with a stateful fake Kitty backend. These verify rendered hierarchy changes and interaction semantics without requiring a running Kitty instance.
 3. **Real-Kitty acceptance** is a deliberately small manual boundary check for behavior that cannot be proven by the headless harness, such as native macOS window titles and Kitty remote-control effects.
 
-Tests use pytest and are classified with the repository's size markers.
+Tests use pytest and are classified with the repository's size markers. Size is based on resource behavior, not merely runtime:
+
+- `small`: hermetic; no real filesystem, database, subprocess, network, or sleep calls.
+- `medium`: may use local filesystem/SQLite/subprocesses or framework event loops that sleep/yield internally.
+- Textual `App.run_test()` cases are therefore `medium`; pure TUI helper/rendering functions remain `small`.
+- Tests using `tmp_path` for real file behavior are `medium`; use pyfakefs or mocks only when the test is genuinely intended to remain a hermetic unit test.
 
 ## Standard commands
 
