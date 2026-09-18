@@ -15,6 +15,7 @@ from catherd.tui import (
     Destination,
     KittyManagerApp,
     NodeRef,
+    _compact_hint,
     containing_os_window_id,
     merge_os_window_destinations,
     merge_tab_destinations,
@@ -410,18 +411,24 @@ def test_selected_title_uses_hierarchy() -> None:
 def test_selected_details_for_os_window() -> None:
     details = selected_details(_state(), NodeRef("os_window", "100"))
 
-    assert "OS window" in details.plain
-    assert "Tabs: 2" in details.plain
-    assert "Panes: 3" in details.plain
+    assert "OS WINDOW" in details.plain
+    assert "work  [100]" in details.plain
+    assert "CONTENTS" in details.plain
+    assert "Tabs" in details.plain and "2" in details.plain
+    assert "Panes" in details.plain and "3" in details.plain
+    assert "Kitty active" in details.plain
 
 
 @pytest.mark.small
 def test_selected_details_for_tab() -> None:
     details = selected_details(_state(), NodeRef("tab", "10"))
 
-    assert "Tab" in details.plain
-    assert "Layout: splits" in details.plain
-    assert "Panes: 2" in details.plain
+    assert "TAB" in details.plain
+    assert "editor  [10]" in details.plain
+    assert "OS 100" in details.plain
+    assert "CONTENTS" in details.plain
+    assert "Layout" in details.plain and "splits" in details.plain
+    assert "Panes" in details.plain and "2" in details.plain
 
 
 @pytest.mark.small
@@ -432,17 +439,24 @@ def test_selected_details_for_pane_with_activity() -> None:
         activity=_activity("1"),
     )
 
-    assert "Pane" in details.plain
-    assert "CWD: /code/project" in details.plain
-    assert "Current command: uv run pytest" in details.plain
-    assert "Foreground process: nvim" in details.plain
-    assert "Root process: /bin/zsh -l" in details.plain
-    assert "Position in tab: 1 of 2" in details.plain
-    assert "Neighbors: R:2" in details.plain
-    assert "Size: 120×40" in details.plain  # ruff: ignore[ambiguous-unicode-character-string]
-    assert "Needs attention: yes" in details.plain
-    assert "Atuin session: session-1" in details.plain
-    assert "Last completed command: pytest -q" in details.plain
+    assert "PANE" in details.plain
+    assert "nvim  [1]" in details.plain
+    assert "OS 100 > editor [10]" in details.plain
+    assert "LOCATION" in details.plain
+    assert "/code/project" in details.plain
+    assert "1 of 2" in details.plain
+    assert "R:2" in details.plain
+    assert "120×40" in details.plain  # ruff: ignore[ambiguous-unicode-character-string]
+    assert "PROCESS" in details.plain
+    assert "uv run pytest" in details.plain
+    assert "/bin/zsh -l" in details.plain
+    assert "STATE" in details.plain
+    assert "command running" in details.plain
+    assert "Attention" in details.plain
+    assert "ATUIN" in details.plain
+    assert "session-1" in details.plain
+    assert "pytest -q" in details.plain
+    assert "Title locked" not in details.plain
 
 
 @pytest.mark.small
@@ -453,8 +467,9 @@ def test_selected_details_for_pane_loading() -> None:
         activity_loading=True,
     )
 
-    assert "Atuin session: loading…" in details.plain
-    assert "Last completed command: loading…" in details.plain
+    assert "ATUIN" in details.plain
+    assert "Session" in details.plain
+    assert details.plain.count("loading...") == 2
 
 
 @pytest.mark.medium
@@ -477,10 +492,97 @@ async def test_details_panel_loads_activity_for_highlighted_pane() -> None:
         await app.workers.wait_for_complete()
         details = app.query_one("#details", Static)
         assert isinstance(details.content, Text)
-        assert "Atuin session: session-live" in details.content.plain
-        assert "Last completed command: uv run pytest" in details.content.plain
+        assert "ATUIN" in details.content.plain
+        assert "session-live" in details.content.plain
+        assert "uv run pytest" in details.content.plain
 
     assert "1" in calls
+
+
+@pytest.mark.small
+def test_compact_hint_normalizes_and_truncates() -> None:
+    assert _compact_hint("  uv   run   pytest  ") == "uv run pytest"
+    hint = _compact_hint("x" * 80)
+    assert hint is not None
+    assert len(hint) == 36
+    assert hint.endswith("...")
+
+
+@pytest.mark.medium
+async def test_tree_rows_are_compact_and_mark_kitty_active() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        pane = _find_node(tree, NodeRef("pane", "1"))
+        assert isinstance(pane.label, Text)
+        assert "▶ " in pane.label.plain
+        assert "nvim" in pane.label.plain
+        assert "[1]" in pane.label.plain
+        assert "uv run pytest" in pane.label.plain
+        assert "/code/project" not in pane.label.plain
+
+        inactive = _find_node(tree, NodeRef("pane", "2"))
+        assert isinstance(inactive.label, Text)
+        assert "▶ " not in inactive.label.plain
+
+
+@pytest.mark.medium
+async def test_action_strip_is_quiet_static_help() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        actions = app.query_one("#actions", Static)
+        assert isinstance(actions.content, str)
+        assert "/ Filter" in actions.content
+        assert "a Active" in actions.content
+        assert "J/K Reorder" in actions.content
+
+
+@pytest.mark.medium
+async def test_filter_tree_keeps_matching_ancestors_and_prunes_siblings() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("/")
+        filter_input = app.screen.query_one("#filter-input", Input)
+        filter_input.value = "pytest"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        assert _child_refs(tree, NodeRef("os_window", "100")) == [NodeRef("tab", "10")]
+        assert _child_refs(tree, NodeRef("tab", "10")) == [NodeRef("pane", "2")]
+        assert all(node.data != NodeRef("os_window", "200") for node in tree.root.children)
+
+
+@pytest.mark.medium
+async def test_jump_active_clears_filter_and_selects_active_pane() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("/")
+        filter_input = app.screen.query_one("#filter-input", Input)
+        filter_input.value = "notes"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        await pilot.press("a")
+        await pilot.pause()
+
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        assert tree.cursor_node is not None
+        assert tree.cursor_node.data == NodeRef("pane", "1")
+        assert app._filter_query == ""
+        assert _find_node(tree, NodeRef("os_window", "200"))
 
 
 @pytest.mark.medium
