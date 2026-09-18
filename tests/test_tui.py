@@ -228,6 +228,7 @@ async def test_reorder_restores_manager_focus(monkeypatch) -> None:
     app = KittyManagerApp(backend, poll_interval=None)
 
     async with app.run_test() as pilot:
+        await pilot.pause()
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
         tree.move_cursor(_find_node(tree, NodeRef("pane", "2")))
         await pilot.press("shift+j")
@@ -243,6 +244,7 @@ async def test_rename_dialog_routes_to_backend() -> None:
     app = KittyManagerApp(backend, poll_interval=None)
 
     async with app.run_test() as pilot:
+        await pilot.pause()
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
         tree.move_cursor(_find_node(tree, NodeRef("pane", "2")))
         await pilot.press("r")
@@ -264,6 +266,7 @@ async def test_move_dialog_routes_to_backend() -> None:
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
         tree.move_cursor(_find_node(tree, NodeRef("pane", "1")))
         await pilot.press("m")
+        await pilot.pause()
         await pilot.press("enter")
         await app.workers.wait_for_complete()
 
@@ -279,6 +282,7 @@ async def test_merge_dialog_routes_to_backend() -> None:
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
         tree.move_cursor(_find_node(tree, NodeRef("os_window", "100")))
         await pilot.press("shift+m")
+        await pilot.pause()
         await pilot.press("enter")
         await app.workers.wait_for_complete()
 
