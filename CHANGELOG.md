@@ -5,6 +5,12 @@
 - add automatic state refresh that preserves tree selection and expansion state.
 - add a selected-object details panel with Kitty metadata and asynchronous Atuin session/command enrichment for panes.
 
+### Fixed
+- update Kitty state parsing for the current `ls` schema, including foreground processes, terminal size, command state, and attention state.
+- filter Kitty's transient UI overlays, such as the built-in tab-renaming prompt, from catherd's pane hierarchy.
+- keep renamed objects visibly renamed in the TUI, explicitly target tab/pane reorder actions, and allow merge from any node in the source OS window.
+- distinguish the currently running Kitty shell-integration command from the most recently completed Atuin command.
+
 ## [0.16.0] - 2026-09-18
 
 ### Added
