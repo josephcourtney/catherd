@@ -266,48 +266,52 @@ def inspect(*, verbose: bool, pretty: bool) -> None:
     click.echo(json.dumps(payloads, indent=2 if pretty else None))
 
 
+def _install_shell_snippet(*, force_shell: str | None, dry_run: bool) -> None:
+    shell = get_shell_info(force_shell)
+    rc_path = get_shell_rc_path(shell)
+    snippet_marker = "# catherd atuin/kitty sync snippet"
+    snippet_block = (
+        snippet_marker + "\n" + load_snippet_for_shell(shell).rstrip() + "\n# end catherd atuin/kitty sync\n"
+    )
+    if rc_path.exists():
+        contents = rc_path.read_text(encoding="utf-8")
+        if snippet_marker in contents:
+            click.secho(f"[OK] Snippet already installed in {rc_path}", fg="green")
+            return
+        if not dry_run:
+            shutil.copyfile(rc_path, rc_path.with_suffix(rc_path.suffix + ".catherd.bak"))
+        click.secho(
+            f"[INFO] Backed up {rc_path} → {rc_path.with_suffix(rc_path.suffix + '.catherd.bak')}",
+            fg="yellow",
+            err=dry_run,
+        )
+    elif dry_run:
+        click.echo(f"[DRY-RUN] Would create {rc_path} and append snippet", err=True)
+        click.secho("[OK] Dry-run complete; no changes made.", fg="green")
+        return
+
+    if dry_run:
+        click.echo(f"[DRY-RUN] Would append snippet to {rc_path}", err=True)
+        click.secho("[OK] Dry-run complete; no changes made.", fg="green")
+        return
+
+    with rc_path.open("a", encoding="utf-8") as f:
+        f.write("\n\n" + snippet_block + "\n")
+
+    click.secho(f"[OK] Snippet added to {rc_path}", fg="green")
+    click.secho(
+        "You must restart Kitty tabs/windows or re-source your shell for the change to take effect.",
+        fg="yellow",
+    )
+
+
 @main.command("install")
 @click.option("--shell", "force_shell", help="Force install for this shell (zsh, bash, fish, csh)")
 @click.option("--dry-run", is_flag=True)
 def install_shell_snippet(*, force_shell: str | None = None, dry_run: bool) -> None:
     """Install the Atuin/Kitty session sync snippet to your shell startup file (idempotent)."""
     try:
-        shell = get_shell_info(force_shell)
-        rc_path = get_shell_rc_path(shell)
-        snippet_marker = "# catherd atuin/kitty sync snippet"
-        snippet_block = (
-            snippet_marker + "\n" + load_snippet_for_shell(shell).rstrip() + "\n# end catherd atuin/kitty sync\n"
-        )
-        if rc_path.exists():
-            contents = rc_path.read_text(encoding="utf-8")
-            if snippet_marker in contents:
-                click.secho(f"[OK] Snippet already installed in {rc_path}", fg="green")
-                return
-            if not dry_run:
-                shutil.copyfile(rc_path, rc_path.with_suffix(rc_path.suffix + ".catherd.bak"))
-            click.secho(
-                f"[INFO] Backed up {rc_path} → {rc_path.with_suffix(rc_path.suffix + '.catherd.bak')}",
-                fg="yellow",
-                err=dry_run,
-            )
-        elif dry_run:
-            click.echo(f"[DRY-RUN] Would create {rc_path} and append snippet", err=True)
-            click.secho("[OK] Dry-run complete; no changes made.", fg="green")
-            return
-
-        if dry_run:
-            click.echo(f"[DRY-RUN] Would append snippet to {rc_path}", err=True)
-            click.secho("[OK] Dry-run complete; no changes made.", fg="green")
-            return
-
-        with rc_path.open("a", encoding="utf-8") as f:
-            f.write("\n\n" + snippet_block + "\n")
-
-        click.secho(f"[OK] Snippet added to {rc_path}", fg="green")
-        click.secho(
-            "You must restart Kitty tabs/windows or re-source your shell for the change to take effect.",
-            fg="yellow",
-        )
+        _install_shell_snippet(force_shell=force_shell, dry_run=dry_run)
     except ValueError as err:
         raise click.ClickException(str(err)) from err
 
