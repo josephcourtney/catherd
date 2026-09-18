@@ -21,6 +21,14 @@ class Pane:
     needs_attention: bool | None = None
     has_activity_since_last_focus: bool | None = None
     is_self: bool | None = None
+    tab_index: int | None = None
+    tab_count: int | None = None
+    group_index: int | None = None
+    group_count: int | None = None
+    neighbors_left: tuple[str, ...] = ()
+    neighbors_top: tuple[str, ...] = ()
+    neighbors_right: tuple[str, ...] = ()
+    neighbors_bottom: tuple[str, ...] = ()
     tty: str | None = None
     cols: int | None = None
     rows: int | None = None
