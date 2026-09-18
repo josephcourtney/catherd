@@ -1,3 +1,9 @@
+## [0.17.0] - 2026-09-18
+
+### Added
+- add a Textual TUI for navigating, focusing, renaming, moving, reordering, and merging Kitty OS windows, tabs, and panes.
+- add automatic state refresh that preserves tree selection and expansion state.
+
 ## [0.16.0] - 2026-09-18
 
 ### Added

@@ -59,6 +59,16 @@ def test_main_entrypoint_exits_zero():
     assert result.exit_code == 0
 
 
+def test_tui_command(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "run_tui", lambda: calls.append("run"))
+
+    result = CliRunner().invoke(cli.main, ["tui"])
+
+    assert result.exit_code == 0
+    assert calls == ["run"]
+
+
 @patch("catherd.cli.get_kitty_state")
 @patch("catherd.cli.get_atuin_session_for_window")
 @patch("catherd.cli.get_last_command_for_atuin_session")

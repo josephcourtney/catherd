@@ -9,9 +9,10 @@ import click
 
 from .atuin import get_last_command_for_atuin_session
 from .config import get_session_file
-from .kitty import get_kitty_state
+from .kitty import KittyClientError, get_kitty_state
 from .model import KittyState, Pane, PaneLocation
 from .shell import get_shell_rc_path, load_snippet_for_shell
+from .tui import run_tui
 
 
 def is_sync_active_in_this_shell() -> bool:
@@ -540,6 +541,15 @@ def print_kitty_session_diagnostics(state: KittyState, *, verbose: bool = False)
             f"[INFO] Atuin/Kitty sync active in {synced}/{total} windows.",
             fg=color,
         )
+
+
+@main.command()
+def tui() -> None:
+    """Interactively organize Kitty OS windows, tabs, and panes."""
+    try:
+        run_tui()
+    except KittyClientError as err:
+        raise click.ClickException(str(err)) from err
 
 
 @main.command()
