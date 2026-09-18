@@ -333,12 +333,12 @@ class KittyTree(Tree[NodeRef]):
     """Tree with Vim-like navigation."""
 
     BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("enter,f,F", "focus_kitty", "Focus"),
         *Tree.BINDINGS,
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
         Binding("h", "collapse_or_parent", "Collapse", show=False),
         Binding("l", "expand_or_child", "Expand", show=False),
-        Binding("enter,f,F", "focus_kitty", "Focus"),
     ]
 
     def action_collapse_or_parent(self) -> None:
