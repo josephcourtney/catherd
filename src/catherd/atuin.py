@@ -1,5 +1,6 @@
 import os
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 
@@ -21,7 +22,7 @@ def get_last_command_for_atuin_session(
             print(f"[verbose] Atuin history DB not found at {db_path}")
         return "(no history db)"
     try:
-        with sqlite3.connect(db_path) as conn:
+        with closing(sqlite3.connect(db_path)) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
