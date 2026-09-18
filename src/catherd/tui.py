@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from functools import partial
-from typing import Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 from rich.text import Text
 from textual.app import App, ComposeResult
@@ -15,10 +14,15 @@ from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Footer, Input, Label, OptionList, Static, Tree
 from textual.widgets.option_list import Option
-from textual.widgets.tree import TreeNode
-
 from .kitty import KittyClient, KittyClientError
 from .model import KittyState, OsWindow, Pane, Tab
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
+    from typing import ClassVar
+
+    from textual.binding import BindingType
+    from textual.widgets.tree import TreeNode
 
 NodeKind = Literal["os_window", "tab", "pane"]
 DestinationKind = Literal["os_window", "tab", "new_tab", "new_os_window"]
@@ -190,7 +194,7 @@ def _walk_nodes(node: TreeNode[NodeRef]) -> Iterator[TreeNode[NodeRef]]:
 class KittyTree(Tree[NodeRef]):
     """Tree with Vim-like navigation."""
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[BindingType]] = [
         *Tree.BINDINGS,
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
@@ -221,7 +225,7 @@ class KittyTree(Tree[NodeRef]):
 class VimOptionList(OptionList):
     """Option list with j/k navigation."""
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[BindingType]] = [
         *OptionList.BINDINGS,
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
@@ -231,7 +235,7 @@ class VimOptionList(OptionList):
 class RenameScreen(ModalScreen[str | None]):
     """Small modal used to rename the selected object."""
 
-    BINDINGS = [Binding("escape", "cancel", "Cancel", show=False)]
+    BINDINGS: ClassVar[list[BindingType]] = [Binding("escape", "cancel", "Cancel", show=False)]
 
     CSS = """
     RenameScreen {
@@ -276,7 +280,7 @@ class RenameScreen(ModalScreen[str | None]):
 class DestinationScreen(ModalScreen[Destination | None]):
     """Modal destination picker."""
 
-    BINDINGS = [Binding("escape", "cancel", "Cancel", show=False)]
+    BINDINGS: ClassVar[list[BindingType]] = [Binding("escape", "cancel", "Cancel", show=False)]
 
     CSS = """
     DestinationScreen {
@@ -335,7 +339,7 @@ class KittyManagerApp(App[None]):
     TITLE = "catherd"
     SUB_TITLE = "Kitty organizer"
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[BindingType]] = [
         Binding("q", "quit", "Quit"),
         Binding("r", "rename_selected", "Rename"),
         Binding("m", "move_selected", "Move"),
@@ -471,7 +475,8 @@ class KittyManagerApp(App[None]):
             pane_ref = NodeRef("pane", pane.id)
             nodes[pane_ref] = node.add_leaf(_pane_label(pane), pane_ref)
 
-    def _reveal_and_select(self, tree: KittyTree, node: TreeNode[NodeRef]) -> None:
+    @staticmethod
+    def _reveal_and_select(tree: KittyTree, node: TreeNode[NodeRef]) -> None:
         parent = node.parent
         while parent is not None:
             parent.expand()
