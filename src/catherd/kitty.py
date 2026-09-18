@@ -120,8 +120,7 @@ def _is_kitty_ui_window(window: dict[str, object]) -> bool:
 def _id_tuple(value: object, visible_ids: set[str]) -> tuple[str, ...]:
     if not isinstance(value, list):
         return ()
-    ids = tuple(item for raw in value if (item := _safe_str(raw)) is not None and item in visible_ids)
-    return ids
+    return tuple(item for raw in value if (item := _safe_str(raw)) is not None and item in visible_ids)
 
 
 def _visible_groups(tab_data: dict[str, object], visible_ids: set[str]) -> tuple[tuple[str, ...], ...]:
@@ -138,9 +137,7 @@ def _ordered_pane_data(
     visible_groups: tuple[tuple[str, ...], ...],
 ) -> list[dict[str, object]]:
     by_id = {
-        pane_id: pane_data
-        for pane_data in pane_data_items
-        if (pane_id := _safe_str(pane_data.get("id"))) is not None
+        pane_id: pane_data for pane_data in pane_data_items if (pane_id := _safe_str(pane_data.get("id"))) is not None
     }
     ordered_ids = [pane_id for group in visible_groups for pane_id in group]
     ordered = [by_id[pane_id] for pane_id in ordered_ids if pane_id in by_id]
@@ -164,15 +161,11 @@ def _group_positions(
     }
 
 
-def _parse_panes(tab_data: dict[str, object], tab_title: str | None) -> tuple[Pane, ...]:
+def _parse_panes(tab_data: dict[str, object], tab_title: str | None) -> tuple[Pane, ...]:  # ruff: ignore[too-many-locals]
     pane_data_items = [
-        pane_data
-        for pane_data in _as_object_list(tab_data.get("windows"))
-        if not _is_kitty_ui_window(pane_data)
+        pane_data for pane_data in _as_object_list(tab_data.get("windows")) if not _is_kitty_ui_window(pane_data)
     ]
-    visible_ids = {
-        pane_id for pane_data in pane_data_items if (pane_id := _safe_str(pane_data.get("id"))) is not None
-    }
+    visible_ids = {pane_id for pane_data in pane_data_items if (pane_id := _safe_str(pane_data.get("id"))) is not None}
     visible_groups = _visible_groups(tab_data, visible_ids)
     pane_data_items = _ordered_pane_data(pane_data_items, visible_groups)
     group_positions = _group_positions(visible_groups)
@@ -449,9 +442,11 @@ class KittyClient:
         state = self.snapshot()
         found = state.find_tab(source_tab_id)
         if found is None:
-            raise KittyObjectNotFoundError("tab", source_tab_id)
+            msg = "tab"
+            raise KittyObjectNotFoundError(msg, source_tab_id)
         if state.find_tab(target_tab_id) is None:
-            raise KittyObjectNotFoundError("tab", target_tab_id)
+            msg = "tab"
+            raise KittyObjectNotFoundError(msg, target_tab_id)
         for pane in found[1].panes:
             if pane.id:
                 self.move_pane(pane.id, target_tab_id)

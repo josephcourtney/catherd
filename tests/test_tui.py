@@ -184,7 +184,7 @@ class FakeBackend:
         new_tab = self._normalize_tab(Tab(id=f"new-tab-{pane_id}", title=location.pane.title, panes=(location.pane,)))
         self.state = KittyState(
             tuple(
-                replace(os_window, tabs=os_window.tabs + (new_tab,))
+                replace(os_window, tabs=(*os_window.tabs, new_tab))
                 if os_window.id == location.os_window.id
                 else os_window
                 for os_window in self.state.os_windows
@@ -199,7 +199,7 @@ class FakeBackend:
         self.move_pane(pane_id, "__detached__")
         new_tab = self._normalize_tab(Tab(id=f"new-tab-{pane_id}", title=location.pane.title, panes=(location.pane,)))
         new_os_window = OsWindow(id=f"new-os-{pane_id}", title=None, tabs=(new_tab,))
-        self.state = KittyState(self.state.os_windows + (new_os_window,))
+        self.state = KittyState((*self.state.os_windows, new_os_window))
 
     def move_tab(self, tab_id: str, target_os_window_id: str) -> None:
         self.calls.append(("move_tab", tab_id, target_os_window_id))
@@ -280,11 +280,13 @@ class FakeBackend:
         os_windows: list[OsWindow] = []
         for os_window in self.state.os_windows:
             tabs: list[Tab] = []
-            for tab in os_window.tabs:
-                if tab.id == source_tab_id:
+            for tab_ in os_window.tabs:
+                if tab_.id == source_tab_id:
                     continue
-                if tab.id == target_tab_id:
-                    tab = self._normalize_tab(replace(tab, panes=tab.panes + source_panes))
+                if tab_.id == target_tab_id:
+                    tab = self._normalize_tab(replace(tab_, panes=tab_.panes + source_panes))
+                else:
+                    tab = tab_
                 tabs.append(tab)
             if tabs:
                 os_windows.append(replace(os_window, tabs=tuple(tabs)))
@@ -371,9 +373,7 @@ def test_move_destinations_for_tab() -> None:
 
 
 def test_merge_os_window_destinations_exclude_source() -> None:
-    assert merge_os_window_destinations(_state(), "100") == (
-        Destination("os_window", "200", "OS 200 — notes"),
-    )
+    assert merge_os_window_destinations(_state(), "100") == (Destination("os_window", "200", "OS 200 — notes"),)
 
 
 def test_merge_tab_destinations_exclude_source() -> None:
