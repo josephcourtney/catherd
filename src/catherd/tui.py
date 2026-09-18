@@ -90,21 +90,23 @@ def _display_name(value: str | None, fallback: str) -> str:
     return value or fallback
 
 
-def _os_window_label(os_window: OsWindow) -> Text:
+def _os_window_label(os_window: OsWindow, display_title: str | None = None) -> Text:
     label = Text()
     label.append("● " if os_window.is_active else "  ", style="bold" if os_window.is_active else "")
     label.append("OS ", style="dim")
     label.append(_display_name(os_window.id, "?"))
-    if os_window.title:
+    title = display_title if display_title is not None else os_window.title
+    if title:
         label.append("  ")
-        label.append(os_window.title, style="bold" if os_window.is_active else "")
+        label.append(title, style="bold" if os_window.is_active else "")
     return label
 
 
-def _tab_label(tab: Tab) -> Text:
+def _tab_label(tab: Tab, display_title: str | None = None) -> Text:
     label = Text()
     label.append("● " if tab.is_active else "  ", style="bold" if tab.is_active else "")
-    label.append(_display_name(tab.title, "(untitled)"), style="bold" if tab.is_active else "")
+    title = display_title if display_title is not None else tab.title
+    label.append(_display_name(title, "(untitled)"), style="bold" if tab.is_active else "")
     if tab.id:
         label.append(f"  [{tab.id}]", style="dim")
     if tab.layout:
@@ -112,15 +114,17 @@ def _tab_label(tab: Tab) -> Text:
     return label
 
 
-def _pane_label(pane: Pane) -> Text:
+def _pane_label(pane: Pane, display_title: str | None = None) -> Text:
     label = Text()
     label.append("● " if pane.is_active else "  ", style="bold" if pane.is_active else "")
-    label.append(_display_name(pane.title, "(untitled)"), style="bold" if pane.is_active else "")
+    title = display_title if display_title is not None else pane.title
+    label.append(_display_name(title, "(untitled)"), style="bold" if pane.is_active else "")
     label.append(f"  [{pane.id}]", style="dim")
     if pane.cwd:
         label.append(f"  {pane.cwd}", style="dim")
-    if pane.foreground_cmd:
-        label.append(f"  {pane.foreground_cmd}", style="dim")
+    command = pane.current_command or pane.foreground_cmd
+    if command:
+        label.append(f"  {command}", style="dim")
     return label
 
 
@@ -210,6 +214,7 @@ def selected_details(
     *,
     activity: PaneActivity | None = None,
     activity_loading: bool = False,
+    display_title: str | None = None,
 ) -> Text:
     """Render details for an object in the current Kitty snapshot."""
     details = Text()
@@ -219,7 +224,7 @@ def selected_details(
             return Text("OS window no longer exists", style="dim")
         details.append("OS window\n", style="bold underline")
         _append_detail(details, "ID", os_window.id)
-        _append_detail(details, "Title", os_window.title)
+        _append_detail(details, "Title", display_title if display_title is not None else os_window.title)
         _append_detail(details, "Active", os_window.is_active)
         _append_detail(details, "Tabs", len(os_window.tabs))
         _append_detail(details, "Panes", sum(len(tab.panes) for tab in os_window.tabs))
@@ -232,7 +237,7 @@ def selected_details(
         os_window, tab = found
         details.append("Tab\n", style="bold underline")
         _append_detail(details, "ID", tab.id)
-        _append_detail(details, "Title", tab.title)
+        _append_detail(details, "Title", display_title if display_title is not None else tab.title)
         _append_detail(details, "OS window", os_window.id)
         _append_detail(details, "Layout", tab.layout)
         _append_detail(details, "Active", tab.is_active)
@@ -245,27 +250,43 @@ def selected_details(
     pane = location.pane
     details.append("Pane\n", style="bold underline")
     _append_detail(details, "ID", pane.id)
-    _append_detail(details, "Title", pane.title)
+    _append_detail(details, "Title", display_title if display_title is not None else pane.title)
     _append_detail(details, "OS window", location.os_window.id)
     _append_detail(details, "Tab", location.tab.id)
     _append_detail(details, "CWD", pane.cwd)
-    _append_detail(details, "Foreground", pane.foreground_cmd)
-    _append_detail(details, "PID", pane.pid)
-    _append_detail(details, "TTY", pane.tty)
+    _append_detail(details, "Current command", pane.current_command)
+    _append_detail(details, "Foreground process", pane.foreground_cmd)
+    _append_detail(details, "Foreground PID", pane.pid)
+    _append_detail(details, "Root process", pane.root_cmdline)
     size = f"{pane.cols}×{pane.rows}" if pane.cols is not None and pane.rows is not None else None
-    position = f"{pane.x},{pane.y}" if pane.x is not None and pane.y is not None else None
     _append_detail(details, "Size", size)
-    _append_detail(details, "Position", position)
-    _append_detail(details, "Bell", pane.has_bell)
-    _append_detail(details, "Urgent", pane.is_urgent)
+    _append_detail(details, "At prompt", pane.at_prompt)
+    _append_detail(details, "Title locked", pane.title_overridden)
+    _append_detail(details, "Needs attention", pane.needs_attention)
+    _append_detail(details, "Activity since focus", pane.has_activity_since_last_focus)
     _append_detail(details, "Active", pane.is_active)
     if activity_loading:
         _append_detail(details, "Atuin session", "loading…")
-        _append_detail(details, "Last command", "loading…")
+        _append_detail(details, "Last completed command", "loading…")
     else:
         _append_detail(details, "Atuin session", activity.session_id if activity is not None else None)
-        _append_detail(details, "Last command", activity.last_command if activity is not None else None)
+        _append_detail(
+            details,
+            "Last completed command",
+            activity.last_command if activity is not None else None,
+        )
     return details
+
+
+def containing_os_window_id(state: KittyState, ref: NodeRef) -> str | None:
+    """Return the OS window containing a referenced tree object."""
+    if ref.kind == "os_window":
+        return ref.id if state.find_os_window(ref.id) is not None else None
+    if ref.kind == "tab":
+        found = state.find_tab(ref.id)
+        return found[0].id if found is not None else None
+    location = state.find_pane(ref.id)
+    return location.os_window.id if location is not None else None
 
 
 def _walk_nodes(node: TreeNode[NodeRef]) -> Iterator[TreeNode[NodeRef]]:
@@ -470,6 +491,7 @@ class KittyManagerApp(App[None]):
         self.poll_interval = poll_interval
         self._activity_provider = activity_provider if activity_provider is not None else get_pane_activity
         self.state = KittyState(os_windows=())
+        self._display_names: dict[NodeRef, str] = {}
         self._manager_pane_id = os.environ.get("KITTY_WINDOW_ID")
         self._mutation_active = False
 
@@ -507,9 +529,18 @@ class KittyManagerApp(App[None]):
             self._details().update("Select an OS window, tab, or pane")
             return
         if ref.kind != "pane":
-            self._details().update(selected_details(self.state, ref))
+            self._details().update(
+                selected_details(self.state, ref, display_title=self._display_names.get(ref))
+            )
             return
-        self._details().update(selected_details(self.state, ref, activity_loading=True))
+        self._details().update(
+            selected_details(
+                self.state,
+                ref,
+                activity_loading=True,
+                display_title=self._display_names.get(ref),
+            )
+        )
         self.run_worker(
             self._load_pane_activity(ref),
             group="pane-details",
@@ -521,15 +552,33 @@ class KittyManagerApp(App[None]):
             activity = await asyncio.to_thread(self._activity_provider, ref.id)
         except OSError as exc:
             if self._selected_ref() == ref:
-                self._details().update(selected_details(self.state, ref))
+                self._details().update(
+                    selected_details(self.state, ref, display_title=self._display_names.get(ref))
+                )
                 self._status(f"Activity lookup failed: {exc}")
             return
         if self._selected_ref() == ref:
-            self._details().update(selected_details(self.state, ref, activity=activity))
+            self._details().update(
+                selected_details(
+                    self.state,
+                    ref,
+                    activity=activity,
+                    display_title=self._display_names.get(ref),
+                )
+            )
 
     def _selected_ref(self) -> NodeRef | None:
         node = self._tree().cursor_node
         return node.data if node is not None else None
+
+    def _selected_title(self, ref: NodeRef) -> str:
+        return self._display_names.get(ref, selected_title(self.state, ref))
+
+    def _record_display_name(self, ref: NodeRef, title: str) -> None:
+        if title:
+            self._display_names[ref] = title
+        else:
+            self._display_names.pop(ref, None)
 
     def _expanded_refs(self) -> set[NodeRef]:
         expanded: set[NodeRef] = set()
@@ -583,13 +632,17 @@ class KittyManagerApp(App[None]):
         if os_window.id is None:
             return
         ref = NodeRef("os_window", os_window.id)
-        node = root.add(_os_window_label(os_window), ref, expand=expanded is None or ref in expanded)
+        node = root.add(
+            _os_window_label(os_window, self._display_names.get(ref)),
+            ref,
+            expand=expanded is None or ref in expanded,
+        )
         nodes[ref] = node
         for tab in os_window.tabs:
             self._add_tab(node, tab, nodes, expanded)
 
-    @staticmethod
     def _add_tab(
+        self,
         parent: TreeNode[NodeRef],
         tab: Tab,
         nodes: dict[NodeRef, TreeNode[NodeRef]],
@@ -598,11 +651,18 @@ class KittyManagerApp(App[None]):
         if tab.id is None:
             return
         ref = NodeRef("tab", tab.id)
-        node = parent.add(_tab_label(tab), ref, expand=expanded is None or ref in expanded)
+        node = parent.add(
+            _tab_label(tab, self._display_names.get(ref)),
+            ref,
+            expand=expanded is None or ref in expanded,
+        )
         nodes[ref] = node
         for pane in tab.panes:
             pane_ref = NodeRef("pane", pane.id)
-            nodes[pane_ref] = node.add_leaf(_pane_label(pane), pane_ref)
+            nodes[pane_ref] = node.add_leaf(
+                _pane_label(pane, self._display_names.get(pane_ref)),
+                pane_ref,
+            )
 
     @staticmethod
     def _schedule_cursor_restore(tree: KittyTree, node: TreeNode[NodeRef]) -> None:
@@ -653,14 +713,19 @@ class KittyManagerApp(App[None]):
             return
         prompt = f"Rename {ref.kind.replace('_', ' ')}:"
         self.push_screen(
-            RenameScreen(prompt, selected_title(self.state, ref)),
+            RenameScreen(prompt, self._selected_title(ref)),
             partial(self._complete_rename, ref),
         )
 
     def _complete_rename(self, ref: NodeRef, title: str | None) -> None:
         if title is None:
             return
-        self._start_mutation("Renamed", self._rename_operation(ref, title), preferred=ref)
+        self._start_mutation(
+            "Renamed",
+            self._rename_operation(ref, title),
+            preferred=ref,
+            on_success=partial(self._record_display_name, ref, title),
+        )
 
     def action_move_selected(self) -> None:
         ref = self._selected_ref()
@@ -686,16 +751,20 @@ class KittyManagerApp(App[None]):
 
     def action_merge_selected(self) -> None:
         ref = self._selected_ref()
-        if ref is None or ref.kind != "os_window":
-            self._status("Select an OS window to merge")
+        if ref is None:
             return
-        destinations = merge_destinations(self.state, ref.id)
+        source_os_window_id = containing_os_window_id(self.state, ref)
+        if source_os_window_id is None:
+            self._status("Selected object no longer exists")
+            return
+        destinations = merge_destinations(self.state, source_os_window_id)
         if not destinations:
             self._status("No other OS window is available")
             return
+        source = NodeRef("os_window", source_os_window_id)
         self.push_screen(
-            DestinationScreen("Merge into:", destinations),
-            partial(self._complete_merge, ref),
+            DestinationScreen("Merge OS window into:", destinations),
+            partial(self._complete_merge, source),
         )
 
     def _complete_merge(self, source: NodeRef, destination: Destination | None) -> None:
@@ -776,6 +845,7 @@ class KittyManagerApp(App[None]):
         *,
         preferred: NodeRef,
         restore_manager_focus: bool = True,
+        on_success: Callable[[], None] | None = None,
     ) -> None:
         if self._mutation_active:
             self._status("Another Kitty operation is still running")
@@ -787,6 +857,7 @@ class KittyManagerApp(App[None]):
                 operation,
                 preferred,
                 restore_manager_focus=restore_manager_focus,
+                on_success=on_success,
             ),
             group="kitty-mutation",
             exclusive=True,
@@ -799,9 +870,12 @@ class KittyManagerApp(App[None]):
         preferred: NodeRef,
         *,
         restore_manager_focus: bool,
+        on_success: Callable[[], None] | None,
     ) -> None:
         try:
             await asyncio.to_thread(operation)
+            if on_success is not None:
+                on_success()
             if restore_manager_focus and self._manager_pane_id is not None:
                 await asyncio.to_thread(self.client.focus_pane, self._manager_pane_id)
             await self.refresh_state(preferred)
