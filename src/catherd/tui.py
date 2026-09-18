@@ -151,8 +151,14 @@ def _pane_activity_hint(pane: Pane) -> str | None:
 
 def _preferred_textual_theme() -> str | None:
     override = os.environ.get("CATHERD_THEME")
-    if override in {"textual-light", "textual-dark"}:
-        return override
+    aliases = {
+        "textual-light": "ansi-light",
+        "textual-dark": "ansi-dark",
+        "ansi-light": "ansi-light",
+        "ansi-dark": "ansi-dark",
+    }
+    if override in aliases:
+        return aliases[override]
     if sys.platform == "darwin":
         try:
             result = subprocess.run(  # noqa: S603, S607 -- fixed macOS system command and arguments
@@ -165,14 +171,14 @@ def _preferred_textual_theme() -> str | None:
         except (OSError, subprocess.TimeoutExpired):
             pass
         else:
-            return "textual-dark" if result.stdout.strip().casefold() == "dark" else "textual-light"
+            return "ansi-dark" if result.stdout.strip().casefold() == "dark" else "ansi-light"
     colorfgbg = os.environ.get("COLORFGBG")
     if colorfgbg:
         background = colorfgbg.rsplit(";", 1)[-1]
         if background == "0":
-            return "textual-dark"
+            return "ansi-dark"
         if background in {"7", "15"}:
-            return "textual-light"
+            return "ansi-light"
     return None
 
 
