@@ -178,7 +178,6 @@ def test_selected_title_uses_hierarchy() -> None:
     assert selected_title(state, NodeRef("pane", "missing")) == ""
 
 
-
 def test_selected_details_for_os_window() -> None:
     details = selected_details(_state(), NodeRef("os_window", "100"))
 
@@ -207,7 +206,7 @@ def test_selected_details_for_pane_with_activity() -> None:
     assert "Current command: uv run pytest" in details.plain
     assert "Foreground process: nvim" in details.plain
     assert "Root process: /bin/zsh -l" in details.plain
-    assert "Size: 120×40" in details.plain
+    assert "Size: 120×40" in details.plain  # ruff: ignore[ambiguous-unicode-character-string]
     assert "Needs attention: yes" in details.plain
     assert "Atuin session: session-1" in details.plain
     assert "Last completed command: pytest -q" in details.plain

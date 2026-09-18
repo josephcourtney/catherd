@@ -84,11 +84,7 @@ def _normalize_foreground(window: dict[str, object]) -> tuple[str | None, int | 
     proc = _as_object(window.get("foreground_process"))
     if proc is not None:
         pid = _safe_int(proc.get("pid"))
-        cmd = (
-            _cmdline_text(proc.get("cmdline"))
-            or _safe_str(proc.get("argv0"))
-            or _safe_str(proc.get("command"))
-        )
+        cmd = _cmdline_text(proc.get("cmdline")) or _safe_str(proc.get("argv0")) or _safe_str(proc.get("command"))
         return cmd, pid, _safe_str(proc.get("cwd"))
 
     cmd = (
@@ -150,9 +146,7 @@ def parse_kitty_state(data: object) -> KittyState:
                         at_prompt=at_prompt,
                         title_overridden=_safe_bool(pane_data.get("title_overridden")),
                         needs_attention=needs_attention,
-                        has_activity_since_last_focus=_safe_bool(
-                            pane_data.get("has_activity_since_last_focus")
-                        ),
+                        has_activity_since_last_focus=_safe_bool(pane_data.get("has_activity_since_last_focus")),
                         is_self=_safe_bool(pane_data.get("is_self")),
                         tty=_safe_str(pane_data.get("tty")),
                         cols=_safe_int(pane_data.get("columns")) or _safe_int(pane_data.get("cols")),

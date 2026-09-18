@@ -258,7 +258,7 @@ def selected_details(
     _append_detail(details, "Foreground process", pane.foreground_cmd)
     _append_detail(details, "Foreground PID", pane.pid)
     _append_detail(details, "Root process", pane.root_cmdline)
-    size = f"{pane.cols}×{pane.rows}" if pane.cols is not None and pane.rows is not None else None
+    size = f"{pane.cols}×{pane.rows}" if pane.cols is not None and pane.rows is not None else None  # ruff: ignore[ambiguous-unicode-character-string]
     _append_detail(details, "Size", size)
     _append_detail(details, "At prompt", pane.at_prompt)
     _append_detail(details, "Title locked", pane.title_overridden)
@@ -529,9 +529,7 @@ class KittyManagerApp(App[None]):
             self._details().update("Select an OS window, tab, or pane")
             return
         if ref.kind != "pane":
-            self._details().update(
-                selected_details(self.state, ref, display_title=self._display_names.get(ref))
-            )
+            self._details().update(selected_details(self.state, ref, display_title=self._display_names.get(ref)))
             return
         self._details().update(
             selected_details(
@@ -552,9 +550,7 @@ class KittyManagerApp(App[None]):
             activity = await asyncio.to_thread(self._activity_provider, ref.id)
         except OSError as exc:
             if self._selected_ref() == ref:
-                self._details().update(
-                    selected_details(self.state, ref, display_title=self._display_names.get(ref))
-                )
+                self._details().update(selected_details(self.state, ref, display_title=self._display_names.get(ref)))
                 self._status(f"Activity lookup failed: {exc}")
             return
         if self._selected_ref() == ref:
