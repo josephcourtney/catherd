@@ -16,6 +16,7 @@ from catherd.tui import (
     KittyManagerApp,
     NodeRef,
     _compact_hint,
+    _compact_process_hint,
     containing_os_window_id,
     merge_os_window_destinations,
     merge_tab_destinations,
@@ -510,6 +511,16 @@ def test_compact_hint_normalizes_and_truncates() -> None:
     assert hint.endswith("...")
 
 
+@pytest.mark.small
+def test_compact_process_hint_strips_absolute_paths() -> None:
+    hint = _compact_process_hint(
+        "/Users/me/.local/bin/atuin-patched-18.22.0 pty-proxy --shell /opt/homebrew/bin/zsh"
+    )
+
+    assert hint == "atuin-patched-18.22.0 pty-proxy ..."
+    assert "/Users/me" not in hint
+
+
 @pytest.mark.medium
 async def test_tree_rows_are_compact_and_mark_kitty_active() -> None:
     backend = FakeBackend(_state())
@@ -554,7 +565,7 @@ async def test_filter_tree_keeps_matching_ancestors_and_prunes_siblings() -> Non
         await pilot.pause()
         await pilot.press("/")
         filter_input = app.screen.query_one("#filter-input", Input)
-        filter_input.value = "pytest"
+        filter_input.value = "tests"
         await pilot.press("enter")
         await pilot.pause()
 
@@ -1096,6 +1107,7 @@ async def test_stale_activity_result_does_not_overwrite_new_selection() -> None:
 
         details = app.query_one("#details", Static)
         assert isinstance(details.content, Text)
-        assert "Atuin session: session-2" in details.content.plain
-        assert "Last completed command: current-two" in details.content.plain
+        assert "ATUIN" in details.content.plain
+        assert "Session         session-2" in details.content.plain
+        assert "Last completed  current-two" in details.content.plain
         assert "stale-one" not in details.content.plain
