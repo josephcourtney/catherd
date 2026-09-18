@@ -116,7 +116,8 @@ def _find_node(tree: Tree[NodeRef], ref: NodeRef):
             for pane_node in tab_node.children:
                 if pane_node.data == ref:
                     return pane_node
-    raise AssertionError(f"missing node: {ref}")
+    msg = f"missing node: {ref}"
+    raise AssertionError(msg)
 
 
 def test_move_destinations_for_pane() -> None:
@@ -141,9 +142,7 @@ def test_move_destinations_for_tab() -> None:
 
 
 def test_merge_destinations_exclude_source() -> None:
-    assert merge_destinations(_state(), "100") == (
-        Destination("os_window", "200", "OS 200 — notes"),
-    )
+    assert merge_destinations(_state(), "100") == (Destination("os_window", "200", "OS 200 — notes"),)
 
 
 def test_selected_title_uses_hierarchy() -> None:

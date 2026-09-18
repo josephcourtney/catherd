@@ -148,8 +148,7 @@ def _pane_destinations(state: KittyState, pane_id: str) -> tuple[Destination, ..
         for os_window, tab in state.iter_tabs()
         if tab.id is not None and tab.id != source_tab_id
     ]
-    destinations.append(Destination("new_tab", None, "New tab"))
-    destinations.append(Destination("new_os_window", None, "New OS window"))
+    destinations.extend((Destination("new_tab", None, "New tab"), Destination("new_os_window", None, "New OS window")))
     return tuple(destinations)
 
 
@@ -314,10 +313,7 @@ class DestinationScreen(ModalScreen[Destination | None]):
         self._destinations = {str(index): destination for index, destination in enumerate(destinations)}
 
     def compose(self) -> ComposeResult:
-        options = [
-            Option(destination.label, id=option_id)
-            for option_id, destination in self._destinations.items()
-        ]
+        options = [Option(destination.label, id=option_id) for option_id, destination in self._destinations.items()]
         yield Vertical(
             Label(self._prompt),
             VimOptionList(*options, id="destination-list"),
@@ -417,14 +413,10 @@ class KittyManagerApp(App[None]):
                 expanded.add(node.data)
         return expanded
 
-    def _initial_ref(self, state: KittyState) -> NodeRef | None:
+    @staticmethod
+    def _initial_ref(state: KittyState) -> NodeRef | None:
         for location in state.iter_panes():
-            if (
-                location.os_window.is_active
-                and location.tab.is_active
-                and location.pane.is_active
-                and location.pane.id
-            ):
+            if location.os_window.is_active and location.tab.is_active and location.pane.is_active and location.pane.id:
                 return NodeRef("pane", location.pane.id)
         first_pane = next(state.iter_panes(), None)
         if first_pane is not None:
@@ -471,8 +463,8 @@ class KittyManagerApp(App[None]):
         for tab in os_window.tabs:
             self._add_tab(node, tab, nodes, expanded)
 
+    @staticmethod
     def _add_tab(
-        self,
         parent: TreeNode[NodeRef],
         tab: Tab,
         nodes: dict[NodeRef, TreeNode[NodeRef]],
@@ -508,9 +500,7 @@ class KittyManagerApp(App[None]):
             return
         self._render_state(state, preferred=selected, expanded=expanded)
         self._status(
-            f"{len(state.os_windows)} OS windows · "
-            f"{sum(1 for _ in state.iter_tabs())} tabs · "
-            f"{state.pane_count} panes"
+            f"{len(state.os_windows)} OS windows · {sum(1 for _ in state.iter_tabs())} tabs · {state.pane_count} panes"
         )
 
     def action_refresh(self) -> None:
