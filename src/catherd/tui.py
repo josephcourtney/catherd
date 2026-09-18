@@ -85,7 +85,7 @@ class KittyBackend(Protocol):
 
 
 def _display_name(value: str | None, fallback: str) -> str:
-    return value if value else fallback
+    return value or fallback
 
 
 def _os_window_label(os_window: OsWindow) -> Text:
@@ -123,13 +123,11 @@ def _pane_label(pane: Pane) -> Text:
 
 
 def _os_window_name(os_window: OsWindow) -> str:
-    title = _display_name(os_window.title, "(untitled)")
-    return f"OS {os_window.id or '?'} — {title}"
+    return f"OS {os_window.id or '?'} — {_display_name(os_window.title, '(untitled)')}"
 
 
 def _tab_name(os_window: OsWindow, tab: Tab) -> str:
-    title = _display_name(tab.title, "(untitled)")
-    return f"{_os_window_name(os_window)} / {title} [{tab.id or '?'}]"
+    return f"{_os_window_name(os_window)} / {_display_name(tab.title, '(untitled)')} [{tab.id or '?'}]"
 
 
 def move_destinations(state: KittyState, source: NodeRef) -> tuple[Destination, ...]:
@@ -184,9 +182,13 @@ def selected_title(state: KittyState, ref: NodeRef) -> str:
         return location.pane.title if location is not None else ""
     if ref.kind == "tab":
         found = state.find_tab(ref.id)
-        return found[1].title or "" if found is not None else ""
+        if found is None:
+            return ""
+        return found[1].title or ""
     os_window = state.find_os_window(ref.id)
-    return os_window.title or "" if os_window is not None else ""
+    if os_window is None:
+        return ""
+    return os_window.title or ""
 
 
 def _walk_nodes(node: TreeNode[NodeRef]) -> Iterator[TreeNode[NodeRef]]:
