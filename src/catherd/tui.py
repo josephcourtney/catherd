@@ -13,7 +13,7 @@ from textual.app import App
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Footer, Input, Label, OptionList, Static, Tree
+from textual.widgets import Input, Label, OptionList, Static, Tree
 from textual.widgets.option_list import Option
 
 from .activity import PaneActivity, get_pane_activity
@@ -92,23 +92,41 @@ def _display_name(value: str | None, fallback: str) -> str:
     return value or fallback
 
 
+_TREE_HINT_MAX = 36
+
+
+def _active_marker(active: bool | None) -> str:
+    return "▶ " if active else "  "
+
+
+def _compact_hint(value: str | None, max_len: int = _TREE_HINT_MAX) -> str | None:
+    if not value:
+        return None
+    normalized = " ".join(value.split())
+    if len(normalized) <= max_len:
+        return normalized
+    return normalized[: max_len - 3].rstrip() + "..."
+
+
 def _os_window_label(os_window: OsWindow, display_title: str | None = None) -> Text:
     label = Text()
-    label.append("● " if os_window.is_active else "  ", style="bold" if os_window.is_active else "")
+    label.append(_active_marker(os_window.is_active), style="bold" if os_window.is_active else "")
     label.append("OS ", style="dim")
     label.append(_display_name(os_window.id, "?"))
     title = display_title if display_title is not None else os_window.title
     if title:
         label.append("  ")
-        label.append(title, style="bold" if os_window.is_active else "")
+        label.append(title)
+    pane_count = sum(len(tab.panes) for tab in os_window.tabs)
+    label.append(f"  {len(os_window.tabs)}t/{pane_count}p", style="dim")
     return label
 
 
 def _tab_label(tab: Tab, display_title: str | None = None) -> Text:
     label = Text()
-    label.append("● " if tab.is_active else "  ", style="bold" if tab.is_active else "")
+    label.append(_active_marker(tab.is_active), style="bold" if tab.is_active else "")
     title = display_title if display_title is not None else tab.title
-    label.append(_display_name(title, "(untitled)"), style="bold" if tab.is_active else "")
+    label.append(_display_name(title, "(untitled)"))
     if tab.id:
         label.append(f"  [{tab.id}]", style="dim")
     if tab.layout:
@@ -118,17 +136,19 @@ def _tab_label(tab: Tab, display_title: str | None = None) -> Text:
 
 def _pane_label(pane: Pane, display_title: str | None = None) -> Text:
     label = Text()
-    label.append("● " if pane.is_active else "  ", style="bold" if pane.is_active else "")
+    label.append(_active_marker(pane.is_active), style="bold" if pane.is_active else "")
     title = display_title if display_title is not None else pane.title
-    label.append(_display_name(title, "(untitled)"), style="bold" if pane.is_active else "")
+    label.append(_display_name(title, "(untitled)"))
     label.append(f"  [{pane.id}]", style="dim")
-    if pane.cwd:
-        label.append(f"  {pane.cwd}", style="dim")
-    command = pane.current_command or pane.foreground_cmd
-    if command:
-        label.append(f"  {command}", style="dim")
+    hint = _compact_hint(pane.current_command or pane.foreground_cmd)
+    if hint:
+        label.append(f"  {hint}", style="dim")
     return label
 
+
+def _matches_query(query: str, *values: object | None) -> bool:
+    needle = query.casefold()
+    return any(value is not None and needle in str(value).casefold() for value in values)
 
 def _os_window_name(os_window: OsWindow) -> str:
     return f"OS {os_window.id or '?'} — {_display_name(os_window.title, '(untitled)')}"
@@ -213,10 +233,36 @@ def _detail_value(value: object | None) -> str:
     return str(value)
 
 
+def _append_section(details: Text, title: str) -> None:
+    details.append("\n")
+    details.append(title.upper())
+    details.append("\n", style="dim")
+
+
 def _append_detail(details: Text, label: str, value: object | None) -> None:
-    details.append(f"{label}: ", style="bold")
+    if value is None or value == "":
+        return
+    details.append(f"{label:<16}", style="dim")
     details.append(_detail_value(value))
     details.append("\n")
+
+
+def _append_identity(
+    details: Text,
+    kind: str,
+    title: str,
+    object_id: str | None,
+    breadcrumb: str | None = None,
+) -> None:
+    details.append(kind.upper())
+    details.append("\n", style="dim")
+    details.append(_display_name(title, "(untitled)"), style="bold")
+    if object_id:
+        details.append(f"  [{object_id}]", style="dim")
+    details.append("\n")
+    if breadcrumb:
+        details.append(breadcrumb, style="dim")
+        details.append("\n")
 
 
 def _pane_position(pane: Pane) -> str | None:
@@ -236,6 +282,14 @@ def _pane_neighbors(pane: Pane) -> str | None:
     return "  ".join(parts) or None
 
 
+def _prompt_state(pane: Pane) -> str | None:
+    if pane.at_prompt is True:
+        return "at prompt"
+    if pane.at_prompt is False:
+        return "command running"
+    return None
+
+
 def selected_details(
     state: KittyState,
     ref: NodeRef,
@@ -244,18 +298,20 @@ def selected_details(
     activity_loading: bool = False,
     display_title: str | None = None,
 ) -> Text:
-    """Render details for an object in the current Kitty snapshot."""
+    """Render a compact, grouped inspector for an object in the current Kitty snapshot."""
     details = Text()
     if ref.kind == "os_window":
         os_window = state.find_os_window(ref.id)
         if os_window is None:
             return Text("OS window no longer exists", style="dim")
-        details.append("OS window\n", style="bold underline")
-        _append_detail(details, "ID", os_window.id)
-        _append_detail(details, "Title", display_title if display_title is not None else os_window.title)
-        _append_detail(details, "Active", os_window.is_active)
+        title = display_title if display_title is not None else os_window.title
+        _append_identity(details, "OS window", _display_name(title, f"OS {os_window.id or '?'}"), os_window.id)
+        _append_section(details, "Contents")
         _append_detail(details, "Tabs", len(os_window.tabs))
         _append_detail(details, "Panes", sum(len(tab.panes) for tab in os_window.tabs))
+        if os_window.is_active:
+            _append_section(details, "State")
+            _append_detail(details, "Kitty active", "yes")
         return details
 
     if ref.kind == "tab":
@@ -263,54 +319,71 @@ def selected_details(
         if found is None:
             return Text("Tab no longer exists", style="dim")
         os_window, tab = found
-        details.append("Tab\n", style="bold underline")
-        _append_detail(details, "ID", tab.id)
-        _append_detail(details, "Title", display_title if display_title is not None else tab.title)
-        _append_detail(details, "OS window", os_window.id)
+        title = display_title if display_title is not None else tab.title
+        breadcrumb = f"OS {os_window.id or '?'}"
+        _append_identity(details, "Tab", _display_name(title, "(untitled)"), tab.id, breadcrumb)
+        _append_section(details, "Contents")
         _append_detail(details, "Layout", tab.layout)
-        _append_detail(details, "Active", tab.is_active)
         _append_detail(details, "Panes", len(tab.panes))
+        if tab.is_active:
+            _append_section(details, "State")
+            _append_detail(details, "Kitty active", "yes")
         return details
 
     location = state.find_pane(ref.id)
     if location is None:
         return Text("Pane no longer exists", style="dim")
     pane = location.pane
-    details.append("Pane\n", style="bold underline")
-    _append_detail(details, "ID", pane.id)
-    _append_detail(details, "Title", display_title if display_title is not None else pane.title)
-    _append_detail(details, "OS window", location.os_window.id)
-    _append_detail(details, "Tab", location.tab.id)
+    title = display_title if display_title is not None else pane.title
+    tab_title = _display_name(location.tab.title, "(untitled)")
+    breadcrumb = f"OS {location.os_window.id or '?'} > {tab_title} [{location.tab.id or '?'}]"
+    _append_identity(details, "Pane", _display_name(title, "(untitled)"), pane.id, breadcrumb)
+
+    _append_section(details, "Location")
     _append_detail(details, "CWD", pane.cwd)
-    _append_detail(details, "Current command", pane.current_command)
-    _append_detail(details, "Foreground process", pane.foreground_cmd)
-    _append_detail(details, "Foreground PID", pane.pid)
-    _append_detail(details, "Root process", pane.root_cmdline)
-    _append_detail(details, "Position in tab", _pane_position(pane))
-    _append_detail(details, "Neighbors", _pane_neighbors(pane))
+    _append_detail(details, "Position", _pane_position(pane))
     size = (
         f"{pane.cols}×{pane.rows}"  # ruff: ignore[ambiguous-unicode-character-string]
         if pane.cols is not None and pane.rows is not None
         else None
     )
     _append_detail(details, "Size", size)
-    _append_detail(details, "At prompt", pane.at_prompt)
-    _append_detail(details, "Title locked", pane.title_overridden)
-    _append_detail(details, "Needs attention", pane.needs_attention)
-    _append_detail(details, "Activity since focus", pane.has_activity_since_last_focus)
-    _append_detail(details, "Active", pane.is_active)
-    if activity_loading:
-        _append_detail(details, "Atuin session", "loading…")
-        _append_detail(details, "Last completed command", "loading…")
-    else:
-        _append_detail(details, "Atuin session", activity.session_id if activity is not None else None)
-        _append_detail(
-            details,
-            "Last completed command",
-            activity.last_command if activity is not None else None,
-        )
-    return details
+    _append_detail(details, "Neighbors", _pane_neighbors(pane))
 
+    _append_section(details, "Process")
+    _append_detail(details, "Current", pane.current_command)
+    _append_detail(details, "Foreground", pane.foreground_cmd)
+    _append_detail(details, "PID", pane.pid)
+    _append_detail(details, "Root", pane.root_cmdline)
+
+    state_items: list[tuple[str, object]] = []
+    prompt = _prompt_state(pane)
+    if prompt is not None:
+        state_items.append(("Prompt", prompt))
+    if pane.is_active:
+        state_items.append(("Kitty active", "yes"))
+    if pane.title_overridden:
+        state_items.append(("Title locked", "yes"))
+    if pane.needs_attention:
+        state_items.append(("Attention", "yes"))
+    if pane.has_activity_since_last_focus:
+        state_items.append(("Activity", "since focus"))
+    if state_items:
+        _append_section(details, "State")
+        for label, value in state_items:
+            _append_detail(details, label, value)
+
+    if activity_loading or (
+        activity is not None and (activity.session_id is not None or activity.last_command is not None)
+    ):
+        _append_section(details, "Atuin")
+        if activity_loading:
+            _append_detail(details, "Session", "loading...")
+            _append_detail(details, "Last completed", "loading...")
+        else:
+            _append_detail(details, "Session", activity.session_id)
+            _append_detail(details, "Last completed", activity.last_command)
+    return details
 
 def containing_os_window_id(state: KittyState, ref: NodeRef) -> str | None:
     """Return the OS window containing a referenced tree object."""
