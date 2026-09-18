@@ -20,7 +20,7 @@ def test_kittywindow_dataclass():
 
 @patch("shutil.which", return_value="/usr/bin/kitty")
 @patch("subprocess.run")
-def test_get_kitty_windows_json_parsing(mock_run, mock_which):  # noqa: ARG001
+def test_get_kitty_windows_json_parsing(mock_run, mock_which):
     # Use a fake kitty ls output
     mock_run.return_value = MagicMock(
         returncode=0,

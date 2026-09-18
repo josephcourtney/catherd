@@ -8,188 +8,190 @@
     { name = "Joseph M Courtney", email = "5942706+josephcourtney@users.noreply.github.com" },
   ]
   urls = { "Homepage" = "https://github.com/josephcourtney/catherd", "Bug Tracker" = "https://github.com/josephcourtney/catherd/issues" }
-  license = { text = "GPL-3.0-only" }
-  classifiers = [
-    "Development Status :: 3 - Alpha",
-    "License :: OSI Approved :: GNU General Public License (GPL)",
-    "Programming Language :: Python :: 3",
-    "Operating System :: MacOS :: MacOS X",
-  ]
-  requires-python = ">=3.12,<3.14"
+  license = "GPL-3.0-only"
+  license-files = ["LICENSE.md"]
+  classifiers = []
+  requires-python = ">=3.12,<3.15"
+
   dependencies = [
     "click>=8.3.1",
   ]
 
   [project.scripts]
-    catherd = "catherd.cli:main"
+    catherd = "catherd.cli:cli"
 
 
 [dependency-groups]
   dev = [
-    "coverage>=7.12.0",
-    "diff-cover>=9.7.2",
+    "pytest-asyncio>=1.3.0",
+    "coverage>=7.13.4",
     "freezegun>=1.5.5",
-    "hypothesis>=6.148.6",
-    "import-linter>=2.9",
+    "hypothesis>=6.151.9",
+    "import-linter>=2.10",
     "mutmut>=3.4.0",
-    "pip-audit>=2.10.0",
-    "pyfakefs>=6.0.0",
-    "pytest>=9.0.1",
+    "pyfakefs>=6.1.1",
     "pytest-asyncio>=1.3.0",
     "pytest-cov>=7.0.0",
-    "pytest-freezegun>=0.4.2",
-    "pytest-json-report>=1.5.0",
+    "pytest-mock>=3.15.1",
     "pytest-randomly>=4.0.1",
-    "pytest-socket>=0.7.0",
-    "pytest-test-categories>=1.2.2",
+    "pytest-regressions>=2.10.0",
+    "pytest-subprocess>=1.5.3",
+    "pytest-test-categories>=1.2.1",
+    "pytest-testmon>=2.2.0",
     "pytest-timeout>=2.4.0",
+    "pytest-xdist>=3.8.0",
+    "pytest>=9.0.2",
     "radon>=6.0.1",
-    "ruff>=0.14.7",
-    "rust-just>=1.43.1",
-    "setuptools>=80.9.0",
-    "showcov>=0.1.4",
-    "ty>=0.0.1a31",
-    "urllib3>=2.6.0",
+    "rope>=1.14.0",
+    "ruff>=0.15.2",
+    "rust-just>=1.46.0",
+    "showcov>=0.3.5",
+    "ty>=0.0.17",
     "vulture>=2.14",
-    "wily>=1.12.2",
   ]
 
 # =================================== build ====================================
 [build-system]
-  requires      = ["uv_build>=0.9,<0.10"]
+  requires      = ["uv_build>=0.12.0,<0.13.0"]
   build-backend = "uv_build"
-
 [tool.uv]
-  default-groups = ["dev"]
-  [tool.uv.sources]
-    showcov                = { git = "https://github.com/josephcourtney/showcov.git", rev = "main" }
-    nootnoot               = { git = "https://github.com/josephcourtney/nootnoot.git", rev = "main" }
-    pytest-test-categories = { git = "https://github.com/mikelane/pytest-test-categories", rev = "6218300a45c525edb89cd7a1a26ee17c9c2095af" }
+  # no-binary-package = ["grimp"]
 
-# =================================== lint =====================================
+  [tool.uv.sources]
+    showcov = { git = "https://github.com/josephcourtney/showcov.git", rev = "main" }
+
+    # [tool.uv.extra-build-variables]
+    #   grimp = { MATURIN_STRIP = "false" }
+
+
+# ==================================== lint ====================================
 [tool.ruff]
-  extend = "./ruff.default.toml"
+  extend         = "./ruff.default.toml"
+  extend-exclude = []
 
   [tool.ruff.lint]
-    ignore = [
-      # "TD002",  # Missing author in TODO; try: `# TODO(<author_name>): ...` or `# TODO @<author_name>: ...`
-      # "TD003",  # Missing issue link for this TODO
-      # "FIX002", # Line contains TODO, consider resolving the issue
-      "N802",   # Function name should be lowercase
-      "ARG002", # Unused method argument
-      "DOC",
+
+    # disable autofix when linting
+    unfixable = [
+      # "F401", # delete unused imports
+      "F841", # remove assignment to unused variable
     ]
 
-# ==================================== typecheck ====================================
-[tool.ty.src]
-  include = [
-    "src",
-  ]
+
+    extend-ignore = [
+      ## example:
+      # "PLC1901", # `{expression} != ""` can be simplified to `{expression}` as an empty string is falsey
+      #
+    ]
+    # [tool.ruff.lint.extend-per-file-ignores]
+
 
 # =================================== test ===================================
 [tool.pytest.ini_options]
-  minversion = "8.0"
+
+  minversion = "9.0"
   testpaths = ["tests"]
   python_files = ["test_*.py"]
   addopts = [
     "--strict-markers",
     "--strict-config",
     "-ra",
-
-    # coverage
+    "--import-mode=importlib",
+    "--cov=.",
     "--cov-branch",
-    "--cov=catherd",
-    "--cov-report=xml",
-
-    # artifacts (structured)
-    "--junitxml=.artifacts/pytest-junit.xml",
-    "--json-report",
-    "--json-report-file=.artifacts/pytest-report.json",
-    "--json-report-omit=collectors",
+    "--cov-report=",
+    "--cov-context=test",
+    "--timeout-method=thread",
+    "--test-categories-enforcement=strict",
+    "--test-categories-distribution-enforcement=off",
   ]
-  timeout = 600
-  timeout_method = "thread"
   xfail_strict = true
-  log_cli = true
-  log_cli_level = "INFO"
-  log_cli_format = "%%(asctime)s [%%(levelname)s] %%(name)s - %%(message)s"
-  log_cli_date_format = "%%Y-%%m-%%d %%H:%%M:%%S"
-  test_categories_enforcement = "fail"
-  test_categories_distribution_enforcement = "fail"
-  asyncio_mode = "auto"
-  filterwarnings = [
-    # "error::DeprecationWarning:catherd\\.",
-    # "ignore::DeprecationWarning:some_known_third_party",
-    # "ignore:distutils Version classes are deprecated.*:DeprecationWarning:pytest_freezegun",
-    "ignore:unclosed database:ResourceWarning",
+
+  # Keep default runs quiet; enable live logs only from specific just recipes.
+  log_cli             = false
+  log_cli_level       = "INFO"
+  log_cli_format      = "%(asctime)s [%(levelname)s] %(name)s - %(message)s"
+  log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+
+  # Optional: avoid the progress UI style if you prefer classic dots / simpler output.
+  console_output_style = "progress"
+
+  norecursedirs = [
+    ".hypothesis",
+    ".git",
+    ".tox",
+    ".venv",
+    "dist",
+    "build",
+    ".pytest_cache",
+    ".eggs",
+    ".uv",
+    ".cache",
   ]
+  asyncio_mode = "auto"
+
+  filterwarnings = [
+    "error::DeprecationWarning:showcov\\.",
+    "ignore::DeprecationWarning:pkg_resources",
+    "ignore::DeprecationWarning:distutils",
+    "ignore::UserWarning:hypothesis",
+    "ignore:datetime.datetime.utcnow\\(\\) is deprecated.*:DeprecationWarning:smartratelimit\\.",
+    "ignore:`use_rich_markup=` will be deprecated.*:PendingDeprecationWarning:rich_click.*",
+  ]
+
   markers = [
-    "unit: Fast, isolated tests of individual functions/classes. No real I/O.",
-    "component: Tests of a subsystem via public APIs; may use local fakes or lightweight real deps.",
-    "integration: Tests involving real external dependencies (DB, HTTP APIs, queues).",
-    "system: End-to-end tests treating the app as a black box.",
-    "contract: Tests of API or schema contracts.",
-    "db: Tests that exercise database behaviour or schema.",
-    "smoke: Fast, critical-path tests for quick feedback.",
-    "slow: Known slow tests.",
-    "regression: Guards against previously reported bugs.",
-    "property_based: Property-based tests (e.g. Hypothesis).",
-    "observability: Tests asserting on logs, metrics, or traces.",
+    # Structural levels
+    "unit: Fast, isolated tests of individual functions/classes. No real I/O or global state.",
+    "component: Tests of a bounded context via public APIs with in-process fakes.",
+    "integration: Tests involving real external dependencies (DB, queues, containers, external services).",
+    "system: Full system / end-to-end tests treating the app as a black box.",
+    "contract: Service/API or data/schema contract tests.",
+
+    # Purpose markers
+    "acceptance: Requirement-driven system tests tied to user stories or acceptance criteria.",
+    "regression: Prevent re-introduction of known bugs or failures.",
+    "sanity: Narrow checks verifying specific bugfixes or features.",
+    "smoke: Fast, critical-path tests run before larger suites.",
+    "performance: Performance tests (latency, throughput, resource usage).",
+    "performance_regression: Tests comparing runtime metrics to stored baselines.",
     "security: Security-focused tests.",
-    "performance: Performance or performance-regression tests.",
-    "data_quality: Tests of data integrity or freshness.",
-    "perf: performance tests",
+    "fuzz: Fuzzing-style tests feeding malformed/randomized inputs.",
+    "chaos: Chaos/resilience tests injecting faults/disruptions.",
+    "privacy: Privacy-impact tests ensuring correct PII/data handling.",
+    "data_quality: Tests of data integrity, freshness, referential integrity, etc.",
+    "drift: Model/data drift detection tests (PSI, KS, etc.).",
+    "usability: Automated usability tests (accessibility, i18n).",
+    "synthetic_monitoring: Synthetic production probes.",
 
-    # ---------------------------------------------------------------------------
-    # Size markers (pytest-test-categories)
-    # Note: pytest-test-categories auto-registers these, but listing them here keeps
-    # them visible in `pytest --markers` and documents local expectations.
-    # ---------------------------------------------------------------------------
-    "small: Fast, hermetic tests (< 1s).",
-    "medium: Tests with local services (< 5 min).",
-    "large: End-to-end tests (< 15 min).",
-    "xlarge: Extended tests (< 15 min).",
+    # Technique / infra
+    "snapshot: Snapshot-based tests.",
+    "property_based: Property-based tests (Hypothesis).",
+    "mutation: Mutation-testing related.",
+    "observability: Tests asserting presence/shape of logs/metrics/traces.",
 
+    # Operational/meta
+    "small: Hermetic test under 1 second; no filesystem, network, subprocess, database, or sleep.",
+    "medium: Test under 5 minutes; filesystem, localhost networking, and subprocesses are allowed.",
+    "large: Test under 15 minutes; external networking and systems are allowed.",
+    "xlarge: Extended test under 15 minutes with unrestricted external resources.",
+    "slow: Known slow tests.",
+    "flaky: Known flaky tests under triage.",
+    "legacy: Legacy tests awaiting refactor/removal.",
+    "experimental: Experimental tests or tooling not yet mandatory.",
+    "external_data: Tests requiring external vendor data (skip if vendor fixtures are absent).",
+
+    # Domain-specific
+    "db: Database behavior tests.",
+    "api: API-centric tests (HTTP/RPC).",
+    "ml: ML-related tests.",
+    "ui: UI-layer tests (web, CLI).",
   ]
 
 
 # =================================== test:coverage ===================================
 [tool.coverage.run]
-  source   = ["catherd"]
-  branch   = true
-  parallel = true
-
-[tool.coverage.report]
-  show_missing = true
-  skip_covered = true
-  # Regexes for lines to exclude from consideration
-  exclude_also = [
-    # Don't complain about missing debug-only code:
-    "def __repr__",
-    "if self\\.debug",
-
-    # Don't complain if tests don't hit defensive assertion code:
-    "raise AssertionError",
-    "raise NotImplementedError",
-
-    # Don't complain if non-runnable code isn't run:
-    "if 0:",
-    "if __name__ == .__main__.:",
-
-    # Don't complain about abstract methods, they aren't run:
-    "@(abc\\.)?abstractmethod",
-  ]
-  ignore_errors = true
-
-[tool.coverage.xml]
-  output = ".coverage.xml"
-
-[tool.mutmut]
-  paths_to_mutate = ["src/catherd"]
-  tests_dir = ["tests/unit"]
-  also_copy = ["src", ".coverage.xml", ".coverage"]
-  mutate_only_covered_lines = true
-  pytest_add_cli_args = [
-    "-m unit",
-    "--no-cov",
-  ]
+  core      = "ctrace"
+  source    = ["catherd"]
+  branch    = true
+  parallel  = true
+  data_file = ".cache/coverage/.coverage"

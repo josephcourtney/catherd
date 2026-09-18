@@ -1,10 +1,10 @@
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
 
-import catherd.__main__  # noqa: F401
+import catherd.__main__  # ruff: ignore[unused-import]
 from catherd import cli
 from catherd.cli import (
     _collect_kitty_session_diagnostics,
@@ -12,23 +12,14 @@ from catherd.cli import (
 )
 from catherd.kitty import KittyWindow
 
-pytestmark = pytest.mark.small
 
-
-def setup_sync_env(tmp_path, monkeypatch):
-    """Simulate a shell with KITTY_WINDOW_ID + ATUIN_SESSION available."""
-    monkeypatch.setenv("KITTY_WINDOW_ID", "1")
-    monkeypatch.setenv("ATUIN_SESSION", "s")
-    session_file = tmp_path / "atuin_kitty_1"
-    session_file.write_text("s 1")
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
-
-
+@pytest.mark.small
 def test_main_entrypoint_exits_zero():
     result = CliRunner().invoke(cli.main, ["--help"])
     assert result.exit_code == 0
 
 
+@pytest.mark.small
 @patch("catherd.cli.get_kitty_windows")
 @patch("catherd.cli.get_atuin_session_for_window")
 @patch("catherd.cli.get_last_command_for_atuin_session")
@@ -46,20 +37,22 @@ def test_show_prints_commands(mock_last, mock_sess, mock_win):
     assert "cmdB" in result.output
 
 
+@pytest.mark.small
 def test_show_empty_warns():
     with patch("catherd.cli.get_kitty_windows", return_value=[]):
         result = CliRunner().invoke(cli.main, ["show"])
     assert "No Kitty windows/tabs found" in result.stderr
 
 
+@pytest.mark.small
 def test_show_none_warns():
     with patch("catherd.cli.get_kitty_windows", return_value=None):
         result = CliRunner().invoke(cli.main, ["show"])
     assert "Could not get Kitty windows" in result.stderr
 
 
-def test_json_output(tmp_path, monkeypatch):
-    setup_sync_env(tmp_path, monkeypatch)
+@pytest.mark.small
+def test_json_output(monkeypatch):
     win = KittyWindow(id="1", tab="t", title="T")
     monkeypatch.setattr(cli, "get_kitty_windows", lambda **_kwargs: [win])
     monkeypatch.setattr(cli, "get_atuin_session_for_window", lambda *_args, **_kwargs: "s")
@@ -77,6 +70,7 @@ def test_json_output(tmp_path, monkeypatch):
     assert item["last_command"] == "ls"
 
 
+@pytest.mark.medium
 def test_inspect_outputs_full_metadata(tmp_path, monkeypatch):
     session_file = tmp_path / "atuin_kitty_win"
     session_file.write_text("sessA win")
@@ -109,6 +103,7 @@ def test_inspect_outputs_full_metadata(tmp_path, monkeypatch):
     assert payload[0]["session_content"] == "sessA win"
 
 
+@pytest.mark.small
 def test_show_env_verbose(monkeypatch):
     win = KittyWindow(id="w", tab="t", title="tit")
     monkeypatch.setattr(cli, "get_kitty_windows", lambda *_args, **_kwargs: [win])
@@ -117,7 +112,8 @@ def test_show_env_verbose(monkeypatch):
     assert "(no command)" in result.output
 
 
-def test_preflight_only_on_show(tmp_path, monkeypatch):
+@pytest.mark.small
+def test_preflight_only_on_show(monkeypatch):
     monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
     monkeypatch.delenv("ATUIN_SESSION", raising=False)
 
@@ -126,14 +122,15 @@ def test_preflight_only_on_show(tmp_path, monkeypatch):
     assert show_result.exit_code == 0
     assert "Run 'catherd doctor'" in show_result.stderr or "diagnose" in show_result.stderr
 
-    monkeypatch.setenv("HOME", str(tmp_path))
-    rc = tmp_path / ".bashrc"
-    rc.write_text("")
+    rc = MagicMock()
+    rc.exists.return_value = False
+    monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: rc)
     dry_run = CliRunner().invoke(cli.main, ["install", "--shell", "bash", "--dry-run"])
     assert dry_run.exit_code == 0
     assert "DRY-RUN" in dry_run.stderr
 
 
+@pytest.mark.medium
 def test_install_shell_snippet(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "get_shell_info", lambda *_args, **_kwargs: "bash")
     monkeypatch.setattr(cli, "load_snippet_for_shell", lambda *_args, **_kwargs: "# mock snippet")
@@ -144,6 +141,7 @@ def test_install_shell_snippet(monkeypatch, tmp_path):
         assert "Snippet added" in result.output or "already installed" in result.output
 
 
+@pytest.mark.small
 def test_install_shell_snippet_unsupported(monkeypatch):
     monkeypatch.setattr(cli, "get_shell_info", lambda *_args, **_kwargs: "badsh")
     result = CliRunner().invoke(cli.main, ["install"])
@@ -151,6 +149,7 @@ def test_install_shell_snippet_unsupported(monkeypatch):
     assert "Unknown shell" in result.stderr
 
 
+@pytest.mark.medium
 def test_install_shell_snippet_already_installed(tmp_path, monkeypatch):
     rc = tmp_path / "rc"
     rc.write_text("# catherd atuin/kitty sync snippet\n…")
@@ -161,6 +160,7 @@ def test_install_shell_snippet_already_installed(tmp_path, monkeypatch):
     assert "Snippet already installed" in result.output
 
 
+@pytest.mark.medium
 def test_install_dry_run(tmp_path, monkeypatch):
     rc = tmp_path / ".bashrc"
     rc.write_text("orig")
@@ -171,6 +171,7 @@ def test_install_dry_run(tmp_path, monkeypatch):
     assert rc.read_text() == "orig"
 
 
+@pytest.mark.medium
 def test_uninstall_dry_run_and_remove(tmp_path, monkeypatch):
     content = "line1\n# catherd atuin/kitty sync snippet\nfoo\n# end catherd atuin/kitty sync\nline2"
     rc = tmp_path / ".bashrc"
@@ -189,30 +190,40 @@ def test_uninstall_dry_run_and_remove(tmp_path, monkeypatch):
     assert (tmp_path / ".bashrc.catherd.uninstall.bak").exists()
 
 
+@pytest.mark.small
 def test_exit_code_on_unknown_shell_install():
     result = CliRunner().invoke(cli.main, ["install", "--shell", "noshell"])
     assert result.exit_code == 1
     assert "Unknown shell" in result.stderr
 
 
-def test_errors_and_diagnostics_to_stderr(tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("SHELL", "/bin/bash")
-    result = CliRunner().invoke(cli.main, ["uninstall"])
+@pytest.mark.small
+def test_errors_and_diagnostics_to_stderr(monkeypatch):
+    rc = MagicMock()
+    rc.exists.return_value = False
+    rc.__str__.return_value = "/fake/.bashrc"
+    monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: rc)
+    result = CliRunner().invoke(cli.main, ["uninstall", "--shell", "bash"])
     assert result.exit_code == 1
     assert "No rc file found" in result.stderr
 
 
+@pytest.mark.small
 @patch("catherd.cli.get_kitty_windows", return_value=[])
-def test_doctor_no_windows(mock_win, runner):
+def test_doctor_no_windows(mock_win, runner, monkeypatch):
     _ = mock_win
-    result = runner.invoke(["doctor"])
+    monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
+    monkeypatch.delenv("ATUIN_SESSION", raising=False)
+    result = runner.invoke(cli.main, ["doctor"])
     assert result.exit_code == 1
     assert "No Kitty windows found" in result.output
 
 
+@pytest.mark.small
 @patch("catherd.cli.get_kitty_windows")
-def test_doctor_basic(mock_win, runner):
+def test_doctor_basic(mock_win, runner, monkeypatch):
+    monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
+    monkeypatch.delenv("ATUIN_SESSION", raising=False)
     mock_win.return_value = [KittyWindow(id="X", tab="T", title="Y")]
     with (
         patch("catherd.cli.get_session_file") as gsf,
@@ -220,16 +231,18 @@ def test_doctor_basic(mock_win, runner):
     ):
         gsf.return_value.exists.return_value = False
         glc.return_value = None
-        result = runner.invoke(["doctor"])
+        result = runner.invoke(cli.main, ["doctor"])
     assert "sync snippet" in result.output or "Add this to your shell rc file" in result.output
 
 
+@pytest.mark.small
 def test_is_sync_env_missing(monkeypatch):
     monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
     monkeypatch.delenv("ATUIN_SESSION", raising=False)
     assert not cli.is_sync_active_in_this_shell()
 
 
+@pytest.mark.medium
 def test_is_sync_success(monkeypatch, tmp_path):
     monkeypatch.setenv("KITTY_WINDOW_ID", "a")
     monkeypatch.setenv("ATUIN_SESSION", "sess")
@@ -239,11 +252,14 @@ def test_is_sync_success(monkeypatch, tmp_path):
     assert cli.is_sync_active_in_this_shell()
 
 
-def test_main_invocation(runner):
-    result = runner.invoke(["-m", "catherd"])
+@pytest.mark.small
+def test_main_invocation(runner, monkeypatch):
+    monkeypatch.setattr(cli, "get_kitty_windows", lambda **_kwargs: [])
+    result = runner.invoke(cli.main, [])
     assert result.exit_code == 0
 
 
+@pytest.mark.small
 def test_print_shell_snippet_and_env(monkeypatch, capsys):
     monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: "rc")
     monkeypatch.setattr(cli, "load_snippet_for_shell", lambda *_args, **_kwargs: "snippet")
@@ -254,6 +270,7 @@ def test_print_shell_snippet_and_env(monkeypatch, capsys):
     assert "Add this to your shell" in out or "Unknown shell" in out
 
 
+@pytest.mark.medium
 def test__collect_kitty_session_diagnostics(monkeypatch, tmp_path):
     win = KittyWindow(id="id", tab="tab", title="title")
     session_file = tmp_path / "atuin_kitty_id"
@@ -265,6 +282,7 @@ def test__collect_kitty_session_diagnostics(monkeypatch, tmp_path):
     assert notes == []
 
 
+@pytest.mark.medium
 def test__collect_kitty_session_diagnostics_branches(tmp_path, monkeypatch):
     w_no_file = KittyWindow(id="a", tab=None, title="")
     w_corrupt = KittyWindow(id="b", tab=None, title="")
@@ -303,6 +321,7 @@ def test__collect_kitty_session_diagnostics_branches(tmp_path, monkeypatch):
     assert notes == []
 
 
+@pytest.mark.small
 def test_print_kitty_session_diagnostics_all_branches(monkeypatch, capsys):
     w_ok = KittyWindow(id="a", tab="t", title="title")
     w_missing = KittyWindow(id="b", tab="t", title="title2")
@@ -328,6 +347,7 @@ def test_print_kitty_session_diagnostics_all_branches(monkeypatch, capsys):
     assert "Atuin/Kitty sync active in" in out
 
 
+@pytest.mark.small
 def test_print_kitty_session_diagnostics_none_synced(monkeypatch, capsys):
     w = KittyWindow(id="a", tab="t", title="title")
     monkeypatch.setattr(

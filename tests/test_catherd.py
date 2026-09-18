@@ -6,4 +6,4 @@ pytestmark = pytest.mark.small
 
 
 def test_dummy():
-    assert catherd
+    assert catherd.__name__ == "catherd"

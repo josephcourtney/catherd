@@ -270,45 +270,42 @@ def install_shell_snippet(*, force_shell: str | None = None, dry_run: bool) -> N
     try:
         shell = get_shell_info(force_shell)
         rc_path = get_shell_rc_path(shell)
-        snippet_marker = "# catherd atuin/kitty sync snippet"
-        snippet_block = (
-            snippet_marker
-            + "\n"
-            + load_snippet_for_shell(shell).rstrip()
-            + "\n# end catherd atuin/kitty sync\n"
-        )
-        if rc_path.exists():
-            contents = rc_path.read_text(encoding="utf-8")
-            if snippet_marker in contents:
-                click.secho(f"[OK] Snippet already installed in {rc_path}", fg="green")
-                return
-            if not dry_run:
-                shutil.copyfile(rc_path, rc_path.with_suffix(rc_path.suffix + ".catherd.bak"))
-            click.secho(
-                f"[INFO] Backed up {rc_path} → {rc_path.with_suffix(rc_path.suffix + '.catherd.bak')}",
-                fg="yellow",
-                err=dry_run,
-            )
-        elif dry_run:
-            click.echo(f"[DRY-RUN] Would create {rc_path} and append snippet", err=True)
-            click.secho("[OK] Dry-run complete; no changes made.", fg="green")
-            return
-
-        if dry_run:
-            click.echo(f"[DRY-RUN] Would append snippet to {rc_path}", err=True)
-            click.secho("[OK] Dry-run complete; no changes made.", fg="green")
-            return
-
-        with rc_path.open("a", encoding="utf-8") as f:
-            f.write("\n\n" + snippet_block + "\n")
-
-        click.secho(f"[OK] Snippet added to {rc_path}", fg="green")
-        click.secho(
-            "You must restart Kitty tabs/windows or re-source your shell for the change to take effect.",
-            fg="yellow",
-        )
+        snippet = load_snippet_for_shell(shell).rstrip()
     except ValueError as err:
         raise click.ClickException(str(err)) from err
+
+    snippet_marker = "# catherd atuin/kitty sync snippet"
+    snippet_block = snippet_marker + "\n" + snippet + "\n# end catherd atuin/kitty sync\n"
+    if rc_path.exists():
+        contents = rc_path.read_text(encoding="utf-8")
+        if snippet_marker in contents:
+            click.secho(f"[OK] Snippet already installed in {rc_path}", fg="green")
+            return
+        if not dry_run:
+            shutil.copyfile(rc_path, rc_path.with_suffix(rc_path.suffix + ".catherd.bak"))
+        click.secho(
+            f"[INFO] Backed up {rc_path} → {rc_path.with_suffix(rc_path.suffix + '.catherd.bak')}",
+            fg="yellow",
+            err=dry_run,
+        )
+    elif dry_run:
+        click.echo(f"[DRY-RUN] Would create {rc_path} and append snippet", err=True)
+        click.secho("[OK] Dry-run complete; no changes made.", fg="green")
+        return
+
+    if dry_run:
+        click.echo(f"[DRY-RUN] Would append snippet to {rc_path}", err=True)
+        click.secho("[OK] Dry-run complete; no changes made.", fg="green")
+        return
+
+    with rc_path.open("a", encoding="utf-8") as f:
+        f.write("\n\n" + snippet_block + "\n")
+
+    click.secho(f"[OK] Snippet added to {rc_path}", fg="green")
+    click.secho(
+        "You must restart Kitty tabs/windows or re-source your shell for the change to take effect.",
+        fg="yellow",
+    )
 
 
 @main.command("uninstall")
@@ -362,9 +359,7 @@ def print_shell_snippet(shell: str) -> None:
         click.echo(snippet)
         click.echo("\nOr run 'catherd install' to do it automatically.")
     except ValueError:
-        click.echo(
-            "[INFO] Unknown shell. See the README or scripts/catherd_rc_snippet.* for setup instructions.\n"
-        )
+        click.echo("[INFO] Unknown shell. See the README or scripts/catherd_rc_snippet.* for setup instructions.\n")
 
 
 def print_env_diagnostics():
@@ -404,8 +399,7 @@ def _collect_kitty_session_diagnostics(
                     declared_window = tokens[1]
                     if declared_window != win.id:
                         notes.append(
-                            f"session file {session_path} references window {declared_window} "
-                            f"but we expected {win.id}"
+                            f"session file {session_path} references window {declared_window} but we expected {win.id}"
                         )
                 last_cmd = get_last_command_for_atuin_session(session_id, verbose=verbose)
                 if _is_missing_or_error_command(last_cmd):
@@ -474,9 +468,7 @@ def _print_missing_files(missing_file: list[KittyWindow]) -> None:
         click.echo(f"  - WinID: {win.id}, TabID: {win.tab}, Title: {win.title[:30]}")
         _print_kitty_window_metadata(win)
     click.echo("    -> The Atuin/Kitty sync snippet is NOT active in these windows/tabs.")
-    click.echo(
-        "    -> To activate: Ensure your shell sources the sync snippet and RESTART this Kitty tab/window."
-    )
+    click.echo("    -> To activate: Ensure your shell sources the sync snippet and RESTART this Kitty tab/window.")
 
 
 def _print_corrupt_windows(corrupt_file: list[tuple[KittyWindow, str]]) -> None:
@@ -554,9 +546,7 @@ def doctor(*, verbose: bool = False) -> None:
 
     windows = get_kitty_windows(verbose=verbose)
     if windows is None or not windows:
-        click.secho(
-            "[FAIL] No Kitty windows found. Is Kitty running and are there open windows/tabs?", fg="red"
-        )
+        click.secho("[FAIL] No Kitty windows found. Is Kitty running and are there open windows/tabs?", fg="red")
         raise SystemExit(1)
 
     print_kitty_session_diagnostics(windows, verbose=verbose)

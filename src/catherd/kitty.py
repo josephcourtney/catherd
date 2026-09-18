@@ -2,7 +2,7 @@
 
 import json
 import shutil
-import subprocess  # noqa: S404
+import subprocess  # ruff: ignore[suspicious-subprocess-import]
 import sys
 from dataclasses import dataclass
 from typing import cast
@@ -18,20 +18,23 @@ def _safe_str(value: object) -> str | None:
 
 
 def _safe_int(value: object) -> int | None:
+    result = None
     if value is None:
-        return None
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str):
+        result = None
+    elif isinstance(value, int):
+        result = value
+    elif isinstance(value, str):
         value = value.strip()
         try:
-            return int(value)
+            result = int(value)
         except ValueError:
-            return None
-    try:
-        return int(value)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return None
+            result = None
+    elif isinstance(value, float):
+        try:
+            result = int(value)
+        except (OverflowError, ValueError):
+            result = None
+    return result
 
 
 def _safe_bool(value: object) -> bool | None:
@@ -65,9 +68,7 @@ def _normalize_foreground(window: dict[str, object]) -> tuple[str | None, int | 
         proc_map = cast("dict[str, object]", proc)
         pid = _safe_int(proc_map.get("pid"))
         cmd = (
-            _safe_str(proc_map.get("argv0"))
-            or _safe_str(proc_map.get("command"))
-            or _safe_str(proc_map.get("cmdline"))
+            _safe_str(proc_map.get("argv0")) or _safe_str(proc_map.get("command")) or _safe_str(proc_map.get("cmdline"))
         )
         if not cmd:
             cmdline = proc_map.get("cmdline")
@@ -76,9 +77,7 @@ def _normalize_foreground(window: dict[str, object]) -> tuple[str | None, int | 
         return cmd, pid
 
     cmd = (
-        _safe_str(window.get("foreground_cmd"))
-        or _safe_str(window.get("argv0"))
-        or _safe_str(window.get("foreground"))
+        _safe_str(window.get("foreground_cmd")) or _safe_str(window.get("argv0")) or _safe_str(window.get("foreground"))
     )
     pid = _safe_int(window.get("pid")) or _safe_int(window.get("foreground_pid"))
     return cmd, pid
@@ -114,7 +113,7 @@ def get_kitty_windows(*, verbose: bool = False) -> list[KittyWindow] | None:
 
     cmd = [kitty_path, "@", "ls"]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=False)  # noqa: S603
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)  # ruff: ignore[subprocess-without-shell-equals-true]
     except (FileNotFoundError, subprocess.SubprocessError) as exc:
         print(f"[error] Failed to run {' '.join(cmd)}: {exc}", file=sys.stderr)
         return None

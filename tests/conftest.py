@@ -1,24 +1,5 @@
-# ensure separate stderr capture for CliRunner everywhere
-import inspect
-
-import click.testing as _ct
 import pytest
 from click.testing import CliRunner
-
-import catherd.cli
-
-_orig_init = _ct.CliRunner.__init__
-_supports_mix_stderr = "mix_stderr" in inspect.signature(_orig_init).parameters
-
-
-def _patched_init(self, *args, **kwargs):
-    if _supports_mix_stderr:
-        _orig_init(self, *args, mix_stderr=False, **kwargs)
-    else:
-        _orig_init(self, *args, **kwargs)
-
-
-_ct.CliRunner.__init__ = _patched_init
 
 MAX_OUTPUT_LINES = 32
 
@@ -44,22 +25,5 @@ def pytest_runtest_logreport(report: pytest.TestReport) -> None:
 
 
 @pytest.fixture
-def runner():
-    runner = CliRunner()
-    orig = runner.invoke
-
-    def invoke(cli=None, args=None, **kwargs):
-        # if called as runner.invoke(["-m", "catherd"]), strip the "-m catherd"
-        if isinstance(cli, (list, tuple)):
-            arr = list(cli)
-            if len(arr) >= 2 and arr[0] == "-m" and arr[1] == "catherd":
-                return orig(catherd.cli.main, [], **kwargs)
-            # otherwise treat the list as args to main
-            return orig(catherd.cli.main, arr, **kwargs)
-
-        # default: use the passed-in command or main()
-        cmd = cli or catherd.cli.main
-        return orig(cmd, args or [], **kwargs)
-
-    runner.invoke = invoke
-    return runner
+def runner() -> CliRunner:
+    return CliRunner()
