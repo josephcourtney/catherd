@@ -1,3 +1,10 @@
+## [Unreleased]
+
+### Changed
+- simplify TUI tree rows to identity plus a concise activity/layout hint and distinguish Kitty-active objects from catherd selection.
+- reorganize the details pane into a fixed-width grouped inspector with breadcrumbs and exceptional-state emphasis.
+- replace the colorful binding footer with a restrained command strip and add tree filtering plus jump-to-active navigation.
+
 ## [0.18.0] - 2026-09-18
 
 ### Added
