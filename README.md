@@ -10,17 +10,17 @@ Run:
 catherd tui
 ```
 
-The TUI displays Kitty's hierarchy as OS windows → tabs → panes. A details panel shows metadata for the highlighted object. For panes it distinguishes Kitty's currently running command from the most recently completed Atuin command. Operations are immediate and use Kitty's supported remote-control interface.
+The TUI displays Kitty's hierarchy as OS windows → tabs → panes. Pane order follows Kitty's visual layout order. A details panel shows metadata for the highlighted object. For panes it distinguishes Kitty's currently running command from the most recently completed Atuin command. Mouse clicks only change the selection inside catherd; focusing the corresponding Kitty object is an explicit action.
 
 | Key | Action |
 | --- | --- |
 | `j` / `k` | move through the tree |
 | `h` / `l` | collapse / expand |
-| `Enter` | focus selected OS window, tab, or pane |
+| `Enter` / `f` | focus selected OS window, tab, or pane in Kitty |
 | `r` | rename selected object |
 | `m` | move a pane or tab |
 | `J` / `K` | reorder a pane or tab among siblings |
-| `M` | merge the OS window containing the selection into another |
+| `M` | merge an OS window into another OS window, or a tab into another tab |
 | `Ctrl-R` | refresh |
 | `q` | quit |
 
