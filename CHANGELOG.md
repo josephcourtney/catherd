@@ -1,3 +1,8 @@
+## [0.15.1] - 2026-09-18
+
+### Changed
+- refactor Kitty discovery around a canonical OS-window/tab/pane hierarchy and isolated remote-control client boundary without changing CLI behavior.
+
 ## [0.15.0] - 2026-01-07
 
 ### Removed
