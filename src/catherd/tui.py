@@ -8,21 +8,24 @@ from functools import partial
 from typing import TYPE_CHECKING, Literal, Protocol
 
 from rich.text import Text
-from textual.app import App, ComposeResult
+from textual.app import App
 from textual.binding import Binding
 from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Footer, Input, Label, OptionList, Static, Tree
 from textual.widgets.option_list import Option
 from .kitty import KittyClient, KittyClientError
-from .model import KittyState, OsWindow, Pane, Tab
+from .model import KittyState
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
     from typing import ClassVar
 
+    from textual.app import ComposeResult
     from textual.binding import BindingType
     from textual.widgets.tree import TreeNode
+
+    from .model import OsWindow, Pane, Tab
 
 NodeKind = Literal["os_window", "tab", "pane"]
 DestinationKind = Literal["os_window", "tab", "new_tab", "new_os_window"]
