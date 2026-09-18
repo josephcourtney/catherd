@@ -24,16 +24,15 @@ def _safe_int(value: object) -> int | None:
         return None
     if isinstance(value, int):
         return value
+    if isinstance(value, float):
+        return int(value)
     if isinstance(value, str):
         value = value.strip()
         try:
             return int(value)
         except ValueError:
             return None
-    try:
-        return int(value)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return None
+    return None
 
 
 def _safe_bool(value: object) -> bool | None:
@@ -199,28 +198,30 @@ class KittyClient:
 
     def snapshot(self) -> KittyState:
         """Read and parse the current Kitty hierarchy."""
-        raw = self.read_state_json()
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise KittyOutputError(str(exc)) from exc
-        return parse_kitty_state(data)
+        return _parse_kitty_state_json(self.read_state_json())
+
+
+def _parse_kitty_state_json(raw: str) -> KittyState:
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise KittyOutputError(str(exc)) from exc
+    return parse_kitty_state(data)
+
+
+def _load_kitty_state(*, verbose: bool, client: KittyClient | None) -> KittyState:
+    resolved_client = client or KittyClient.discover()
+    raw = resolved_client.read_state_json()
+    if verbose:
+        print("[verbose] Raw output from 'kitty @ ls':")
+        print(raw)
+    return _parse_kitty_state_json(raw)
 
 
 def get_kitty_state(*, verbose: bool = False, client: KittyClient | None = None) -> KittyState | None:
     """Return the current Kitty state, preserving the CLI's existing error behavior."""
     try:
-        resolved_client = client or KittyClient.discover()
-        raw = resolved_client.read_state_json()
-        if verbose:
-            print("[verbose] Raw output from 'kitty @ ls':")
-            print(raw)
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            print(f"[error] Failed to parse output from 'kitty @ ls' as JSON: {exc}", file=sys.stderr)
-            return None
-        return parse_kitty_state(data)
+        return _load_kitty_state(verbose=verbose, client=client)
     except KittyNotFoundError:
         print("[error] 'kitty' is not found in PATH.", file=sys.stderr)
     except KittyInvocationError as exc:
@@ -230,6 +231,8 @@ def get_kitty_state(*, verbose: bool = False, client: KittyClient | None = None)
             f"[error] 'kitty @ ls' failed (exit code {exc.returncode}):\n{exc.stderr}",
             file=sys.stderr,
         )
+    except KittyOutputError as exc:
+        print(f"[error] Failed to parse output from 'kitty @ ls' as JSON: {exc}", file=sys.stderr)
     except KittyClientError as exc:
         print(f"[error] {exc}", file=sys.stderr)
     return None
