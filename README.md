@@ -10,13 +10,15 @@ Run:
 catherd tui
 ```
 
-The TUI displays Kitty's hierarchy as OS windows → tabs → panes. Pane order follows Kitty's visual layout order. A details panel shows metadata for the highlighted object. For panes it distinguishes Kitty's currently running command from the most recently completed Atuin command. Mouse clicks only change the selection inside catherd; focusing the corresponding Kitty object is an explicit action.
+The TUI displays Kitty's hierarchy as OS windows → tabs → panes. The tree is intentionally compact: it shows identity plus one activity/layout hint, while the fixed-width inspector groups richer metadata into location, process, state, and Atuin sections. A persistent `▶` marks the object currently active in Kitty; the highlighted row is the selection inside catherd. Mouse clicks only change that catherd selection, while focusing the corresponding Kitty object is explicit.
 
 | Key | Action |
 | --- | --- |
 | `j` / `k` | move through the tree |
 | `h` / `l` | collapse / expand |
 | `Enter` / `f` | focus selected OS window, tab, or pane in Kitty |
+| `/` | filter the tree by title, ID, path, or command; submit an empty filter to clear |
+| `a` | clear filtering and jump to the active Kitty pane |
 | `r` | rename selected object |
 | `m` | move a pane or tab |
 | `J` / `K` | reorder a pane or tab among siblings |
