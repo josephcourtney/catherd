@@ -863,6 +863,21 @@ class KittyManagerApp(App[None]):
             exclusive=True,
         )
 
+    async def _perform_mutation(
+        self,
+        operation: Callable[[], None],
+        preferred: NodeRef,
+        *,
+        restore_manager_focus: bool,
+        on_success: Callable[[], None] | None,
+    ) -> None:
+        await asyncio.to_thread(operation)
+        if on_success is not None:
+            on_success()
+        if restore_manager_focus and self._manager_pane_id is not None:
+            await asyncio.to_thread(self.client.focus_pane, self._manager_pane_id)
+        await self.refresh_state(preferred)
+
     async def _run_mutation(
         self,
         success_message: str,
@@ -873,12 +888,12 @@ class KittyManagerApp(App[None]):
         on_success: Callable[[], None] | None,
     ) -> None:
         try:
-            await asyncio.to_thread(operation)
-            if on_success is not None:
-                on_success()
-            if restore_manager_focus and self._manager_pane_id is not None:
-                await asyncio.to_thread(self.client.focus_pane, self._manager_pane_id)
-            await self.refresh_state(preferred)
+            await self._perform_mutation(
+                operation,
+                preferred,
+                restore_manager_focus=restore_manager_focus,
+                on_success=on_success,
+            )
         except KittyClientError as exc:
             self._status(f"Kitty error: {exc}")
         else:
