@@ -368,7 +368,7 @@ class KittyManagerApp(App[None]):
         poll_interval: float | None = 2.0,
     ) -> None:
         super().__init__()
-        self.client: KittyBackend = client or KittyClient.discover()
+        self.client: KittyBackend = client if client is not None else KittyClient.discover()
         self.poll_interval = poll_interval
         self.state = KittyState(os_windows=())
         self._mutation_active = False
@@ -400,11 +400,11 @@ class KittyManagerApp(App[None]):
         return node.data if node is not None else None
 
     def _expanded_refs(self) -> set[NodeRef]:
-        return {
-            node.data
-            for node in _walk_nodes(self._tree().root)
-            if node.data is not None and node.is_expanded
-        }
+        expanded: set[NodeRef] = set()
+        for node in _walk_nodes(self._tree().root):
+            if node.data is not None and node.is_expanded:
+                expanded.add(node.data)
+        return expanded
 
     def _initial_ref(self, state: KittyState) -> NodeRef | None:
         for location in state.iter_panes():
@@ -496,6 +496,9 @@ class KittyManagerApp(App[None]):
         )
 
     def action_refresh(self) -> None:
+        if self._mutation_active:
+            self._status("A Kitty operation is still running")
+            return
         self.run_worker(self.refresh_state(), group="kitty-refresh", exclusive=True)
 
     def on_tree_node_selected(self, event: Tree.NodeSelected[NodeRef]) -> None:
