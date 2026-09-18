@@ -118,7 +118,7 @@ def _is_kitty_ui_window(window: dict[str, object]) -> bool:
     if env is None:
         return False
     value = _safe_str(env.get("KITTEN_RUNNING_AS_UI"))
-    return value not in {None, "", "0", "false", "False"}
+    return value is not None and value.casefold() not in {"", "0", "false", "no"}
 
 
 def parse_kitty_state(data: object) -> KittyState:
