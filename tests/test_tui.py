@@ -5,6 +5,7 @@ from dataclasses import replace
 import pytest
 from textual.widgets import Input, Tree
 
+from catherd.activity import PaneActivity
 from catherd.model import KittyState, OsWindow, Pane, Tab
 from catherd.tui import (
     Destination,
@@ -12,6 +13,7 @@ from catherd.tui import (
     NodeRef,
     merge_destinations,
     move_destinations,
+    selected_details,
     selected_title,
 )
 
@@ -52,6 +54,10 @@ def _state() -> KittyState:
             ),
         )
     )
+
+
+def _activity(_pane_id: str) -> PaneActivity:
+    return PaneActivity(session_id="session-1", last_command="pytest -q")
 
 
 class FakeBackend:
@@ -154,9 +160,51 @@ def test_selected_title_uses_hierarchy() -> None:
     assert selected_title(state, NodeRef("pane", "missing")) == ""
 
 
+
+def test_selected_details_for_os_window() -> None:
+    details = selected_details(_state(), NodeRef("os_window", "100"))
+
+    assert "OS window" in details.plain
+    assert "Tabs: 2" in details.plain
+    assert "Panes: 3" in details.plain
+
+
+def test_selected_details_for_tab() -> None:
+    details = selected_details(_state(), NodeRef("tab", "10"))
+
+    assert "Tab" in details.plain
+    assert "Layout: splits" in details.plain
+    assert "Panes: 2" in details.plain
+
+
+def test_selected_details_for_pane_with_activity() -> None:
+    details = selected_details(
+        _state(),
+        NodeRef("pane", "1"),
+        activity=_activity("1"),
+    )
+
+    assert "Pane" in details.plain
+    assert "CWD: /code/project" in details.plain
+    assert "Foreground: nvim" in details.plain
+    assert "Atuin session: session-1" in details.plain
+    assert "Last command: pytest -q" in details.plain
+
+
+def test_selected_details_for_pane_loading() -> None:
+    details = selected_details(
+        _state(),
+        NodeRef("pane", "1"),
+        activity_loading=True,
+    )
+
+    assert "Atuin session: loading…" in details.plain
+    assert "Last command: loading…" in details.plain
+
+
 async def test_tui_renders_hierarchy_and_selects_active_pane() -> None:
     backend = FakeBackend(_state())
-    app = KittyManagerApp(backend, poll_interval=None)
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
 
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -169,7 +217,7 @@ async def test_tui_renders_hierarchy_and_selects_active_pane() -> None:
 
 async def test_refresh_preserves_selection_and_reveals_it() -> None:
     backend = FakeBackend(_state())
-    app = KittyManagerApp(backend, poll_interval=None)
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
 
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -191,7 +239,7 @@ async def test_refresh_preserves_selection_and_reveals_it() -> None:
 
 async def test_enter_focuses_selected_pane() -> None:
     backend = FakeBackend(_state())
-    app = KittyManagerApp(backend, poll_interval=None)
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
 
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -205,7 +253,7 @@ async def test_enter_focuses_selected_pane() -> None:
 
 async def test_reorder_routes_to_backend_and_preserves_selection() -> None:
     backend = FakeBackend(_state())
-    app = KittyManagerApp(backend, poll_interval=None)
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
 
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -224,7 +272,7 @@ async def test_reorder_routes_to_backend_and_preserves_selection() -> None:
 async def test_reorder_restores_manager_focus(monkeypatch) -> None:
     monkeypatch.setenv("KITTY_WINDOW_ID", "99")
     backend = FakeBackend(_state())
-    app = KittyManagerApp(backend, poll_interval=None)
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
 
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -240,7 +288,7 @@ async def test_reorder_restores_manager_focus(monkeypatch) -> None:
 
 async def test_rename_dialog_routes_to_backend() -> None:
     backend = FakeBackend(_state())
-    app = KittyManagerApp(backend, poll_interval=None)
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
 
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -258,7 +306,7 @@ async def test_rename_dialog_routes_to_backend() -> None:
 
 async def test_move_dialog_routes_to_backend() -> None:
     backend = FakeBackend(_state())
-    app = KittyManagerApp(backend, poll_interval=None)
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
 
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -274,7 +322,7 @@ async def test_move_dialog_routes_to_backend() -> None:
 
 async def test_merge_dialog_routes_to_backend() -> None:
     backend = FakeBackend(_state())
-    app = KittyManagerApp(backend, poll_interval=None)
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
 
     async with app.run_test() as pilot:
         await pilot.pause()
