@@ -235,8 +235,8 @@ def _detail_value(value: object | None) -> str:
 
 def _append_section(details: Text, title: str) -> None:
     details.append("\n")
-    details.append(title.upper())
-    details.append("\n", style="dim")
+    details.append(title.upper(), style="dim bold")
+    details.append("\n")
 
 
 def _append_detail(details: Text, label: str, value: object | None) -> None:
@@ -254,8 +254,8 @@ def _append_identity(
     object_id: str | None,
     breadcrumb: str | None = None,
 ) -> None:
-    details.append(kind.upper())
-    details.append("\n", style="dim")
+    details.append(kind.upper(), style="dim")
+    details.append("\n")
     details.append(_display_name(title, "(untitled)"), style="bold")
     if object_id:
         details.append(f"  [{object_id}]", style="dim")
@@ -600,6 +600,7 @@ class KittyManagerApp(App[None]):
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("q", "quit", "Quit"),
+        Binding("escape", "clear_filter", "Clear filter", show=False),
         Binding("/", "filter_tree", "Filter"),
         Binding("a", "jump_active", "Active"),
         Binding("r", "rename_selected", "Rename"),
@@ -952,7 +953,10 @@ class KittyManagerApp(App[None]):
         selected = preferred or self._logical_selection or self._selected_ref()
         expanded = self._expanded_refs() if tree.root.children else None
         self._render_state(state, preferred=selected, expanded=expanded)
-        summary = f"{len(state.os_windows)} OS windows · {sum(1 for _ in state.iter_tabs())} tabs · {state.pane_count} panes"
+        summary = (
+            f"{len(state.os_windows)} OS windows · "
+            f"{sum(1 for _ in state.iter_tabs())} tabs · {state.pane_count} panes"
+        )
         if self._filter_query:
             summary += f" · filter: {self._filter_query}"
         self._status(summary)
@@ -965,6 +969,17 @@ class KittyManagerApp(App[None]):
 
     def action_filter_tree(self) -> None:
         self.push_screen(FilterScreen(self._filter_query), self._complete_filter)
+
+    def action_clear_filter(self) -> None:
+        if not self._filter_query:
+            return
+        self._filter_query = ""
+        self._render_state(
+            self.state,
+            preferred=self._selected_ref(),
+            expanded=self._expanded_refs(),
+        )
+        self._status("Filter cleared")
 
     def _complete_filter(self, query: str | None) -> None:
         if query is None:
