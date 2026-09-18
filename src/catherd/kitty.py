@@ -20,22 +20,23 @@ def _safe_str(value: object) -> str | None:
 
 
 def _safe_int(value: object) -> int | None:
+    result = None
     if value is None:
-        return None
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
+        result = None
+    elif isinstance(value, int):
+        result = value
+    elif isinstance(value, float):
         try:
-            return int(value)
+            result = int(value)
         except (OverflowError, ValueError):
-            return None
-    if isinstance(value, str):
+            result = None
+    elif isinstance(value, str):
         value = value.strip()
         try:
-            return int(value)
+            result = int(value)
         except ValueError:
-            return None
-    return None
+            result = None
+    return result
 
 
 def _safe_bool(value: object) -> bool | None:
@@ -188,7 +189,8 @@ class KittyStateError(KittyClientError):
 def _require_os_window(state: KittyState, os_window_id: str) -> OsWindow:
     os_window = state.find_os_window(os_window_id)
     if os_window is None:
-        raise KittyObjectNotFoundError("OS window", os_window_id)
+        msg = "OS window"
+        raise KittyObjectNotFoundError(msg, os_window_id)
     return os_window
 
 
@@ -196,7 +198,8 @@ def _representative_tab_id(os_window: OsWindow) -> str:
     for tab in os_window.tabs:
         if tab.id is not None:
             return tab.id
-    raise KittyStateError(f"OS window {os_window.id!r} has no addressable tab")
+    msg = f"OS window {os_window.id!r} has no addressable tab"
+    raise KittyStateError(msg)
 
 
 def _representative_pane_id(os_window: OsWindow) -> str:
@@ -204,7 +207,8 @@ def _representative_pane_id(os_window: OsWindow) -> str:
         for pane in tab.panes:
             if pane.id:
                 return pane.id
-    raise KittyStateError(f"OS window {os_window.id!r} has no addressable pane")
+    msg = f"OS window {os_window.id!r} has no addressable pane"
+    raise KittyStateError(msg)
 
 
 @dataclass(frozen=True, slots=True)
