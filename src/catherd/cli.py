@@ -1,7 +1,7 @@
 import json
 import os
 import shutil
-from itertools import groupby, starmap
+from itertools import groupby
 from pathlib import Path
 from typing import Final
 
@@ -9,7 +9,8 @@ import click
 
 from .atuin import get_last_command_for_atuin_session
 from .config import get_session_file
-from .kitty import KittyWindow, get_kitty_windows
+from .kitty import get_kitty_state
+from .model import KittyState, Pane, PaneLocation
 from .shell import get_shell_rc_path, load_snippet_for_shell
 
 
@@ -69,11 +70,11 @@ def _is_missing_or_error_command(last_cmd: str | None) -> bool:
     return last_cmd in _MISSING_COMMAND_SENTINELS
 
 
-def _resolve_display_command(window: KittyWindow, atuin_cmd: str | None) -> str:
+def _resolve_display_command(pane: Pane, atuin_cmd: str | None) -> str:
     if atuin_cmd and not _is_missing_or_error_command(atuin_cmd):
         return atuin_cmd
-    if window.foreground_cmd:
-        return window.foreground_cmd
+    if pane.foreground_cmd:
+        return pane.foreground_cmd
     return _DISPLAY_COMMAND_FALLBACK
 
 
@@ -87,38 +88,39 @@ def _truncate(value: str | None, max_len: int) -> str:
     return value[: max_len - 3] + "..."
 
 
-def _active_summary(window: KittyWindow) -> str:
+def _active_summary(location: PaneLocation) -> str:
     parts: list[str] = []
-    if window.is_active_os_window:
+    if location.os_window.is_active:
         parts.append("os")
-    if window.is_active_tab:
+    if location.tab.is_active:
         parts.append("tab")
-    if window.is_active_window:
+    if location.pane.is_active:
         parts.append("win")
     return ",".join(parts)
 
 
-def _serialize_window(window: KittyWindow, last_command: str) -> dict[str, str | int | bool | None]:
+def _serialize_pane(location: PaneLocation, last_command: str) -> dict[str, str | int | bool | None]:
+    pane = location.pane
     return {
-        "window_id": window.id,
-        "tab": window.tab,
-        "title": window.title,
+        "window_id": pane.id,
+        "tab": location.tab.id,
+        "title": pane.title,
         "last_command": last_command,
-        "os_window_id": window.os_window_id,
-        "tab_title": window.tab_title,
-        "is_active_os_window": window.is_active_os_window,
-        "is_active_tab": window.is_active_tab,
-        "is_active_window": window.is_active_window,
-        "pid": window.pid,
-        "cwd": window.cwd,
-        "foreground_cmd": window.foreground_cmd,
-        "tty": window.tty,
-        "cols": window.cols,
-        "rows": window.rows,
-        "x": window.x,
-        "y": window.y,
-        "has_bell": window.has_bell,
-        "is_urgent": window.is_urgent,
+        "os_window_id": location.os_window.id,
+        "tab_title": location.tab.title,
+        "is_active_os_window": location.os_window.is_active,
+        "is_active_tab": location.tab.is_active,
+        "is_active_window": pane.is_active,
+        "pid": pane.pid,
+        "cwd": pane.cwd,
+        "foreground_cmd": pane.foreground_cmd,
+        "tty": pane.tty,
+        "cols": pane.cols,
+        "rows": pane.rows,
+        "x": pane.x,
+        "y": pane.y,
+        "has_bell": pane.has_bell,
+        "is_urgent": pane.is_urgent,
     }
 
 
@@ -132,41 +134,42 @@ _ACTIVE_WIDTH: Final[int] = 10
 _TAB_TITLE_HINT_WIDTH: Final[int] = 30
 
 
-def _tab_title_hint(tab_rows: list[tuple[KittyWindow, str]]) -> str:
-    title = tab_rows[0][0].tab_title
+def _tab_title_hint(tab_rows: list[tuple[PaneLocation, str]]) -> str:
+    title = tab_rows[0][0].tab.title
     return f" - {_truncate(title, _TAB_TITLE_HINT_WIDTH)}" if title else ""
 
 
-def _print_show_row(win: KittyWindow, display_cmd: str) -> None:
-    truncated_title = _truncate(win.title, _TITLE_WIDTH)
+def _print_show_row(location: PaneLocation, display_cmd: str) -> None:
+    pane = location.pane
+    truncated_title = _truncate(pane.title, _TITLE_WIDTH)
     truncated_cmd = _truncate(display_cmd, _CMD_WIDTH)
-    truncated_cwd = _truncate(win.cwd, _CWD_WIDTH)
-    truncated_fg = _truncate(win.foreground_cmd, _FG_WIDTH)
-    truncated_tty = _truncate(win.tty, _TTY_WIDTH)
+    truncated_cwd = _truncate(pane.cwd, _CWD_WIDTH)
+    truncated_fg = _truncate(pane.foreground_cmd, _FG_WIDTH)
+    truncated_tty = _truncate(pane.tty, _TTY_WIDTH)
     size = ""
-    if win.cols is not None or win.rows is not None:
-        size = f"{win.cols or ''}x{win.rows or ''}"
+    if pane.cols is not None or pane.rows is not None:
+        size = f"{pane.cols or ''}x{pane.rows or ''}"
         if size == "x":
             size = ""
     click.echo(
-        f"{win.id:>10} | {win.tab or '':>5} | {truncated_title:<{_TITLE_WIDTH}} | "
+        f"{pane.id:>10} | {location.tab.id or '':>5} | {truncated_title:<{_TITLE_WIDTH}} | "
         f"{truncated_cmd:<{_CMD_WIDTH}} | {truncated_cwd:<{_CWD_WIDTH}} | "
-        f"{win.pid or '':>5} | {truncated_fg:<{_FG_WIDTH}} | "
+        f"{pane.pid or '':>5} | {truncated_fg:<{_FG_WIDTH}} | "
         f"{truncated_tty:<{_TTY_WIDTH}} | {size:<{_SIZE_WIDTH}} | "
-        f"{_active_summary(win):<{_ACTIVE_WIDTH}}"
+        f"{_active_summary(location):<{_ACTIVE_WIDTH}}"
     )
 
 
-def _prepare_show_rows(windows: list[KittyWindow], *, verbose: bool) -> list[tuple[KittyWindow, str]]:
-    rows: list[tuple[KittyWindow, str]] = []
-    for win in windows:
-        session_id = get_atuin_session_for_window(win.id, verbose=verbose)
+def _prepare_show_rows(state: KittyState, *, verbose: bool) -> list[tuple[PaneLocation, str]]:
+    rows: list[tuple[PaneLocation, str]] = []
+    for location in state.iter_panes():
+        session_id = get_atuin_session_for_window(location.pane.id, verbose=verbose)
         last_cmd = get_last_command_for_atuin_session(session_id, verbose=verbose) if session_id else None
-        rows.append((win, _resolve_display_command(win, last_cmd)))
+        rows.append((location, _resolve_display_command(location.pane, last_cmd)))
     return rows
 
 
-def _render_show_table(rows: list[tuple[KittyWindow, str]]) -> None:
+def _render_show_table(rows: list[tuple[PaneLocation, str]]) -> None:
     header = (
         f"{'Kitty WinID':>10} | {'Tab':>5} | {'Title':<{_TITLE_WIDTH}} | "
         f"{'Command':<{_CMD_WIDTH}} | {'CWD':<{_CWD_WIDTH}} | {'PID':>5} | "
@@ -177,7 +180,7 @@ def _render_show_table(rows: list[tuple[KittyWindow, str]]) -> None:
     click.secho("-" * len(header), fg="cyan")
 
     first_os = True
-    for os_id, os_group in groupby(rows, key=lambda entry: entry[0].os_window_id or ""):
+    for os_id, os_group in groupby(rows, key=lambda entry: entry[0].os_window.id or ""):
         os_rows = list(os_group)
         if not os_rows:
             continue
@@ -185,18 +188,18 @@ def _render_show_table(rows: list[tuple[KittyWindow, str]]) -> None:
             click.echo()
         first_os = False
         os_label = os_id or "(unknown os window)"
-        os_active_suffix = " (active)" if any(row[0].is_active_os_window for row in os_rows) else ""
+        os_active_suffix = " (active)" if any(row[0].os_window.is_active for row in os_rows) else ""
         click.secho(f"OS Window {os_label}{os_active_suffix}", fg="cyan")
-        for tab_id, tab_group in groupby(os_rows, key=lambda entry: entry[0].tab or ""):
+        for tab_id, tab_group in groupby(os_rows, key=lambda entry: entry[0].tab.id or ""):
             tab_rows = list(tab_group)
             if not tab_rows:
                 continue
             tab_label = tab_id or "(no tab id)"
-            tab_active_suffix = " (active)" if any(row[0].is_active_tab for row in tab_rows) else ""
+            tab_active_suffix = " (active)" if any(row[0].tab.is_active for row in tab_rows) else ""
             tab_hint = _tab_title_hint(tab_rows)
             click.echo(f"  Tab {tab_label}{tab_active_suffix}{tab_hint}")
-            for win, display_cmd in tab_rows:
-                _print_show_row(win, display_cmd)
+            for location, display_cmd in tab_rows:
+                _print_show_row(location, display_cmd)
 
 
 @main.command()
@@ -212,18 +215,17 @@ def show(*, verbose: bool, as_json: bool) -> None:
             err=True,
         )
 
-    windows = get_kitty_windows(verbose=verbose)
-    if windows is None:
+    state = get_kitty_state(verbose=verbose)
+    if state is None:
         click.echo("[error] Could not get Kitty windows. See error messages above.", err=True)
         return
-    if not windows:
+    rows = _prepare_show_rows(state, verbose=verbose)
+    if not rows:
         click.echo("[warning] No Kitty windows/tabs found. Is Kitty running?", err=True)
         return
 
-    rows = _prepare_show_rows(windows, verbose=verbose)
-
     if as_json:
-        click.echo(json.dumps(list(starmap(_serialize_window, rows)), indent=2))
+        click.echo(json.dumps([_serialize_pane(location, command) for location, command in rows], indent=2))
         return
 
     _render_show_table(rows)
@@ -234,24 +236,26 @@ def show(*, verbose: bool, as_json: bool) -> None:
 @click.option("--pretty", is_flag=True, help="Pretty-print the JSON output")
 def inspect(*, verbose: bool, pretty: bool) -> None:
     """Show the richest per-window Kitty + Atuin dataset as JSON."""
-    windows = get_kitty_windows(verbose=verbose)
-    if windows is None:
+    state = get_kitty_state(verbose=verbose)
+    if state is None:
         click.echo("[error] Could not get Kitty windows. See error messages above.", err=True)
         return
-    if not windows:
+    locations = list(state.iter_panes())
+    if not locations:
         click.echo("[warning] No Kitty windows/tabs found. Is Kitty running?", err=True)
         return
 
     payloads: list[dict[str, str | int | bool | None]] = []
-    for win in windows:
-        session_id = get_atuin_session_for_window(win.id, verbose=verbose)
-        session_path = get_session_file(win.id)
+    for location in locations:
+        pane = location.pane
+        session_id = get_atuin_session_for_window(pane.id, verbose=verbose)
+        session_path = get_session_file(pane.id)
         session_content: str | None = None
         if session_path.exists():
             session_content = session_path.read_text(encoding="utf-8").strip()
         atuin_cmd = get_last_command_for_atuin_session(session_id, verbose=verbose) if session_id else None
-        display_cmd = _resolve_display_command(win, atuin_cmd)
-        payload = _serialize_window(win, display_cmd)
+        display_cmd = _resolve_display_command(pane, atuin_cmd)
+        payload = _serialize_pane(location, display_cmd)
         payload.update({
             "atuin_session_id": session_id,
             "session_file": str(session_path),
@@ -380,7 +384,7 @@ MIN_SESSION_TOKENS: Final[int] = 2
 
 
 def _collect_kitty_session_diagnostics(
-    windows: list[KittyWindow], *, verbose: bool = False
+    state: KittyState, *, verbose: bool = False
 ) -> tuple[list, list, list, list, list[str]]:
     ok = []
     missing_file = []
@@ -388,117 +392,122 @@ def _collect_kitty_session_diagnostics(
     missing_command = []
     session_map: dict[str, list[str]] = {}
     notes: list[str] = []
-    for win in windows:
-        session_path = get_session_file(str(win.id))
+    for location in state.iter_panes():
+        pane = location.pane
+        session_path = get_session_file(pane.id)
         if not session_path.exists():
-            missing_file.append(win)
+            missing_file.append(location)
         else:
             content = session_path.read_text(encoding="utf-8").strip()
             if not content or not content.split():
-                corrupt_file.append((win, content))
+                corrupt_file.append((location, content))
             else:
                 session_id = content.split()[0]
-                session_map.setdefault(session_id, []).append(win.id)
+                session_map.setdefault(session_id, []).append(pane.id)
                 tokens = content.split()
                 if len(tokens) >= MIN_SESSION_TOKENS:
                     declared_window = tokens[1]
-                    if declared_window != win.id:
+                    if declared_window != pane.id:
                         notes.append(
                             f"session file {session_path} references window {declared_window} "
-                            f"but we expected {win.id}"
+                            f"but we expected {pane.id}"
                         )
                 last_cmd = get_last_command_for_atuin_session(session_id, verbose=verbose)
                 if _is_missing_or_error_command(last_cmd):
-                    missing_command.append((win, content, last_cmd))
+                    missing_command.append((location, content, last_cmd))
                 else:
-                    ok.append((win, content, last_cmd))
-    for session_id, wins in session_map.items():
-        if len(wins) > 1:
-            notes.append(f"duplicate ATUIN_SESSION {session_id} across windows {', '.join(sorted(wins))}")
+                    ok.append((location, content, last_cmd))
+    for session_id, pane_ids in session_map.items():
+        if len(pane_ids) > 1:
+            notes.append(f"duplicate ATUIN_SESSION {session_id} across windows {', '.join(sorted(pane_ids))}")
     return ok, missing_file, corrupt_file, missing_command, notes
 
 
-def _gather_window_metadata(win: KittyWindow) -> list[str]:
+def _gather_window_metadata(pane: Pane) -> list[str]:
     metadata: list[str] = []
-    if win.pid is not None:
-        metadata.append(f"PID: {win.pid}")
-    if win.cwd:
-        metadata.append(f"CWD: {win.cwd}")
-    if win.foreground_cmd:
-        metadata.append(f"FG: {win.foreground_cmd}")
-    if win.tty:
-        metadata.append(f"TTY: {win.tty}")
+    if pane.pid is not None:
+        metadata.append(f"PID: {pane.pid}")
+    if pane.cwd:
+        metadata.append(f"CWD: {pane.cwd}")
+    if pane.foreground_cmd:
+        metadata.append(f"FG: {pane.foreground_cmd}")
+    if pane.tty:
+        metadata.append(f"TTY: {pane.tty}")
     return metadata
 
 
-def _gather_window_hints(win: KittyWindow) -> list[str]:
+def _gather_window_hints(pane: Pane) -> list[str]:
     hints: list[str] = []
-    if win.cwd is None:
+    if pane.cwd is None:
         hints.append("cwd unavailable; enable Kitty shell integration if desired.")
-    if not win.foreground_cmd:
+    if not pane.foreground_cmd:
         hints.append("foreground command unavailable; ensure Kitty shell integration is enabled.")
-    if win.tty is None:
+    if pane.tty is None:
         hints.append("tty unavailable; enable Kitty shell integration for richer metadata.")
-    if win.pid is None:
+    if pane.pid is None:
         hints.append("pid unavailable; ensure Kitty shell integration is enabled for richer metadata.")
     return hints
 
 
-def _print_kitty_window_metadata(win: KittyWindow) -> None:
-    metadata = _gather_window_metadata(win)
+def _print_kitty_window_metadata(pane: Pane) -> None:
+    metadata = _gather_window_metadata(pane)
     if metadata:
         click.echo(f"      Kitty metadata: {', '.join(metadata)}")
     else:
         click.echo("      Kitty metadata unavailable; enable Kitty shell integration for richer info.")
 
-    for hint in _gather_window_hints(win):
+    for hint in _gather_window_hints(pane):
         click.echo(f"      Hint: {hint}")
 
 
-def _print_ok_windows(ok: list[tuple[KittyWindow, str, str]]) -> None:
+def _print_ok_windows(ok: list[tuple[PaneLocation, str, str]]) -> None:
     if not ok:
         return
     click.secho("[OK] Windows with valid Atuin session file:", fg="green")
-    for win, content, last_cmd in ok:
-        click.echo(f"  - WinID: {win.id}, TabID: {win.tab}, Title: {win.title[:30]}")
+    for location, content, last_cmd in ok:
+        pane = location.pane
+        click.echo(f"  - WinID: {pane.id}, TabID: {location.tab.id}, Title: {pane.title[:30]}")
         click.echo(f"      Content: '{content}'")
         click.echo(f"      Atuin last command: {last_cmd}")
-        _print_kitty_window_metadata(win)
+        _print_kitty_window_metadata(pane)
 
 
-def _print_missing_files(missing_file: list[KittyWindow]) -> None:
+def _print_missing_files(missing_file: list[PaneLocation]) -> None:
     if not missing_file:
         return
     click.secho("[WARN] Windows missing session file (sync inactive):", fg="yellow")
-    for win in missing_file:
-        click.echo(f"  - WinID: {win.id}, TabID: {win.tab}, Title: {win.title[:30]}")
-        _print_kitty_window_metadata(win)
+    for location in missing_file:
+        pane = location.pane
+        click.echo(f"  - WinID: {pane.id}, TabID: {location.tab.id}, Title: {pane.title[:30]}")
+        _print_kitty_window_metadata(pane)
     click.echo("    -> The Atuin/Kitty sync snippet is NOT active in these windows/tabs.")
     click.echo(
         "    -> To activate: Ensure your shell sources the sync snippet and RESTART this Kitty tab/window."
     )
 
 
-def _print_corrupt_windows(corrupt_file: list[tuple[KittyWindow, str]]) -> None:
+def _print_corrupt_windows(corrupt_file: list[tuple[PaneLocation, str]]) -> None:
     if not corrupt_file:
         return
     click.secho("[FAIL] Windows with session file but missing Atuin session ID:", fg="red")
-    for win, content in corrupt_file:
-        click.echo(f"  - WinID: {win.id}, TabID: {win.tab}, Title: {win.title[:30]}")
+    for location, content in corrupt_file:
+        pane = location.pane
+        click.echo(f"  - WinID: {pane.id}, TabID: {location.tab.id}, Title: {pane.title[:30]}")
         click.echo(f"      Content: '{content}' (empty or corrupt)")
-        _print_kitty_window_metadata(win)
+        _print_kitty_window_metadata(pane)
     click.echo("    -> To fix: restart your shell/tab.")
 
 
-def _print_missing_command_windows(missing_command: list[tuple[KittyWindow, str, str]]) -> None:
+def _print_missing_command_windows(missing_command: list[tuple[PaneLocation, str, str]]) -> None:
     if not missing_command:
         return
     click.secho("[WARN] Windows with session file but no command in Atuin:", fg="yellow")
-    for win, content, last_cmd in missing_command:
-        click.echo(f"  - WinID: {win.id}, TabID: {win.tab}, Title: {win.title[:30]}")
+    for location, content, last_cmd in missing_command:
+        pane = location.pane
+        click.echo(f"  - WinID: {pane.id}, TabID: {location.tab.id}, Title: {pane.title[:30]}")
         click.echo(f"      Content: '{content}'")
         click.echo(f"      Atuin last command: {last_cmd}")
-        _print_kitty_window_metadata(win)
+        _print_kitty_window_metadata(pane)
     click.echo("    -> To fix: ensure Atuin is tracking this session's history.")
 
 
@@ -510,11 +519,12 @@ def _print_sync_notes(notes: list[str]) -> None:
         click.echo(f"  - {note}")
 
 
-def print_kitty_session_diagnostics(windows: list[KittyWindow], *, verbose: bool = False) -> None:
+def print_kitty_session_diagnostics(state: KittyState, *, verbose: bool = False) -> None:
     ok, missing_file, corrupt_file, missing_command, notes = _collect_kitty_session_diagnostics(
-        windows, verbose=verbose
+        state, verbose=verbose
     )
-    click.secho(f"[OK] Found {len(windows)} Kitty window(s).\n", fg="green")
+    total = state.pane_count
+    click.secho(f"[OK] Found {total} Kitty window(s).\n", fg="green")
 
     _print_ok_windows(ok)
     _print_missing_files(missing_file)
@@ -522,7 +532,6 @@ def print_kitty_session_diagnostics(windows: list[KittyWindow], *, verbose: bool
     _print_missing_command_windows(missing_command)
     _print_sync_notes(notes)
 
-    total = len(windows)
     synced = len(ok)
     if synced == 0:
         click.secho(
@@ -552,14 +561,14 @@ def doctor(*, verbose: bool = False) -> None:
     if not is_sync_active_in_this_shell():
         print_shell_snippet(shell)
 
-    windows = get_kitty_windows(verbose=verbose)
-    if windows is None or not windows:
+    state = get_kitty_state(verbose=verbose)
+    if state is None or state.pane_count == 0:
         click.secho(
             "[FAIL] No Kitty windows found. Is Kitty running and are there open windows/tabs?", fg="red"
         )
         raise SystemExit(1)
 
-    print_kitty_session_diagnostics(windows, verbose=verbose)
+    print_kitty_session_diagnostics(state, verbose=verbose)
 
     if not is_sync_active_in_this_shell():
         click.secho(

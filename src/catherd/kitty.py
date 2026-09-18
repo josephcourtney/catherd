@@ -1,4 +1,4 @@
-"""Kitty window discovery and data models."""
+"""Kitty remote-control client and state parsing."""
 
 import json
 import shutil
@@ -6,6 +6,8 @@ import subprocess  # noqa: S404
 import sys
 from dataclasses import dataclass
 from typing import cast
+
+from .model import KittyState, OsWindow, Pane, Tab
 
 
 def _safe_str(value: object) -> str | None:
@@ -84,89 +86,154 @@ def _normalize_foreground(window: dict[str, object]) -> tuple[str | None, int | 
     return cmd, pid
 
 
-@dataclass(frozen=True)
-class KittyWindow:
-    id: str
-    tab: str | None
-    title: str
-    os_window_id: str | None = None
-    tab_title: str | None = None
-    is_active_os_window: bool | None = None
-    is_active_tab: bool | None = None
-    is_active_window: bool | None = None
-    pid: int | None = None
-    cwd: str | None = None
-    foreground_cmd: str | None = None
-    tty: str | None = None
-    cols: int | None = None
-    rows: int | None = None
-    x: int | None = None
-    y: int | None = None
-    has_bell: bool | None = None
-    is_urgent: bool | None = None
+def _as_object(value: object) -> dict[str, object] | None:
+    if isinstance(value, dict):
+        return cast("dict[str, object]", value)
+    return None
 
 
-def get_kitty_windows(*, verbose: bool = False) -> list[KittyWindow] | None:
-    kitty_path = shutil.which("kitty")
-    if not kitty_path:
-        print("[error] 'kitty' is not found in PATH.", file=sys.stderr)
-        return None
+def _as_object_list(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    return [obj for item in value if (obj := _as_object(item)) is not None]
 
-    cmd = [kitty_path, "@", "ls"]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=False)  # noqa: S603
-    except (FileNotFoundError, subprocess.SubprocessError) as exc:
-        print(f"[error] Failed to run {' '.join(cmd)}: {exc}", file=sys.stderr)
-        return None
 
-    if result.returncode != 0:
-        print(
-            f"[error] 'kitty @ ls' failed (exit code {result.returncode}):\n{result.stderr}",
-            file=sys.stderr,
-        )
-        return None
-
-    if verbose:
-        print("[verbose] Raw output from 'kitty @ ls':")
-        print(result.stdout)
-    try:
-        data = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        print(f"[error] Failed to parse output from 'kitty @ ls' as JSON: {exc}", file=sys.stderr)
-        return None
-
-    windows: list[KittyWindow] = []
-    for os_window in data:
-        os_id = _safe_str(os_window.get("id"))
-        os_active = _extract_active_flag(os_window)
-        for tab in os_window.get("tabs", []) or []:
-            tab_id = _safe_str(tab.get("id"))
-            tab_title = _safe_str(tab.get("title")) or None
-            tab_active = _extract_active_flag(tab)
-            for window in tab.get("windows", []) or []:
-                win_id = _safe_str(window.get("id")) or ""
-                win_title = _safe_str(window.get("title")) or tab_title or ""
-                fg_cmd, pid = _normalize_foreground(window)
-                windows.append(
-                    KittyWindow(
-                        id=win_id,
-                        tab=tab_id,
-                        title=win_title,
-                        os_window_id=os_id,
-                        tab_title=tab_title,
-                        is_active_os_window=os_active,
-                        is_active_tab=tab_active,
-                        is_active_window=_extract_active_flag(window),
+def parse_kitty_state(data: object) -> KittyState:
+    """Parse kitty @ ls JSON data into the canonical hierarchy."""
+    os_windows: list[OsWindow] = []
+    for os_data in _as_object_list(data):
+        tabs: list[Tab] = []
+        for tab_data in _as_object_list(os_data.get("tabs")):
+            tab_title = _safe_str(tab_data.get("title"))
+            panes: list[Pane] = []
+            for pane_data in _as_object_list(tab_data.get("windows")):
+                foreground_cmd, pid = _normalize_foreground(pane_data)
+                panes.append(
+                    Pane(
+                        id=_safe_str(pane_data.get("id")) or "",
+                        title=_safe_str(pane_data.get("title")) or tab_title or "",
+                        is_active=_extract_active_flag(pane_data),
                         pid=pid,
-                        cwd=_safe_str(window.get("cwd")),
-                        foreground_cmd=fg_cmd,
-                        tty=_safe_str(window.get("tty")),
-                        cols=_safe_int(window.get("cols")),
-                        rows=_safe_int(window.get("rows")),
-                        x=_safe_int(window.get("x")),
-                        y=_safe_int(window.get("y")),
-                        has_bell=_safe_bool(window.get("has_bell")),
-                        is_urgent=_safe_bool(window.get("is_urgent")),
+                        cwd=_safe_str(pane_data.get("cwd")),
+                        foreground_cmd=foreground_cmd,
+                        tty=_safe_str(pane_data.get("tty")),
+                        cols=_safe_int(pane_data.get("cols")),
+                        rows=_safe_int(pane_data.get("rows")),
+                        x=_safe_int(pane_data.get("x")),
+                        y=_safe_int(pane_data.get("y")),
+                        has_bell=_safe_bool(pane_data.get("has_bell")),
+                        is_urgent=_safe_bool(pane_data.get("is_urgent")),
                     )
                 )
-    return windows
+            tabs.append(
+                Tab(
+                    id=_safe_str(tab_data.get("id")),
+                    title=tab_title,
+                    panes=tuple(panes),
+                    is_active=_extract_active_flag(tab_data),
+                    layout=_safe_str(tab_data.get("layout")),
+                )
+            )
+        os_windows.append(
+            OsWindow(
+                id=_safe_str(os_data.get("id")),
+                title=_safe_str(os_data.get("title")),
+                tabs=tuple(tabs),
+                is_active=_extract_active_flag(os_data),
+            )
+        )
+    return KittyState(os_windows=tuple(os_windows))
+
+
+class KittyClientError(RuntimeError):
+    """Base class for failures at the Kitty remote-control boundary."""
+
+
+class KittyNotFoundError(KittyClientError):
+    """Raised when the Kitty executable cannot be located."""
+
+
+class KittyInvocationError(KittyClientError):
+    """Raised when the Kitty process cannot be started."""
+
+    def __init__(self, command: tuple[str, ...], cause: BaseException) -> None:
+        self.command = command
+        self.cause = cause
+        super().__init__(str(cause))
+
+
+class KittyCommandError(KittyClientError):
+    """Raised when a Kitty remote-control command fails."""
+
+    def __init__(self, command: tuple[str, ...], returncode: int, stderr: str) -> None:
+        self.command = command
+        self.returncode = returncode
+        self.stderr = stderr
+        super().__init__(f"command failed with exit code {returncode}: {' '.join(command)}")
+
+
+class KittyOutputError(KittyClientError):
+    """Raised when Kitty returns invalid JSON."""
+
+
+@dataclass(frozen=True, slots=True)
+class KittyClient:
+    """Thin synchronous adapter around Kitty's supported remote-control CLI."""
+
+    executable: str
+
+    @classmethod
+    def discover(cls) -> "KittyClient":
+        """Locate Kitty on PATH and construct a client."""
+        executable = shutil.which("kitty")
+        if not executable:
+            raise KittyNotFoundError
+        return cls(executable=executable)
+
+    def read_state_json(self) -> str:
+        """Return raw JSON from kitty @ ls."""
+        command = (self.executable, "@", "ls")
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, check=False)  # noqa: S603
+        except (FileNotFoundError, subprocess.SubprocessError) as exc:
+            raise KittyInvocationError(command, exc) from exc
+        if result.returncode != 0:
+            raise KittyCommandError(command, result.returncode, result.stderr)
+        return result.stdout
+
+    def snapshot(self) -> KittyState:
+        """Read and parse the current Kitty hierarchy."""
+        raw = self.read_state_json()
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise KittyOutputError(str(exc)) from exc
+        return parse_kitty_state(data)
+
+
+def get_kitty_state(*, verbose: bool = False, client: KittyClient | None = None) -> KittyState | None:
+    """Return the current Kitty state, preserving the CLI's existing error behavior."""
+    try:
+        resolved_client = client or KittyClient.discover()
+        raw = resolved_client.read_state_json()
+        if verbose:
+            print("[verbose] Raw output from 'kitty @ ls':")
+            print(raw)
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            print(f"[error] Failed to parse output from 'kitty @ ls' as JSON: {exc}", file=sys.stderr)
+            return None
+        return parse_kitty_state(data)
+    except KittyNotFoundError:
+        print("[error] 'kitty' is not found in PATH.", file=sys.stderr)
+    except KittyInvocationError as exc:
+        print(f"[error] Failed to run {' '.join(exc.command)}: {exc.cause}", file=sys.stderr)
+    except KittyCommandError as exc:
+        print(
+            f"[error] 'kitty @ ls' failed (exit code {exc.returncode}):\n{exc.stderr}",
+            file=sys.stderr,
+        )
+    except KittyClientError as exc:
+        print(f"[error] {exc}", file=sys.stderr)
+    return None

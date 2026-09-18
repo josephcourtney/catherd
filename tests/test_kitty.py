@@ -3,107 +3,118 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from catherd.kitty import KittyWindow, get_kitty_windows
+from catherd.kitty import KittyClient, get_kitty_state, parse_kitty_state
+from catherd.model import KittyState, OsWindow, Pane, Tab
 
 pytestmark = pytest.mark.small
 
 
-def test_kittywindow_dataclass():
-    w = KittyWindow(id="w", tab="t", title="foo")
-    assert w.id == "w"
-    assert w.tab == "t"
-    assert w.title == "foo"
-    assert w.os_window_id is None
-    assert w.pid is None
-    assert w.foreground_cmd is None
+def _payload():
+    return [
+        {
+            "id": 42,
+            "title": "work",
+            "is_focused": True,
+            "tabs": [
+                {
+                    "id": "tabA",
+                    "title": "tab",
+                    "layout": "splits",
+                    "is_focused": True,
+                    "windows": [
+                        {
+                            "id": 11,
+                            "title": "w1",
+                            "is_focused": True,
+                            "has_bell": False,
+                            "is_urgent": True,
+                            "cwd": "/safe/cwd",
+                            "tty": "/dev/pts/1",
+                            "cols": 80,
+                            "rows": 24,
+                            "x": 10,
+                            "y": 5,
+                            "foreground_process": {"argv0": "bash", "pid": 100},
+                        }
+                    ],
+                }
+            ],
+        }
+    ]
+
+
+def test_parse_kitty_state_preserves_hierarchy_and_metadata():
+    state = parse_kitty_state(_payload())
+    assert isinstance(state, KittyState)
+    os_window = state.os_windows[0]
+    assert isinstance(os_window, OsWindow)
+    assert os_window.id == "42"
+    assert os_window.title == "work"
+    assert os_window.is_active is True
+
+    tab = os_window.tabs[0]
+    assert isinstance(tab, Tab)
+    assert tab.id == "tabA"
+    assert tab.title == "tab"
+    assert tab.layout == "splits"
+    assert tab.is_active is True
+
+    pane = tab.panes[0]
+    assert isinstance(pane, Pane)
+    assert pane.id == "11"
+    assert pane.title == "w1"
+    assert pane.is_active is True
+    assert pane.foreground_cmd == "bash"
+    assert pane.pid == 100
+    assert pane.cwd == "/safe/cwd"
+    assert pane.tty == "/dev/pts/1"
+    assert pane.cols == 80
+    assert pane.rows == 24
+    assert pane.x == 10
+    assert pane.y == 5
+    assert pane.has_bell is False
+    assert pane.is_urgent is True
+
+
+def test_parse_kitty_state_tolerates_non_mapping_entries():
+    state = parse_kitty_state([None, "x", {"tabs": [None, {"windows": [None]}]}])
+    assert len(state.os_windows) == 1
+    assert len(state.os_windows[0].tabs) == 1
+    assert state.pane_count == 0
 
 
 @patch("shutil.which", return_value="/usr/bin/kitty")
 @patch("subprocess.run")
-def test_get_kitty_windows_json_parsing(mock_run, mock_which):  # noqa: ARG001
-    # Use a fake kitty ls output
-    mock_run.return_value = MagicMock(
-        returncode=0,
-        stdout=json.dumps([
-            {
-                "id": 42,
-                "is_focused": True,
-                "tabs": [
-                    {
-                        "id": "tabA",
-                        "title": "tab",
-                        "is_focused": True,
-                        "windows": [
-                            {
-                                "id": 11,
-                                "title": "w1",
-                                "is_focused": True,
-                                "has_bell": False,
-                                "is_urgent": True,
-                                "cwd": "/safe/cwd",
-                                "tty": "/dev/pts/1",
-                                "cols": 80,
-                                "rows": 24,
-                                "x": 10,
-                                "y": 5,
-                                "foreground_process": {"argv0": "bash", "pid": 100},
-                            }
-                        ],
-                    }
-                ],
-            }
-        ]),
-        stderr="",
-    )
-    windows = get_kitty_windows()
-    assert isinstance(windows, list)
-    assert isinstance(windows[0], KittyWindow)
-    assert windows[0].id == "11"
-    assert windows[0].os_window_id == "42"
-    assert windows[0].tab == "tabA"
-    assert windows[0].tab_title == "tab"
-    assert windows[0].is_active_os_window is True
-    assert windows[0].is_active_tab is True
-    assert windows[0].is_active_window is True
-    assert windows[0].foreground_cmd == "bash"
-    assert windows[0].pid == 100
-    assert windows[0].cwd == "/safe/cwd"
-    assert windows[0].tty == "/dev/pts/1"
-    assert windows[0].cols == 80
-    assert windows[0].rows == 24
-    assert windows[0].x == 10
-    assert windows[0].y == 5
-    assert windows[0].has_bell is False
-    assert windows[0].is_urgent is True
+def test_get_kitty_state_json_parsing(mock_run, mock_which):  # noqa: ARG001
+    mock_run.return_value = MagicMock(returncode=0, stdout=json.dumps(_payload()), stderr="")
+    state = get_kitty_state()
+    assert state is not None
+    assert state.os_windows[0].tabs[0].panes[0].id == "11"
 
 
-def test_kittywindow_repr_and_fields():
-    k = KittyWindow(id="abc", tab="tabX", title="my title")
-    assert k.id == "abc"
-    assert k.tab == "tabX"
-    assert k.title == "my title"
-    assert repr(k).startswith("KittyWindow(")
+def test_client_snapshot_uses_parser(monkeypatch):
+    client = KittyClient(executable="/usr/bin/kitty")
+    monkeypatch.setattr(client.__class__, "read_state_json", lambda _self: json.dumps(_payload()))
+    state = client.snapshot()
+    assert state.pane_count == 1
 
 
-def test_get_kitty_windows_kitty_not_found(monkeypatch):
+def test_get_kitty_state_kitty_not_found(monkeypatch):
     monkeypatch.setattr("shutil.which", lambda _x: None)
-    result = get_kitty_windows()
-    assert result is None
+    assert get_kitty_state() is None
 
 
-def test_get_kitty_windows_subprocess_error(monkeypatch):
+def test_get_kitty_state_subprocess_error(monkeypatch):
     monkeypatch.setattr("shutil.which", lambda _x: "/usr/bin/kitty")
 
     def raise_exc(*_a, **_k):
-        msg = "fail"
-        raise FileNotFoundError(msg)
+        raise FileNotFoundError("fail")
 
     monkeypatch.setattr("subprocess.run", raise_exc)
-    result = get_kitty_windows()
-    assert result is None
+    assert get_kitty_state() is None
 
 
-def test_get_kitty_windows_nonzero_return(monkeypatch):
+def test_get_kitty_state_nonzero_return(monkeypatch):
     monkeypatch.setattr("shutil.which", lambda _x: "/usr/bin/kitty")
 
     class R:
@@ -112,11 +123,10 @@ def test_get_kitty_windows_nonzero_return(monkeypatch):
         stderr = "fail"
 
     monkeypatch.setattr("subprocess.run", lambda *_a, **_k: R())
-    result = get_kitty_windows()
-    assert result is None
+    assert get_kitty_state() is None
 
 
-def test_get_kitty_windows_json_decode_error(monkeypatch):
+def test_get_kitty_state_json_decode_error(monkeypatch):
     monkeypatch.setattr("shutil.which", lambda _x: "/usr/bin/kitty")
 
     class R:
@@ -125,25 +135,23 @@ def test_get_kitty_windows_json_decode_error(monkeypatch):
         stderr = ""
 
     monkeypatch.setattr("subprocess.run", lambda *_a, **_k: R())
-    result = get_kitty_windows()
-    assert result is None
+    assert get_kitty_state() is None
 
 
-def test_get_kitty_windows_no_windows(monkeypatch):
+def test_get_kitty_state_no_windows(monkeypatch):
     monkeypatch.setattr("shutil.which", lambda _x: "/usr/bin/kitty")
 
     class R:
         returncode = 0
-        stdout = json.dumps([])
+        stdout = "[]"
         stderr = ""
 
     monkeypatch.setattr("subprocess.run", lambda *_a, **_k: R())
-    result = get_kitty_windows()
-    assert isinstance(result, list)
-    assert result == []
+    state = get_kitty_state()
+    assert state == KittyState(os_windows=())
 
 
-def test_get_kitty_windows_verbose_branch(monkeypatch, capsys):
+def test_get_kitty_state_verbose_branch(monkeypatch, capsys):
     monkeypatch.setattr("shutil.which", lambda _x: "/usr/bin/kitty")
 
     class R:
@@ -152,6 +160,6 @@ def test_get_kitty_windows_verbose_branch(monkeypatch, capsys):
         stderr = ""
 
     monkeypatch.setattr("subprocess.run", lambda *_a, **_k: R())
-    get_kitty_windows(verbose=True)
+    get_kitty_state(verbose=True)
     out = capsys.readouterr().out
     assert "Raw output" in out

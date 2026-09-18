@@ -6,13 +6,43 @@ from click.testing import CliRunner
 
 import catherd.__main__  # noqa: F401
 from catherd import cli
-from catherd.cli import (
-    _collect_kitty_session_diagnostics,
-    print_kitty_session_diagnostics,
-)
-from catherd.kitty import KittyWindow
+from catherd.cli import _collect_kitty_session_diagnostics, print_kitty_session_diagnostics
+from catherd.model import KittyState, OsWindow, Pane, Tab
 
 pytestmark = pytest.mark.small
+
+
+def _state(
+    *panes: Pane,
+    tab_id: str = "t",
+    tab_title: str | None = None,
+    os_id: str = "os",
+    os_active: bool | None = None,
+    tab_active: bool | None = None,
+) -> KittyState:
+    return KittyState(
+        os_windows=(
+            OsWindow(
+                id=os_id,
+                is_active=os_active,
+                tabs=(Tab(id=tab_id, title=tab_title, panes=tuple(panes), is_active=tab_active),),
+            ),
+        )
+    )
+
+
+def _two_tab_state() -> KittyState:
+    return KittyState(
+        os_windows=(
+            OsWindow(
+                id="os",
+                tabs=(
+                    Tab(id="t1", title=None, panes=(Pane(id="a", title="foo"),)),
+                    Tab(id="t2", title=None, panes=(Pane(id="b", title="bar"),)),
+                ),
+            ),
+        )
+    )
 
 
 def setup_sync_env(tmp_path, monkeypatch):
@@ -29,46 +59,41 @@ def test_main_entrypoint_exits_zero():
     assert result.exit_code == 0
 
 
-@patch("catherd.cli.get_kitty_windows")
+@patch("catherd.cli.get_kitty_state")
 @patch("catherd.cli.get_atuin_session_for_window")
 @patch("catherd.cli.get_last_command_for_atuin_session")
-def test_show_prints_commands(mock_last, mock_sess, mock_win):
-    mock_win.return_value = [
-        KittyWindow(id="a", tab="t1", title="foo"),
-        KittyWindow(id="b", tab="t2", title="bar"),
-    ]
+def test_show_prints_commands(mock_last, mock_sess, mock_state):
+    mock_state.return_value = _two_tab_state()
     mock_sess.side_effect = ["sessA", "sessB"]
     mock_last.side_effect = ["cmdA", "cmdB"]
     result = CliRunner().invoke(cli.main, ["show"])
-    # show prints header even if sync env vars are missing
     assert "Kitty WinID" in result.output
     assert "cmdA" in result.output
     assert "cmdB" in result.output
 
 
 def test_show_empty_warns():
-    with patch("catherd.cli.get_kitty_windows", return_value=[]):
+    with patch("catherd.cli.get_kitty_state", return_value=KittyState(os_windows=())):
         result = CliRunner().invoke(cli.main, ["show"])
     assert "No Kitty windows/tabs found" in result.stderr
 
 
 def test_show_none_warns():
-    with patch("catherd.cli.get_kitty_windows", return_value=None):
+    with patch("catherd.cli.get_kitty_state", return_value=None):
         result = CliRunner().invoke(cli.main, ["show"])
     assert "Could not get Kitty windows" in result.stderr
 
 
 def test_json_output(tmp_path, monkeypatch):
     setup_sync_env(tmp_path, monkeypatch)
-    win = KittyWindow(id="1", tab="t", title="T")
-    monkeypatch.setattr(cli, "get_kitty_windows", lambda **_kwargs: [win])
+    state = _state(Pane(id="1", title="T"))
+    monkeypatch.setattr(cli, "get_kitty_state", lambda **_kwargs: state)
     monkeypatch.setattr(cli, "get_atuin_session_for_window", lambda *_args, **_kwargs: "s")
     monkeypatch.setattr(cli, "get_last_command_for_atuin_session", lambda *_args, **_kwargs: "ls")
 
     result = CliRunner().invoke(cli.main, ["show", "--json"])
     assert result.exit_code == 0
     data = json.loads(result.output)
-    assert isinstance(data, list)
     assert len(data) == 1
     item = data[0]
     assert item["window_id"] == "1"
@@ -80,19 +105,20 @@ def test_json_output(tmp_path, monkeypatch):
 def test_inspect_outputs_full_metadata(tmp_path, monkeypatch):
     session_file = tmp_path / "atuin_kitty_win"
     session_file.write_text("sessA win")
-
-    info = KittyWindow(
-        id="win",
-        tab="tab",
-        title="title",
-        os_window_id="os-1",
-        pid=1234,
-        cwd=str(tmp_path),
-        foreground_cmd="bash",
-        tty="/dev/pts/42",
+    state = _state(
+        Pane(
+            id="win",
+            title="title",
+            pid=1234,
+            cwd=str(tmp_path),
+            foreground_cmd="bash",
+            tty="/dev/pts/42",
+        ),
+        tab_id="tab",
+        os_id="os-1",
     )
 
-    monkeypatch.setattr(cli, "get_kitty_windows", lambda **_kwargs: [info])
+    monkeypatch.setattr(cli, "get_kitty_state", lambda **_kwargs: state)
     monkeypatch.setattr(cli, "get_session_file", lambda *_args, **_kwargs: session_file)
     monkeypatch.setattr(cli, "get_last_command_for_atuin_session", lambda *_args, **_kwargs: "echo hi")
 
@@ -110,8 +136,8 @@ def test_inspect_outputs_full_metadata(tmp_path, monkeypatch):
 
 
 def test_show_env_verbose(monkeypatch):
-    win = KittyWindow(id="w", tab="t", title="tit")
-    monkeypatch.setattr(cli, "get_kitty_windows", lambda *_args, **_kwargs: [win])
+    state = _state(Pane(id="w", title="tit"))
+    monkeypatch.setattr(cli, "get_kitty_state", lambda *_args, **_kwargs: state)
     monkeypatch.setattr(cli, "get_atuin_session_for_window", lambda *_args, **_kwargs: None)
     result = CliRunner().invoke(cli.main, ["show", "-v"])
     assert "(no command)" in result.output
@@ -121,7 +147,7 @@ def test_preflight_only_on_show(tmp_path, monkeypatch):
     monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
     monkeypatch.delenv("ATUIN_SESSION", raising=False)
 
-    with patch("catherd.cli.get_kitty_windows", return_value=[]):
+    with patch("catherd.cli.get_kitty_state", return_value=KittyState(os_windows=())):
         show_result = CliRunner().invoke(cli.main, ["show"])
     assert show_result.exit_code == 0
     assert "Run 'catherd doctor'" in show_result.stderr or "diagnose" in show_result.stderr
@@ -203,24 +229,24 @@ def test_errors_and_diagnostics_to_stderr(tmp_path, monkeypatch):
     assert "No rc file found" in result.stderr
 
 
-@patch("catherd.cli.get_kitty_windows", return_value=[])
-def test_doctor_no_windows(mock_win, runner):
-    _ = mock_win
-    result = runner.invoke(["doctor"])
+@patch("catherd.cli.get_kitty_state", return_value=KittyState(os_windows=()))
+def test_doctor_no_windows(mock_state):
+    _ = mock_state
+    result = CliRunner().invoke(cli.main, ["doctor"])
     assert result.exit_code == 1
     assert "No Kitty windows found" in result.output
 
 
-@patch("catherd.cli.get_kitty_windows")
-def test_doctor_basic(mock_win, runner):
-    mock_win.return_value = [KittyWindow(id="X", tab="T", title="Y")]
+@patch("catherd.cli.get_kitty_state")
+def test_doctor_basic(mock_state):
+    mock_state.return_value = _state(Pane(id="X", title="Y"), tab_id="T")
     with (
         patch("catherd.cli.get_session_file") as gsf,
         patch("catherd.cli.get_last_command_for_atuin_session") as glc,
     ):
         gsf.return_value.exists.return_value = False
         glc.return_value = None
-        result = runner.invoke(["doctor"])
+        result = CliRunner().invoke(cli.main, ["doctor"])
     assert "sync snippet" in result.output or "Add this to your shell rc file" in result.output
 
 
@@ -239,37 +265,25 @@ def test_is_sync_success(monkeypatch, tmp_path):
     assert cli.is_sync_active_in_this_shell()
 
 
-def test_main_invocation(runner):
-    result = runner.invoke(["-m", "catherd"])
-    assert result.exit_code == 0
-
-
-def test_print_shell_snippet_and_env(monkeypatch, capsys):
-    monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: "rc")
-    monkeypatch.setattr(cli, "load_snippet_for_shell", lambda *_args, **_kwargs: "snippet")
-    cli.print_shell_snippet("zsh")
-    cli.print_shell_snippet("unknown")
-    cli.print_env_diagnostics()
-    out = capsys.readouterr().out
-    assert "Add this to your shell" in out or "Unknown shell" in out
-
-
 def test__collect_kitty_session_diagnostics(monkeypatch, tmp_path):
-    win = KittyWindow(id="id", tab="tab", title="title")
+    state = _state(Pane(id="id", title="title"), tab_id="tab")
     session_file = tmp_path / "atuin_kitty_id"
     session_file.write_text("sessid")
     monkeypatch.setattr(cli, "get_session_file", lambda *_args, **_kwargs: session_file)
     monkeypatch.setattr(cli, "get_last_command_for_atuin_session", lambda *_args, **_kwargs: "cmd")
-    ok, missing, corrupt, missing_cmd, notes = _collect_kitty_session_diagnostics([win], verbose=True)
+    ok, missing, corrupt, missing_cmd, notes = _collect_kitty_session_diagnostics(state, verbose=True)
     assert ok or missing or corrupt or missing_cmd
     assert notes == []
 
 
 def test__collect_kitty_session_diagnostics_branches(tmp_path, monkeypatch):
-    w_no_file = KittyWindow(id="a", tab=None, title="")
-    w_corrupt = KittyWindow(id="b", tab=None, title="")
-    w_nocommand = KittyWindow(id="c", tab=None, title="")
-    w_ok = KittyWindow(id="d", tab=None, title="")
+    state = _state(
+        Pane(id="a", title=""),
+        Pane(id="b", title=""),
+        Pane(id="c", title=""),
+        Pane(id="d", title=""),
+        tab_id="",
+    )
 
     def fake_session_file(window_id):
         p = tmp_path / f"atuin_kitty_{window_id}"
@@ -291,35 +305,35 @@ def test__collect_kitty_session_diagnostics_branches(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cli, "get_last_command_for_atuin_session", fake_last)
 
-    ok, missing, corrupt, missing_cmd, notes = _collect_kitty_session_diagnostics(
-        [w_no_file, w_corrupt, w_nocommand, w_ok], verbose=True
-    )
-    assert [w_no_file] == missing
-    assert [(w_corrupt, "")] == corrupt
+    ok, missing, corrupt, missing_cmd, notes = _collect_kitty_session_diagnostics(state, verbose=True)
+    assert ["a"] == [location.pane.id for location in missing]
+    assert ["b"] == [location.pane.id for location, _ in corrupt]
     assert len(missing_cmd) == 1
-    assert missing_cmd[0][0] == w_nocommand
+    assert missing_cmd[0][0].pane.id == "c"
     assert len(ok) == 1
-    assert ok[0][0] == w_ok
+    assert ok[0][0].pane.id == "d"
     assert notes == []
 
 
 def test_print_kitty_session_diagnostics_all_branches(monkeypatch, capsys):
-    w_ok = KittyWindow(id="a", tab="t", title="title")
-    w_missing = KittyWindow(id="b", tab="t", title="title2")
-    w_corrupt = KittyWindow(id="c", tab="t", title="title3")
-    w_cmd = KittyWindow(id="d", tab="t", title="title4")
-
-    ok = [(w_ok, "sessid", "cmd")]
-    missing_file = [w_missing]
-    corrupt_file = [(w_corrupt, "")]
-    missing_command = [(w_cmd, "sessid", "(sqlite error)")]
+    state = _state(
+        Pane(id="a", title="title"),
+        Pane(id="b", title="title2"),
+        Pane(id="c", title="title3"),
+        Pane(id="d", title="title4"),
+    )
+    locations = list(state.iter_panes())
+    ok = [(locations[0], "sessid", "cmd")]
+    missing_file = [locations[1]]
+    corrupt_file = [(locations[2], "")]
+    missing_command = [(locations[3], "sessid", "(sqlite error)")]
 
     monkeypatch.setattr(
         cli,
         "_collect_kitty_session_diagnostics",
         lambda *_args, **_kwargs: (ok, missing_file, corrupt_file, missing_command, []),
     )
-    print_kitty_session_diagnostics([w_ok, w_missing, w_corrupt, w_cmd], verbose=True)
+    print_kitty_session_diagnostics(state, verbose=True)
     out = capsys.readouterr().out
     assert "[OK] Windows with valid Atuin session file:" in out
     assert "missing session file" in out
@@ -329,12 +343,28 @@ def test_print_kitty_session_diagnostics_all_branches(monkeypatch, capsys):
 
 
 def test_print_kitty_session_diagnostics_none_synced(monkeypatch, capsys):
-    w = KittyWindow(id="a", tab="t", title="title")
+    state = _state(Pane(id="a", title="title"))
+    location = next(state.iter_panes())
     monkeypatch.setattr(
         cli,
         "_collect_kitty_session_diagnostics",
-        lambda *_args, **_kwargs: ([], [w], [], [], []),
+        lambda *_args, **_kwargs: ([], [location], [], [], []),
     )
-    print_kitty_session_diagnostics([w], verbose=True)
+    print_kitty_session_diagnostics(state, verbose=True)
     out = capsys.readouterr().out
     assert "sync is not active in any open windows" in out
+
+
+def test_main_invocation(runner):
+    result = runner.invoke(["-m", "catherd"])
+    assert result.exit_code == 0
+
+
+def test_print_shell_snippet_and_env(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: "rc")
+    monkeypatch.setattr(cli, "load_snippet_for_shell", lambda *_args, **_kwargs: "snippet")
+    cli.print_shell_snippet("zsh")
+    cli.print_shell_snippet("unknown")
+    cli.print_env_diagnostics()
+    out = capsys.readouterr().out
+    assert "Add this to your shell" in out or "Unknown shell" in out
