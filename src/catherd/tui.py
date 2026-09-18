@@ -150,6 +150,7 @@ def _matches_query(query: str, *values: object | None) -> bool:
     needle = query.casefold()
     return any(value is not None and needle in str(value).casefold() for value in values)
 
+
 def _os_window_name(os_window: OsWindow) -> str:
     return f"OS {os_window.id or '?'} — {_display_name(os_window.title, '(untitled)')}"
 
@@ -384,6 +385,7 @@ def selected_details(
             _append_detail(details, "Session", activity.session_id)
             _append_detail(details, "Last completed", activity.last_command)
     return details
+
 
 def containing_os_window_id(state: KittyState, ref: NodeRef) -> str | None:
     """Return the OS window containing a referenced tree object."""
@@ -954,8 +956,7 @@ class KittyManagerApp(App[None]):
         expanded = self._expanded_refs() if tree.root.children else None
         self._render_state(state, preferred=selected, expanded=expanded)
         summary = (
-            f"{len(state.os_windows)} OS windows · "
-            f"{sum(1 for _ in state.iter_tabs())} tabs · {state.pane_count} panes"
+            f"{len(state.os_windows)} OS windows · {sum(1 for _ in state.iter_tabs())} tabs · {state.pane_count} panes"
         )
         if self._filter_query:
             summary += f" · filter: {self._filter_query}"

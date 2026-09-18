@@ -28,8 +28,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
-
-
 def _state() -> KittyState:
     return KittyState(
         os_windows=(
@@ -414,8 +412,10 @@ def test_selected_details_for_os_window() -> None:
     assert "OS WINDOW" in details.plain
     assert "work  [100]" in details.plain
     assert "CONTENTS" in details.plain
-    assert "Tabs" in details.plain and "2" in details.plain
-    assert "Panes" in details.plain and "3" in details.plain
+    assert "Tabs" in details.plain
+    assert "2" in details.plain
+    assert "Panes" in details.plain
+    assert "3" in details.plain
     assert "Kitty active" in details.plain
 
 
@@ -427,8 +427,10 @@ def test_selected_details_for_tab() -> None:
     assert "editor  [10]" in details.plain
     assert "OS 100" in details.plain
     assert "CONTENTS" in details.plain
-    assert "Layout" in details.plain and "splits" in details.plain
-    assert "Panes" in details.plain and "2" in details.plain
+    assert "Layout" in details.plain
+    assert "splits" in details.plain
+    assert "Panes" in details.plain
+    assert "2" in details.plain
 
 
 @pytest.mark.small
