@@ -776,6 +776,54 @@ class KittyManagerApp(App[None]):
                 expanded.add(node.data)
         return expanded
 
+    def _pane_matches_filter(self, pane: Pane) -> bool:
+        ref = NodeRef("pane", pane.id)
+        return _matches_query(
+            self._filter_query,
+            self._display_names.get(ref),
+            pane.title,
+            pane.id,
+            pane.cwd,
+            pane.current_command,
+            pane.foreground_cmd,
+            pane.root_cmdline,
+        )
+
+    def _tab_own_matches_filter(self, tab: Tab) -> bool:
+        ref = NodeRef("tab", tab.id or "")
+        return _matches_query(
+            self._filter_query,
+            self._display_names.get(ref),
+            tab.title,
+            tab.id,
+            tab.layout,
+        )
+
+    def _tab_matches_filter(self, tab: Tab) -> bool:
+        return self._tab_own_matches_filter(tab) or any(self._pane_matches_filter(pane) for pane in tab.panes)
+
+    def _os_window_own_matches_filter(self, os_window: OsWindow) -> bool:
+        ref = NodeRef("os_window", os_window.id or "")
+        return _matches_query(
+            self._filter_query,
+            self._display_names.get(ref),
+            os_window.id,
+            os_window.title,
+        )
+
+    def _os_window_matches_filter(self, os_window: OsWindow) -> bool:
+        return self._os_window_own_matches_filter(os_window) or any(
+            self._tab_matches_filter(tab) for tab in os_window.tabs
+        )
+
+    @staticmethod
+    def _first_visible_ref(nodes: dict[NodeRef, TreeNode[NodeRef]]) -> NodeRef | None:
+        for kind in ("pane", "tab", "os_window"):
+            for ref in nodes:
+                if ref.kind == kind:
+                    return ref
+        return None
+
     @staticmethod
     def _initial_ref(state: KittyState) -> NodeRef | None:
         for location in state.iter_panes():
@@ -811,11 +859,15 @@ class KittyManagerApp(App[None]):
             self._schedule_cursor_restore(tree, nodes[target])
             return
         fallback = self._initial_ref(state)
+        if fallback is None or fallback not in nodes:
+            fallback = self._first_visible_ref(nodes)
         self._logical_selection = fallback
         if fallback is not None and fallback in nodes:
             self._schedule_cursor_restore(tree, nodes[fallback])
         elif tree.root.children:
             self._schedule_cursor_restore(tree, tree.root.children[0])
+        else:
+            self._details().update("No matching Kitty objects")
 
     def _add_os_window(
         self,
@@ -826,15 +878,18 @@ class KittyManagerApp(App[None]):
     ) -> None:
         if os_window.id is None:
             return
+        if self._filter_query and not self._os_window_matches_filter(os_window):
+            return
         ref = NodeRef("os_window", os_window.id)
+        reveal_all = bool(self._filter_query and self._os_window_own_matches_filter(os_window))
         node = root.add(
             _os_window_label(os_window, self._display_names.get(ref)),
             ref,
-            expand=expanded is None or ref in expanded,
+            expand=bool(self._filter_query) or expanded is None or ref in expanded,
         )
         nodes[ref] = node
         for tab in os_window.tabs:
-            self._add_tab(node, tab, nodes, expanded)
+            self._add_tab(node, tab, nodes, expanded, reveal_all=reveal_all)
 
     def _add_tab(
         self,
@@ -842,17 +897,24 @@ class KittyManagerApp(App[None]):
         tab: Tab,
         nodes: dict[NodeRef, TreeNode[NodeRef]],
         expanded: set[NodeRef] | None,
+        *,
+        reveal_all: bool = False,
     ) -> None:
         if tab.id is None:
             return
+        if self._filter_query and not reveal_all and not self._tab_matches_filter(tab):
+            return
         ref = NodeRef("tab", tab.id)
+        reveal_panes = reveal_all or bool(self._filter_query and self._tab_own_matches_filter(tab))
         node = parent.add(
             _tab_label(tab, self._display_names.get(ref)),
             ref,
-            expand=expanded is None or ref in expanded,
+            expand=bool(self._filter_query) or expanded is None or ref in expanded,
         )
         nodes[ref] = node
         for pane in tab.panes:
+            if self._filter_query and not reveal_panes and not self._pane_matches_filter(pane):
+                continue
             pane_ref = NodeRef("pane", pane.id)
             nodes[pane_ref] = node.add_leaf(
                 _pane_label(pane, self._display_names.get(pane_ref)),
@@ -890,15 +952,46 @@ class KittyManagerApp(App[None]):
         selected = preferred or self._logical_selection or self._selected_ref()
         expanded = self._expanded_refs() if tree.root.children else None
         self._render_state(state, preferred=selected, expanded=expanded)
-        self._status(
-            f"{len(state.os_windows)} OS windows · {sum(1 for _ in state.iter_tabs())} tabs · {state.pane_count} panes"
-        )
+        summary = f"{len(state.os_windows)} OS windows · {sum(1 for _ in state.iter_tabs())} tabs · {state.pane_count} panes"
+        if self._filter_query:
+            summary += f" · filter: {self._filter_query}"
+        self._status(summary)
 
     def action_refresh(self) -> None:
         if self._mutation_active:
             self._status("A Kitty operation is still running")
             return
         self.run_worker(self.refresh_state(), group="kitty-refresh", exclusive=True)
+
+    def action_filter_tree(self) -> None:
+        self.push_screen(FilterScreen(self._filter_query), self._complete_filter)
+
+    def _complete_filter(self, query: str | None) -> None:
+        if query is None:
+            return
+        self._filter_query = query
+        self._render_state(
+            self.state,
+            preferred=self._selected_ref(),
+            expanded=self._expanded_refs(),
+        )
+        if query:
+            self._status(f"Filter: {query}")
+        else:
+            self._status("Filter cleared")
+
+    def action_jump_active(self) -> None:
+        active = self._initial_ref(self.state)
+        if active is None:
+            self._status("No active Kitty object")
+            return
+        self._filter_query = ""
+        self._render_state(
+            self.state,
+            preferred=active,
+            expanded=self._expanded_refs(),
+        )
+        self._status("Selected active Kitty pane")
 
     def on_tree_node_highlighted(self, event: Tree.NodeHighlighted[NodeRef]) -> None:
         if event.node.data is not None:
