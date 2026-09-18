@@ -10,6 +10,7 @@
 - filter Kitty's transient UI overlays, such as the built-in tab-renaming prompt, from catherd's pane hierarchy.
 - keep renamed objects visibly renamed in the TUI, explicitly target tab/pane reorder actions, and allow merge from any node in the source OS window.
 - distinguish the currently running Kitty shell-integration command from the most recently completed Atuin command.
+- handle uppercase terminal key events for `J`, `K`, and `M`, preserve logical selection across structural refreshes, and show pane position/group/neighbors from Kitty's layout metadata.
 
 ## [0.16.0] - 2026-09-18
 
