@@ -332,6 +332,19 @@ def _find_node(tree: Tree[NodeRef], ref: NodeRef):
     raise AssertionError(msg)
 
 
+def _child_refs(tree: Tree[NodeRef], ref: NodeRef) -> list[NodeRef]:
+    return [child.data for child in _find_node(tree, ref).children if child.data is not None]
+
+
+def _line_for_ref(tree: Tree[NodeRef], ref: NodeRef) -> int:
+    for line in range(tree.last_line + 1):
+        node = tree.get_node_at_line(line)
+        if node is not None and node.data == ref:
+            return line
+    msg = f"missing rendered line: {ref}"
+    raise AssertionError(msg)
+
+
 def test_move_destinations_for_pane() -> None:
     destinations = move_destinations(_state(), NodeRef("pane", "1"))
 
@@ -493,17 +506,21 @@ async def test_refresh_preserves_selection_and_reveals_it() -> None:
         assert _find_node(tree, other_os_ref).is_collapsed
 
 
-async def test_tree_selection_does_not_focus_kitty_until_explicit_action() -> None:
+async def test_tree_click_selects_without_focusing_kitty_until_explicit_action() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
 
     async with app.run_test() as pilot:
         await pilot.pause()
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
-        target = _find_node(tree, NodeRef("pane", "2"))
-        tree.select_node(target)
+        target_ref = NodeRef("pane", "2")
+        target_line = _line_for_ref(tree, target_ref)
+
+        assert await pilot.click(tree, offset=(20, target_line))
         await pilot.pause()
 
+        assert tree.cursor_node is not None
+        assert tree.cursor_node.data == target_ref
         assert ("focus_pane", "2") not in backend.calls
 
         await pilot.press("f")
@@ -526,39 +543,53 @@ async def test_enter_focuses_selected_pane() -> None:
     assert ("focus_pane", "2") in backend.calls
 
 
-async def test_reorder_routes_to_backend_and_preserves_selection() -> None:
+async def test_reorder_pane_updates_tree_order_and_preserves_selection() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
 
     async with app.run_test() as pilot:
         await pilot.pause()
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
-        pane_ref = NodeRef("pane", "2")
+        pane_ref = NodeRef("pane", "1")
         tree.move_cursor(_find_node(tree, pane_ref))
         await pilot.press("J")
         await app.workers.wait_for_complete()
         await pilot.pause()
+
+        assert _child_refs(tree, NodeRef("tab", "10")) == [
+            NodeRef("pane", "2"),
+            NodeRef("pane", "1"),
+        ]
         assert tree.cursor_node is not None
         assert tree.cursor_node.data == pane_ref
 
-    assert ("reorder_pane", "2", "forward") in backend.calls
+    assert ("reorder_pane", "1", "forward") in backend.calls
 
 
-async def test_tab_reorder_routes_to_backend() -> None:
+async def test_reorder_tab_updates_tree_order() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
 
     async with app.run_test() as pilot:
         await pilot.pause()
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
-        tree.move_cursor(_find_node(tree, NodeRef("tab", "10")))
+        tab_ref = NodeRef("tab", "10")
+        tree.move_cursor(_find_node(tree, tab_ref))
         await pilot.press("J")
         await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        assert _child_refs(tree, NodeRef("os_window", "100")) == [
+            NodeRef("tab", "11"),
+            NodeRef("tab", "10"),
+        ]
+        assert tree.cursor_node is not None
+        assert tree.cursor_node.data == tab_ref
 
     assert ("reorder_tab", "10", "forward") in backend.calls
 
 
-async def test_uppercase_k_routes_backward_reorder() -> None:
+async def test_uppercase_k_reorders_backward() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
 
@@ -568,6 +599,12 @@ async def test_uppercase_k_routes_backward_reorder() -> None:
         tree.move_cursor(_find_node(tree, NodeRef("pane", "2")))
         await pilot.press("K")
         await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        assert _child_refs(tree, NodeRef("tab", "10")) == [
+            NodeRef("pane", "2"),
+            NodeRef("pane", "1"),
+        ]
 
     assert ("reorder_pane", "2", "backward") in backend.calls
 
@@ -580,11 +617,11 @@ async def test_reorder_restores_manager_focus(monkeypatch) -> None:
     async with app.run_test() as pilot:
         await pilot.pause()
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
-        tree.move_cursor(_find_node(tree, NodeRef("pane", "2")))
+        tree.move_cursor(_find_node(tree, NodeRef("pane", "1")))
         await pilot.press("J")
         await app.workers.wait_for_complete()
 
-    reorder_index = backend.calls.index(("reorder_pane", "2", "forward"))
+    reorder_index = backend.calls.index(("reorder_pane", "1", "forward"))
     restore_index = backend.calls.index(("focus_pane", "99"))
     assert restore_index > reorder_index
 
@@ -673,7 +710,7 @@ async def test_merge_on_pane_is_rejected() -> None:
     assert not any(call[0] in {"merge_tabs", "merge_os_windows"} for call in backend.calls)
 
 
-async def test_merge_tab_dialog_routes_to_backend() -> None:
+async def test_merge_tab_updates_hierarchy() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
 
@@ -685,11 +722,21 @@ async def test_merge_tab_dialog_routes_to_backend() -> None:
         await pilot.pause()
         await pilot.press("enter")
         await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        assert backend.state.find_tab("10") is None
+        assert _child_refs(tree, NodeRef("tab", "11")) == [
+            NodeRef("pane", "3"),
+            NodeRef("pane", "1"),
+            NodeRef("pane", "2"),
+        ]
+        assert tree.cursor_node is not None
+        assert tree.cursor_node.data == NodeRef("tab", "11")
 
     assert ("merge_tabs", "10", "11") in backend.calls
 
 
-async def test_merge_dialog_routes_to_backend() -> None:
+async def test_merge_os_windows_updates_hierarchy() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
 
@@ -701,5 +748,74 @@ async def test_merge_dialog_routes_to_backend() -> None:
         await pilot.pause()
         await pilot.press("enter")
         await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        assert backend.state.find_os_window("100") is None
+        assert _child_refs(tree, NodeRef("os_window", "200")) == [
+            NodeRef("tab", "20"),
+            NodeRef("tab", "10"),
+            NodeRef("tab", "11"),
+        ]
+        assert tree.cursor_node is not None
+        assert tree.cursor_node.data == NodeRef("os_window", "200")
 
     assert ("merge_os_windows", "100", "200") in backend.calls
+
+
+async def test_in_flight_refresh_does_not_restore_stale_selection() -> None:
+    backend = BlockingSnapshotBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        backend.block_next_snapshot = True
+        refresh = asyncio.create_task(app.refresh_state())
+
+        started = await asyncio.to_thread(backend.snapshot_started.wait, 1.0)
+        assert started
+
+        target_ref = NodeRef("pane", "2")
+        tree.move_cursor(_find_node(tree, target_ref))
+        await pilot.pause()
+
+        backend.snapshot_release.set()
+        await refresh
+        await pilot.pause()
+
+        assert tree.cursor_node is not None
+        assert tree.cursor_node.data == target_ref
+
+
+async def test_stale_activity_result_does_not_overwrite_new_selection() -> None:
+    pane_one_started = Event()
+    pane_one_release = Event()
+
+    def activity_provider(pane_id: str) -> PaneActivity:
+        if pane_id == "1":
+            pane_one_started.set()
+            pane_one_release.wait(timeout=2)
+            return PaneActivity(session_id="session-1", last_command="stale-one")
+        return PaneActivity(session_id="session-2", last_command="current-two")
+
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=activity_provider)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        started = await asyncio.to_thread(pane_one_started.wait, 1.0)
+        assert started
+
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        tree.move_cursor(_find_node(tree, NodeRef("pane", "2")))
+        await pilot.pause()
+
+        pane_one_release.set()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        details = app.query_one("#details", Static)
+        assert isinstance(details.content, Text)
+        assert "Atuin session: session-2" in details.content.plain
+        assert "Last completed command: current-two" in details.content.plain
+        assert "stale-one" not in details.content.plain
