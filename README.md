@@ -10,7 +10,7 @@ Run:
 catherd tui
 ```
 
-The TUI displays Kitty's hierarchy as OS windows → tabs → panes. The tree is intentionally compact: it shows identity plus one activity/layout hint, while the fixed-width inspector groups richer metadata into location, process, state, and Atuin sections. A persistent `▶` marks the object currently active in Kitty; the highlighted row is the selection inside catherd. Mouse clicks only change that catherd selection, while focusing the corresponding Kitty object is explicit.
+The TUI displays Kitty's hierarchy as OS windows → tabs → panes. The tree is intentionally compact: it shows identity plus one meaningful activity/layout hint, while the fixed-width inspector separates richer metadata with labeled section rules. A persistent `●` marks the object currently active in Kitty; the highlighted row is the selection inside catherd. Generic shell-wrapper process hints are suppressed. Mouse clicks only change the catherd selection, while focusing the corresponding Kitty object is explicit.
 
 | Key | Action |
 | --- | --- |
@@ -26,7 +26,7 @@ The TUI displays Kitty's hierarchy as OS windows → tabs → panes. The tree is
 | `Ctrl-R` | refresh |
 | `q` | quit |
 
-The 0.18.0 TUI intentionally does not close processes or create new shells.
+The TUI follows macOS light/dark appearance when launched, falling back to terminal color hints on other platforms. Set `CATHERD_THEME=textual-light` or `CATHERD_THEME=textual-dark` to override detection. The 0.18.0 TUI intentionally does not close processes or create new shells.
 
 ### TUI testing
 
