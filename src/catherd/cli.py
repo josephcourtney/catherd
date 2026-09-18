@@ -7,6 +7,7 @@ from typing import Final
 
 import click
 
+from .activity import get_atuin_session_for_window
 from .atuin import get_last_command_for_atuin_session
 from .config import get_session_file
 from .kitty import KittyClientError, get_kitty_state
@@ -28,20 +29,6 @@ def is_sync_active_in_this_shell() -> bool:
         return False
     session_id, *_ = content.split()
     return session_id == atuin_sess and str(kitty_id) in content
-
-
-def get_atuin_session_for_window(window_id: str, *, verbose: bool = False) -> str | None:
-    path = get_session_file(window_id)
-    if not path.exists():
-        if verbose:
-            print(f"[verbose] No session file: {path}")
-        return None
-    line = path.read_text(encoding="utf-8").strip()
-    if verbose:
-        print(f"[verbose] Read session info from {path}: '{line}'")
-    if not line:
-        return None
-    return line.split()[0]
 
 
 def get_shell_info(force_shell: str | None = None) -> str:
