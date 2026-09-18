@@ -343,6 +343,7 @@ class KittyManagerApp(App[None]):
 
     TITLE = "catherd"
     SUB_TITLE = "Kitty organizer"
+    TREE_LABEL: ClassVar[str] = "Kitty"
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("q", "quit", "Quit"),
@@ -384,7 +385,7 @@ class KittyManagerApp(App[None]):
         self._mutation_active = False
 
     def compose(self) -> ComposeResult:
-        tree: KittyTree = KittyTree("Kitty", id="kitty-tree")
+        tree: KittyTree = KittyTree(self.TREE_LABEL, id="kitty-tree")
         tree.root.expand()
         yield tree
         yield Static("Loading Kitty state…", id="status")
@@ -451,9 +452,9 @@ class KittyManagerApp(App[None]):
         self.state = state
         target = preferred or self._initial_ref(state)
         if target is not None and target in nodes:
-            self._reveal_and_select(tree, nodes[target])
+            self._schedule_cursor_restore(tree, nodes[target])
         elif tree.root.children:
-            tree.move_cursor(tree.root.children[0])
+            self._schedule_cursor_restore(tree, tree.root.children[0])
 
     def _add_os_window(
         self,
@@ -487,12 +488,13 @@ class KittyManagerApp(App[None]):
             nodes[pane_ref] = node.add_leaf(_pane_label(pane), pane_ref)
 
     @staticmethod
-    def _reveal_and_select(tree: KittyTree, node: TreeNode[NodeRef]) -> None:
+    def _schedule_cursor_restore(tree: KittyTree, node: TreeNode[NodeRef]) -> None:
         parent = node.parent
         while parent is not None:
-            parent.expand()
+            if parent.is_collapsed:
+                parent.expand()
             parent = parent.parent
-        tree.move_cursor(node)
+        tree.call_after_refresh(tree.move_cursor, node, False)
 
     async def refresh_state(self, preferred: NodeRef | None = None) -> None:
         """Reload Kitty state and redraw while preserving navigation state."""
