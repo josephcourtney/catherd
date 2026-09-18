@@ -26,6 +26,16 @@ The TUI displays Kitty's hierarchy as OS windows → tabs → panes. Pane order 
 
 The TUI intentionally does not close processes or create new shells in this version.
 
+### TUI testing
+
+The interaction layer is exercised headlessly with Textual's testing harness and a stateful fake Kitty backend:
+
+```sh
+just test-tui
+```
+
+These tests cover keyboard and mouse selection, explicit focus, rename, move/detach, pane/tab reordering, tab and OS-window merging, details updates, selection preservation, polling races, and stale asynchronous activity results. Manual acceptance is reserved for behavior that requires a real Kitty/macOS process boundary.
+
 ## Existing commands
 
 `catherd show` lists open Kitty panes and their most recent Atuin command when available. `catherd inspect` emits the richer combined dataset as JSON, and `catherd doctor` diagnoses Kitty/Atuin integration.
