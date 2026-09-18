@@ -3,6 +3,9 @@
 ### Changed
 - refactor Kitty discovery around a canonical OS-window/tab/pane hierarchy and isolated remote-control client boundary without changing CLI behavior.
 
+### Fixed
+- fix refactor lint failures by narrowing exception boundaries and make Kitty integer metadata normalization type-safe.
+
 ## [0.15.0] - 2026-01-07
 
 ### Removed
