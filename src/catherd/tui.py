@@ -440,7 +440,7 @@ def selected_title(state: KittyState, ref: NodeRef) -> str:
 def _append_section(details: Text, title: str) -> None:
     if details.plain and not details.plain.endswith("\n\n"):
         details.append("\n")
-    details.append(title.upper(), style="bold")
+    details.append(title.upper(), style=_STYLE_SECTION)
     details.append("\n")
 
 
@@ -553,44 +553,56 @@ def _tab_details(
     return details
 
 
-def _append_pane_context(details: Text, pane: Pane) -> None:
-    if pane.cwd:
-        _append_detail(details, "cwd", pane.cwd)
-
-
 def _pane_size(pane: Pane) -> str | None:
     if pane.cols is None or pane.rows is None:
         return None
     return f"{pane.cols}×{pane.rows}"  # ruff: ignore[ambiguous-unicode-character-string]
 
 
+def _append_status_token(details: Text, value: str, *, style: str = "") -> None:
+    if details.plain and not details.plain.endswith("\n"):
+        details.append("  ")
+    details.append(value, style=style)
+
+
 def _append_pane_status(details: Text, pane: Pane, *, active: bool) -> None:
-    tokens: list[tuple[str, str]] = []
-    tokens.append(("● active", _STYLE_ACTIVE_MARKER) if active else ("inactive", ""))
+    _append_section(details, "Status")
+
+    _append_status_token(
+        details,
+        "● active" if active else "○ inactive",
+        style=_STYLE_ACTIVE_MARKER if active else "",
+    )
     prompt = _prompt_state(pane)
     if prompt:
-        tokens.append((prompt, ""))
+        _append_status_token(details, prompt)
+    details.append("\n")
+
     position = _pane_position(pane)
     if position:
-        tokens.append((position, ""))
+        _append_status_token(details, position)
     size = _pane_size(pane)
     if size:
-        tokens.append((size, ""))
-    _append_section(details, "Status")
-    _append_tokens(details, tokens)
-
-    secondary: list[tuple[str, str]] = []
-    if pane.title_overridden:
-        secondary.append(("title locked", _STYLE_METADATA))
-    if pane.needs_attention:
-        secondary.append(("attention", _STYLE_METADATA))
-    if pane.has_activity_since_last_focus:
-        secondary.append(("activity since focus", _STYLE_METADATA))
+        _append_status_token(details, size)
     neighbors = _pane_neighbors(pane)
     if neighbors:
-        secondary.append((neighbors, _STYLE_METADATA))
-    if secondary:
-        _append_tokens(details, secondary)
+        _append_status_token(details, neighbors, style=_STYLE_METADATA)
+    details.append("\n")
+
+    if pane.cwd:
+        details.append(pane.cwd, style="bold")
+        details.append("\n")
+
+    flags: list[str] = []
+    if pane.title_overridden:
+        flags.append("title locked")
+    if pane.needs_attention:
+        flags.append("attention")
+    if pane.has_activity_since_last_focus:
+        flags.append("activity since focus")
+    if flags:
+        details.append(" · ".join(flags), style=_STYLE_METADATA)
+        details.append("\n")
 
 
 def _is_shell_wrapper(value: str | None) -> bool:
@@ -598,11 +610,8 @@ def _is_shell_wrapper(value: str | None) -> bool:
 
 
 def _append_pane_process(details: Text, pane: Pane) -> None:
-    values = [
-        pane.current_command,
-        None if _is_shell_wrapper(pane.foreground_cmd) else pane.foreground_cmd,
-        pane.root_cmdline,
-    ]
+    foreground = None if _is_shell_wrapper(pane.foreground_cmd) else pane.foreground_cmd
+    values = [pane.current_command, foreground, pane.root_cmdline]
     if not any(values) and pane.pid is None:
         return
 
@@ -611,7 +620,6 @@ def _append_pane_process(details: Text, pane: Pane) -> None:
         details.append(pane.current_command, style="bold")
         details.append("\n")
 
-    foreground = None if _is_shell_wrapper(pane.foreground_cmd) else pane.foreground_cmd
     if foreground and not _same_identity(foreground, pane.current_command):
         details.append(foreground)
         details.append("\n")
@@ -619,7 +627,7 @@ def _append_pane_process(details: Text, pane: Pane) -> None:
     if pane.root_cmdline and not _same_identity(pane.root_cmdline, foreground):
         details.append(pane.root_cmdline)
         if pane.pid is not None:
-            details.append(f" · PID {pane.pid}", style=_STYLE_METADATA)
+            details.append(f"  PID {pane.pid}", style=_STYLE_METADATA)
         details.append("\n")
     elif pane.pid is not None:
         details.append(f"PID {pane.pid}", style=_STYLE_METADATA)
@@ -633,18 +641,21 @@ def _append_session(
     activity_loading: bool,
 ) -> None:
     if activity_loading:
-        _append_section(details, "Session")
+        _append_section(details, "Recent")
         details.append("loading…", style=_STYLE_METADATA)
         details.append("\n")
         return
     if activity is None or (activity.session_id is None and activity.last_command is None):
         return
 
-    _append_section(details, "Session")
+    _append_section(details, "Recent")
     if activity.last_command:
-        _append_detail(details, "last", activity.last_command, value_style="bold")
+        details.append(activity.last_command, style="bold")
+        details.append("\n")
     if activity.session_id:
-        _append_detail(details, "atuin", activity.session_id)
+        details.append("Atuin ", style=_STYLE_DETAIL_LABEL)
+        details.append(activity.session_id)
+        details.append("\n")
 
 
 def _pane_details(
@@ -664,7 +675,15 @@ def _pane_details(
     tab_title = _display_name(location.tab.title, "(untitled)")
     breadcrumb = f"OS {location.os_window.id or '?'} > {tab_title} #{location.tab.id or '?'}"
     _append_identity(details, "Pane", _display_name(title, "(untitled)"), pane.id, breadcrumb)
-    _append_pane_context(details, pane)
+
+    derived_title = _pane_row_title(pane, location.tab.title, display_title)
+    if not _same_identity(derived_title, title):
+        details.append(derived_title, style="bold")
+        position = _pane_position(pane)
+        if position:
+            details.append(f"  {position}", style=_STYLE_METADATA)
+        details.append("\n")
+
     active = bool(location.os_window.is_active and location.tab.is_active and pane.is_active)
     _append_pane_status(details, pane, active=active)
     _append_pane_process(details, pane)
@@ -1090,15 +1109,15 @@ class KittyManagerApp(App[None]):
     }
 
     #kitty-tree {
-        width: 1fr;
+        width: 3fr;
         min-width: 34;
         overflow-x: hidden;
     }
 
     #details {
-        width: 46;
+        width: 2fr;
         min-width: 38;
-        max-width: 52;
+        max-width: 60;
         padding: 1 2;
         border-left: solid $border-blurred;
         overflow-x: hidden;
