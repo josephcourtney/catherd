@@ -839,6 +839,20 @@ class KittyTree(Tree[NodeRef]):
         Binding("l", "expand_or_child", "Expand", show=False),
     ]
 
+    def render_label(
+        self,
+        node: TreeNode[NodeRef],
+        base_style: Style,
+        style: Style,
+    ) -> Text:
+        """Preserve semantic row colors while retaining cursor/hover emphasis."""
+        interaction_style = Style(
+            bold=style.bold,
+            italic=style.italic,
+            underline=style.underline,
+        )
+        return super().render_label(node, base_style, interaction_style)
+
     def clear_bands(self) -> None:
         self._banded_refs: set[NodeRef] = set()
         self._active_branch_refs: set[NodeRef] = set()
