@@ -1021,6 +1021,49 @@ async def test_alternate_tab_subtree_is_banded() -> None:
 
 
 @pytest.mark.medium
+async def test_banded_row_keeps_group_identity_when_selected_or_hovered() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: KittyTree = app.query_one("#kitty-tree", KittyTree)
+        banded_ref = NodeRef("pane", "3")
+        banded_node = _find_node(tree, banded_ref)
+        banded_line = _line_for_ref(tree, banded_ref)
+
+        tree.move_cursor(banded_node)
+        await pilot.pause()
+        selected_strip = tree.render_line(banded_line)
+        selected_segment = list(selected_strip)[-1]
+        assert selected_segment.style is not None
+        assert selected_segment.style.bgcolor is not None
+        selected_banded = selected_segment.style.bgcolor.name
+
+        tree.move_cursor(_find_node(tree, NodeRef("pane", "1")))
+        tree.hover_line = banded_line
+        hovered_strip = tree.render_line(banded_line)
+        hovered_segment = list(hovered_strip)[-1]
+        assert hovered_segment.style is not None
+        assert hovered_segment.style.bgcolor is not None
+        hovered_banded = hovered_segment.style.bgcolor.name
+
+        dark = app.current_theme.dark
+        assert selected_banded == _tree_row_background(
+            dark=dark,
+            banded=True,
+            selected=True,
+            hovered=False,
+        )
+        assert hovered_banded == _tree_row_background(
+            dark=dark,
+            banded=True,
+            selected=False,
+            hovered=True,
+        )
+
+
+@pytest.mark.medium
 async def test_tui_renders_hierarchy_and_selects_active_pane() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
