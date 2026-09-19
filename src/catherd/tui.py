@@ -444,14 +444,6 @@ def _append_section(details: Text, title: str) -> None:
     details.append("\n")
 
 
-def _append_detail(details: Text, label: str, value: object | None, *, value_style: str = "") -> None:
-    if value is None or value == "":
-        return
-    details.append(f"{label} ", style=_STYLE_DETAIL_LABEL)
-    details.append(str(value), style=value_style)
-    details.append("\n")
-
-
 def _append_identity(
     details: Text,
     kind: str,
