@@ -679,9 +679,6 @@ def _pane_details(
     derived_title = _pane_row_title(pane, location.tab.title, display_title)
     if _same_identity(title, location.tab.title) and not _same_identity(derived_title, title):
         details.append(derived_title, style="bold")
-        position = _pane_position(pane)
-        if position:
-            details.append(f"  {position}", style=_STYLE_METADATA)
         details.append("\n")
 
     active = bool(location.os_window.is_active and location.tab.is_active and pane.is_active)
