@@ -520,7 +520,7 @@ def _append_identity(
 ) -> None:
     details.append(kind.upper(), style=_STYLE_KIND)
     if object_id:
-        details.append(f" {object_id}", style=_STYLE_METADATA)
+        details.append(f" #{object_id}", style=_STYLE_METADATA)
     details.append("\n")
     details.append(_display_name(title, "(untitled)"), style="bold")
     details.append("\n")
@@ -528,6 +528,20 @@ def _append_identity(
         details.append(breadcrumb, style=_STYLE_BREADCRUMB)
         details.append("\n")
     details.append("─" * 32, style=_STYLE_SECTION_RULE)
+    details.append("\n")
+
+
+def _append_property(
+    details: Text,
+    label: str,
+    value: object | None,
+    *,
+    value_style: str = "",
+) -> None:
+    if value is None or value == "":
+        return
+    details.append(f"{label:<9}", style=_STYLE_DETAIL_LABEL)
+    details.append(str(value), style=value_style)
     details.append("\n")
 
 
@@ -577,14 +591,9 @@ def _os_window_details(
     title = display_title if display_title is not None else os_window.title
     _append_identity(details, "OS window", _display_name(title, f"OS {os_window.id or '?'}"), os_window.id)
     _append_section(details, "Summary")
-    pane_count = sum(len(tab.panes) for tab in os_window.tabs)
-    tokens = [
-        (f"{len(os_window.tabs)} tabs", ""),
-        (f"{pane_count} panes", ""),
-    ]
-    if os_window.is_active:
-        tokens.insert(0, ("● active", _STYLE_ACTIVE_MARKER))
-    _append_tokens(details, tokens)
+    _append_property(details, "State", "active" if os_window.is_active else "inactive")
+    _append_property(details, "Tabs", len(os_window.tabs))
+    _append_property(details, "Panes", sum(len(tab.panes) for tab in os_window.tabs))
     return details
 
 
@@ -600,97 +609,98 @@ def _tab_details(
     os_window, tab = found
     details = Text()
     title = display_title if display_title is not None else tab.title
-    breadcrumb = f"OS {os_window.id or '?'}"
+    breadcrumb = f"OS #{os_window.id or '?'}"
     _append_identity(details, "Tab", _display_name(title, "(untitled)"), tab.id, breadcrumb)
     _append_section(details, "Summary")
-    tokens = [(f"{len(tab.panes)} panes", "")]
-    if tab.layout:
-        tokens.append((tab.layout, _STYLE_DESCRIPTOR))
-    if os_window.is_active and tab.is_active:
-        tokens.insert(0, ("active branch", _STYLE_ACTIVE_BRANCH))
-    _append_tokens(details, tokens)
+    state_value = "active" if os_window.is_active and tab.is_active else "inactive"
+    _append_property(details, "State", state_value)
+    _append_property(details, "Layout", tab.layout)
+    _append_property(details, "Panes", len(tab.panes))
     return details
 
 
 def _pane_size(pane: Pane) -> str | None:
     if pane.cols is None or pane.rows is None:
         return None
-    return f"{pane.cols}×{pane.rows}"  # ruff: ignore[ambiguous-unicode-character-string]
+    return f"{pane.cols} × {pane.rows}"  # ruff: ignore[ambiguous-unicode-character-string]
 
 
-def _append_status_token(details: Text, value: str, *, style: str = "") -> None:
-    if details.plain and not details.plain.endswith("\n"):
-        details.append("  ")
-    details.append(value, style=style)
+def _pane_position_long(pane: Pane) -> str | None:
+    if pane.tab_index is None or pane.tab_count is None:
+        return None
+    return f"{pane.tab_index} of {pane.tab_count}"
 
 
-def _append_pane_status(details: Text, pane: Pane, *, active: bool) -> None:
-    _append_section(details, "Status")
+def _pane_state_label(pane: Pane, *, active: bool) -> str:
+    if active:
+        return "● ACTIVE"
+    return "○ inactive"
 
-    _append_status_token(
-        details,
-        "● active" if active else "○ inactive",
+
+def _append_pane_state(details: Text, pane: Pane, *, active: bool) -> None:
+    _append_section(details, "State")
+    details.append(
+        _pane_state_label(pane, active=active),
         style=_STYLE_ACTIVE_MARKER if active else "",
     )
+    details.append("\n")
     prompt = _prompt_state(pane)
     if prompt:
-        _append_status_token(details, prompt)
-    details.append("\n")
-
-    position = _pane_position(pane)
-    if position:
-        _append_status_token(details, position)
-    size = _pane_size(pane)
-    if size:
-        _append_status_token(details, size)
-    neighbors = _pane_neighbors(pane)
-    if neighbors:
-        _append_status_token(details, neighbors, style=_STYLE_METADATA)
-    details.append("\n")
-
-    if pane.cwd:
-        details.append(pane.cwd, style="bold")
+        details.append(prompt.capitalize())
         details.append("\n")
 
     flags: list[str] = []
     if pane.title_overridden:
-        flags.append("title locked")
+        flags.append("Title locked")
     if pane.needs_attention:
-        flags.append("attention")
+        flags.append("Needs attention")
     if pane.has_activity_since_last_focus:
-        flags.append("activity since focus")
-    if flags:
-        details.append(" · ".join(flags), style=_STYLE_METADATA)
+        flags.append("Activity since focus")
+    for flag in flags:
+        details.append(flag, style=_STYLE_METADATA)
         details.append("\n")
+
+
+def _append_pane_location(details: Text, pane: Pane) -> None:
+    _append_section(details, "Location")
+    _append_property(details, "Path", pane.cwd, value_style="bold")
+    _append_property(details, "Pane", _pane_position_long(pane))
+    _append_property(details, "Size", _pane_size(pane))
+    _append_property(details, "Neighbors", _pane_neighbors(pane))
 
 
 def _is_shell_wrapper(value: str | None) -> bool:
     return bool(value and "pty-proxy" in value and "--shell" in value)
 
 
+def _shell_command(pane: Pane) -> str | None:
+    if pane.root_cmdline:
+        return pane.root_cmdline
+    if pane.foreground_cmd and _is_shell_wrapper(pane.foreground_cmd):
+        try:
+            parts = shlex.split(pane.foreground_cmd)
+        except ValueError:
+            return pane.foreground_cmd
+        if "--shell" in parts:
+            index = parts.index("--shell")
+            if index + 1 < len(parts):
+                return parts[index + 1]
+    return None
+
+
 def _append_pane_process(details: Text, pane: Pane) -> None:
     foreground = None if _is_shell_wrapper(pane.foreground_cmd) else pane.foreground_cmd
-    values = [pane.current_command, foreground, pane.root_cmdline]
-    if not any(values) and pane.pid is None:
+    shell = _shell_command(pane)
+    if not any((pane.current_command, foreground, shell)) and pane.pid is None:
         return
 
     _append_section(details, "Process")
-    if pane.current_command:
-        details.append(pane.current_command, style="bold")
-        details.append("\n")
-
+    _append_property(details, "Command", pane.current_command, value_style="bold")
     if foreground and not _same_identity(foreground, pane.current_command):
-        details.append(foreground)
-        details.append("\n")
-
-    if pane.root_cmdline and not _same_identity(pane.root_cmdline, foreground):
-        details.append(pane.root_cmdline)
-        if pane.pid is not None:
-            details.append(f"  PID {pane.pid}", style=_STYLE_METADATA)
-        details.append("\n")
-    elif pane.pid is not None:
-        details.append(f"PID {pane.pid}", style=_STYLE_METADATA)
-        details.append("\n")
+        _append_property(details, "Foreground", foreground)
+    if shell and not _same_identity(shell, foreground):
+        _append_property(details, "Shell", shell)
+    _append_property(details, "PID", pane.pid)
 
 
 def _append_session(
@@ -701,20 +711,19 @@ def _append_session(
 ) -> None:
     if activity_loading:
         _append_section(details, "Recent")
-        details.append("loading…", style=_STYLE_METADATA)
-        details.append("\n")
+        _append_property(details, "Last", "loading…")
         return
     if activity is None or (activity.session_id is None and activity.last_command is None):
         return
 
     _append_section(details, "Recent")
-    if activity.last_command:
-        details.append(activity.last_command, style="bold")
-        details.append("\n")
-    if activity.session_id:
-        details.append("Atuin ", style=_STYLE_DETAIL_LABEL)
-        details.append(activity.session_id)
-        details.append("\n")
+    _append_property(
+        details,
+        "Last",
+        activity.last_command or "No completed command",
+        value_style="bold" if activity.last_command else "",
+    )
+    _append_property(details, "Atuin", activity.session_id)
 
 
 def _pane_details(
@@ -732,16 +741,12 @@ def _pane_details(
     details = Text()
     title = display_title if display_title is not None else pane.title
     tab_title = _display_name(location.tab.title, "(untitled)")
-    breadcrumb = f"OS {location.os_window.id or '?'} > {tab_title} #{location.tab.id or '?'}"
+    breadcrumb = f"OS #{location.os_window.id or '?'} > {tab_title} #{location.tab.id or '?'}"
     _append_identity(details, "Pane", _display_name(title, "(untitled)"), pane.id, breadcrumb)
 
-    derived_title = _pane_row_title(pane, location.tab.title, display_title)
-    if _same_identity(title, location.tab.title) and not _same_identity(derived_title, title):
-        details.append(derived_title, style="bold")
-        details.append("\n")
-
     active = bool(location.os_window.is_active and location.tab.is_active and pane.is_active)
-    _append_pane_status(details, pane, active=active)
+    _append_pane_state(details, pane, active=active)
+    _append_pane_location(details, pane)
     _append_pane_process(details, pane)
     _append_session(details, activity=activity, activity_loading=activity_loading)
     return details
