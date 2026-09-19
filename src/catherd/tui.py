@@ -466,7 +466,7 @@ def _pane_label(
         object_id=pane.id,
         status=_pane_status_summary(pane, focused=is_active),
         detail=_pane_detail_summary(pane, title),
-        hierarchy_style="bold" if is_active else "",
+        hierarchy_style="",
     )
     return label
 
@@ -925,10 +925,7 @@ class KittyTree(Tree[NodeRef]):
         style: Style,
     ) -> Text:
         """Preserve semantic colors; row selection is rendered separately."""
-        interaction_style = Style(
-            bold=node is self.cursor_node,
-            underline=style.underline,
-        )
+        interaction_style = Style(underline=style.underline)
         return super().render_label(node, base_style, interaction_style)
 
     def clear_bands(self) -> None:
