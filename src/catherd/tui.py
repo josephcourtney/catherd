@@ -677,7 +677,7 @@ def _pane_details(
     _append_identity(details, "Pane", _display_name(title, "(untitled)"), pane.id, breadcrumb)
 
     derived_title = _pane_row_title(pane, location.tab.title, display_title)
-    if not _same_identity(derived_title, title):
+    if _same_identity(title, location.tab.title) and not _same_identity(derived_title, title):
         details.append(derived_title, style="bold")
         position = _pane_position(pane)
         if position:
