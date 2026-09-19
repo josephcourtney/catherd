@@ -836,7 +836,7 @@ def test_long_command_title_is_preserved_in_current_column() -> None:
 
     assert "uv run python" in label.plain
     assert "running" in label.plain
-    assert command in label.plain
+    assert _compact_hint(command) in label.plain
 
 
 @pytest.mark.small
@@ -1612,7 +1612,7 @@ async def test_stale_activity_result_does_not_overwrite_new_selection() -> None:
 
         details = app.query_one("#details", Static)
         assert isinstance(details.content, Text)
-        assert "ATUIN" in details.content.plain
-        assert "Session         session-2" in details.content.plain
-        assert "Last completed  current-two" in details.content.plain
+        assert "RECENT" in details.content.plain
+        assert "Atuin      session-2" in details.content.plain
+        assert "Last       current-two" in details.content.plain
         assert "stale-one" not in details.content.plain
