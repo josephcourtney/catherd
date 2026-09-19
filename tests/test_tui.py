@@ -20,11 +20,13 @@ from catherd.tui import (
     KittyManagerApp,
     KittyTree,
     NodeRef,
-    _active_marker,
+    _abbreviate_identifier,
     _apply_row_background,
+    _apply_selection,
     _compact_hint,
     _compact_process_hint,
     _count_label,
+    _home_relative_path,
     _os_window_label,
     _pane_activity_hint,
     _pane_label,
@@ -467,7 +469,7 @@ def test_selected_details_for_os_window() -> None:
     assert "OS WINDOW #100" in details.plain
     assert "work" in details.plain
     assert "SUMMARY" in details.plain
-    assert "State      active" in details.plain
+    assert "Focus      focused" in details.plain
     assert "Tabs       2" in details.plain
     assert "Panes      3" in details.plain
 
@@ -480,7 +482,7 @@ def test_selected_details_for_tab() -> None:
     assert "editor" in details.plain
     assert "OS #100" in details.plain
     assert "SUMMARY" in details.plain
-    assert "State      active" in details.plain
+    assert "Focus      focused" in details.plain
     assert "Layout     splits" in details.plain
     assert "Panes      2" in details.plain
 
@@ -495,11 +497,12 @@ def test_selected_details_for_pane_with_activity() -> None:
 
     assert "PANE #1" in details.plain
     assert "nvim" in details.plain
-    assert "OS #100 > editor #10" in details.plain
+    assert "OS #100 › editor #10" in details.plain
 
-    assert "STATE" in details.plain
-    assert "● ACTIVE" in details.plain
-    assert "Command running" in details.plain
+    assert "STATUS" in details.plain
+    assert "Focus      focused" in details.plain
+    assert "Activity   running" in details.plain
+    assert "Flags      needs attention, activity since focus" in details.plain
 
     assert "LOCATION" in details.plain
     assert "Path       /code/project" in details.plain
@@ -510,11 +513,12 @@ def test_selected_details_for_pane_with_activity() -> None:
     assert "PROCESS" in details.plain
     assert "Command    uv run pytest" in details.plain
     assert "Foreground nvim" in details.plain
-    assert "Shell      /bin/zsh -l" in details.plain
+    assert "Shell      zsh" in details.plain
+    assert "Executable /bin/zsh" in details.plain
 
     assert "RECENT" in details.plain
     assert "Last       pytest -q" in details.plain
-    assert "Atuin      session-1" in details.plain
+    assert "Session ID session-1" in details.plain
 
 
 @pytest.mark.small
@@ -538,7 +542,7 @@ def test_selected_details_explains_empty_recent_command() -> None:
     )
 
     assert "Last       No completed command" in details.plain
-    assert "Atuin      session-1" in details.plain
+    assert "Session ID session-1" in details.plain
 
 
 @pytest.mark.medium
@@ -637,7 +641,7 @@ def test_zebra_background_preserves_compact_selection_background() -> None:
 
 @pytest.mark.small
 def test_tree_render_label_does_not_override_semantic_colors() -> None:
-    pane = Pane(id="1", title="nvim", is_active=True)
+    pane = Pane(id="1", title="nvim", is_active=True, at_prompt=False)
     tree = KittyTree("Kitty")
     label = _pane_label(pane, "editor", active=True)
     node = tree.root.add_leaf(label, NodeRef("pane", "1"))
@@ -648,20 +652,25 @@ def test_tree_render_label_does_not_override_semantic_colors() -> None:
         Style(color="red", bgcolor="blue", bold=True),
     )
 
-    id_offset = rendered.plain.index("#1")
+    focus_offset = rendered.plain.index("● focused")
     styles = [
         Style.parse(span.style) if isinstance(span.style, str) else span.style
         for span in rendered.spans
-        if span.start <= id_offset < span.end
+        if span.start <= focus_offset < span.end
     ]
     assert any(_color_name(style) == "cyan" for style in styles)
     assert all(_color_name(style) != "red" for style in styles)
 
 
 @pytest.mark.small
-def test_active_marker_does_not_reuse_tree_disclosure_triangle() -> None:
-    assert _active_marker(active=True) == "● "
-    assert _active_marker(active=False) == "  "
+def test_selection_spans_row_and_adds_left_cursor_marker() -> None:
+    strip = Strip([Segment("  row contents", Style())])
+
+    selected = _apply_selection(strip, "#dbe9f2")
+
+    assert selected.text.startswith("▎")
+    assert selected.text[1:] == strip.text[1:]
+    assert _background_names(selected) == {"#dbe9f2"}
 
 
 @pytest.mark.small
@@ -670,9 +679,9 @@ def test_outline_header_explains_tree_columns() -> None:
 
     assert "HIERARCHY" in header.plain
     assert "ID" in header.plain
-    assert "STATE" in header.plain
+    assert "STATUS" in header.plain
     assert "DETAIL" in header.plain
-    for heading in ("HIERARCHY", "ID", "STATE", "DETAIL"):
+    for heading in ("HIERARCHY", "ID", "STATUS", "DETAIL"):
         assert _style_for(header, heading).bold
 
 
@@ -688,25 +697,31 @@ def test_tree_labels_use_semantic_outline_columns() -> None:
     pane_label = _pane_label(pane, tab.title, active=True)
 
     assert os_label.plain.index("work") < os_label.plain.index("#100")
-    assert os_label.plain.index("#100") < os_label.plain.index("active")
-    assert os_label.plain.index("active") < os_label.plain.index("2 tabs · 3 panes")
+    assert os_label.plain.index("#100") < os_label.plain.index("● focused")
+    assert os_label.plain.index("● focused") < os_label.plain.index("2 tabs · 3 panes")
 
     assert tab_label.plain.index("editor") < tab_label.plain.index("#10")
-    assert tab_label.plain.index("#10") < tab_label.plain.index("splits")
+    assert tab_label.plain.index("#10") < tab_label.plain.index("● focused")
+    assert tab_label.plain.index("● focused") < tab_label.plain.index("2 panes · splits")
 
     assert pane_label.plain.index("nvim") < pane_label.plain.index("#1")
-    assert pane_label.plain.index("#1") < pane_label.plain.index("active")
-    assert pane_label.plain.index("active") < pane_label.plain.index("uv run pytest")
+    assert pane_label.plain.index("#1") < pane_label.plain.index("● focused")
+    assert pane_label.plain.index("● focused") < pane_label.plain.index("▶ running")
+    assert pane_label.plain.index("▶ running") < pane_label.plain.index("1/2 · uv run pytest")
 
     assert _style_for(tab_label, "editor").bold
-    assert _color_name(_style_for(tab_label, "editor")) == "cyan"
-    assert _color_name(_style_for(pane_label, "#1")) == "cyan"
+    assert _color_name(_style_for(tab_label, "editor")) is None
+    pane_id_style = _style_for(pane_label, "#1")
+    assert pane_id_style.dim
+    assert pane_id_style.color is None
+    assert _color_name(_style_for(pane_label, "● focused")) == "cyan"
+    assert _color_name(_style_for(pane_label, "▶ running")) == "cyan"
     detail_style = _style_for(pane_label, "uv run pytest")
     assert not detail_style.italic
     assert detail_style.color is None
-    state_style = _style_for(tab_label, "splits")
-    assert not state_style.italic
-    assert state_style.color is None
+    layout_style = _style_for(tab_label, "splits")
+    assert not layout_style.italic
+    assert layout_style.color is None
 
 
 @pytest.mark.small
@@ -727,10 +742,10 @@ def test_outline_columns_align_across_tree_depths() -> None:
     pane_id_cell = 12 + pane_label.plain.index("#1")
     assert os_id_cell == tab_id_cell == pane_id_cell
 
-    os_state_cell = 4 + 2 + os_label.plain.index("active")
-    tab_state_cell = 8 + 2 + tab_label.plain.index("splits")
-    pane_state_cell = 12 + pane_label.plain.index("active")
-    assert os_state_cell == tab_state_cell == pane_state_cell
+    os_status_cell = 4 + 2 + os_label.plain.index("● focused")
+    tab_status_cell = 8 + 2 + tab_label.plain.index("● focused")
+    pane_status_cell = 12 + pane_label.plain.index("● focused")
+    assert os_status_cell == tab_status_cell == pane_status_cell
 
 
 @pytest.mark.small
@@ -738,21 +753,37 @@ def test_inspector_uses_labels_to_explain_values() -> None:
     details = selected_details(_state(), NodeRef("pane", "1"), activity=_activity("1"))
 
     kind_style = _style_for(details, "PANE")
-    assert kind_style.italic
+    assert kind_style.bold
+    assert not kind_style.italic
     assert _color_name(kind_style) == "cyan"
-    assert _color_name(_style_for(details, "#1")) == "cyan"
+    id_style = _style_for(details, "#1")
+    assert id_style.dim
+    assert id_style.color is None
 
-    breadcrumb_style = _style_for(details, "OS #100 > editor #10")
-    assert breadcrumb_style.italic
+    breadcrumb_style = _style_for(details, "OS #100 › editor #10")
+    assert breadcrumb_style.dim
+    assert not breadcrumb_style.italic
     assert breadcrumb_style.color is None
 
-    assert _color_name(_style_for(details, "STATE")) == "cyan"
+    status_style = _style_for(details, "STATUS")
+    assert status_style.bold
+    assert _color_name(status_style) == "cyan"
     path_label_style = _style_for(details, "Path")
-    assert path_label_style.italic
+    assert path_label_style.dim
+    assert not path_label_style.italic
     assert path_label_style.color is None
     assert _style_for(details, "/code/project").bold
     assert _color_name(_style_for(details, "─")) == "cyan"
 
+
+
+@pytest.mark.small
+def test_home_relative_paths_and_opaque_ids_are_compact(monkeypatch) -> None:
+    monkeypatch.setattr(tui_module.os.path, "expanduser", lambda _value: "/Users/example")
+
+    assert _home_relative_path("/Users/example/code/catherd") == "~/code/catherd"
+    assert _home_relative_path("/tmp/work") == "/tmp/work"
+    assert _abbreviate_identifier("01a0b73179e7711183ac42d84ca228c5") == "01a0b731…a228c5"
 
 
 @pytest.mark.small
@@ -913,22 +944,24 @@ def test_repeated_pane_title_prefers_current_command_over_shell() -> None:
 
 
 @pytest.mark.small
-def test_active_branch_labels_strengthen_ancestry_without_green_markers() -> None:
+def test_focused_branch_uses_status_not_hierarchy_markers() -> None:
     state = _state()
     os_label = _os_window_label(state.os_windows[0], active_branch=True)
     tab_label = _tab_label(state.os_windows[0].tabs[0], active_branch=True)
 
-    assert "● " not in os_label.plain
-    assert "● " not in tab_label.plain
+    assert not os_label.plain.startswith("● ")
+    assert not tab_label.plain.startswith("● ")
+    assert "● focused" in os_label.plain
+    assert "● focused" in tab_label.plain
     assert _style_for(os_label, "work").bold
-    assert _color_name(_style_for(os_label, "work")) == "cyan"
-    assert _color_name(_style_for(os_label, "#100")) == "cyan"
+    assert _color_name(_style_for(os_label, "work")) is None
+    assert _style_for(os_label, "#100").dim
     assert _style_for(tab_label, "editor").bold
-    assert _color_name(_style_for(tab_label, "editor")) == "cyan"
+    assert _color_name(_style_for(tab_label, "● focused")) == "cyan"
 
 
 @pytest.mark.medium
-async def test_only_active_pane_has_green_marker_and_branch_is_tracked() -> None:
+async def test_focused_window_tab_and_pane_are_explicitly_marked() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
 
@@ -942,9 +975,10 @@ async def test_only_active_pane_has_green_marker_and_branch_is_tracked() -> None
         assert isinstance(os_label, Text)
         assert isinstance(tab_label, Text)
         assert isinstance(pane_label, Text)
-        assert "● " not in os_label.plain
-        assert "● " not in tab_label.plain
-        assert "● " in pane_label.plain
+        assert "● focused" in os_label.plain
+        assert "● focused" in tab_label.plain
+        assert "● focused" in pane_label.plain
+        assert "▶ running" in pane_label.plain
         assert tree._active_branch_refs == {
             NodeRef("os_window", "100"),
             NodeRef("tab", "10"),
@@ -976,15 +1010,15 @@ async def test_action_strip_is_quiet_static_help() -> None:
         await pilot.pause()
         actions = app.query_one("#actions", Static)
         assert isinstance(actions.content, Text)
-        assert "/ filter" in actions.content.plain
-        assert "a active" in actions.content.plain
-        assert "? help" in actions.content.plain
+        assert "/ Filter" in actions.content.plain
+        assert "a Focused pane" in actions.content.plain
+        assert "? Help" in actions.content.plain
         assert "r rename" not in actions.content.plain
         assert "m move" not in actions.content.plain
         assert "J/K" not in actions.content.plain
         assert "Merge" not in actions.content.plain
         assert _style_for(actions.content, "Enter").bold
-        assert not _style_for(actions.content, "focus").bold
+        assert not _style_for(actions.content, "Focus").bold
 
         footer = app.query_one("#footer")
         status = app.query_one("#status", Static)
@@ -1008,6 +1042,10 @@ async def test_filter_tree_keeps_matching_ancestors_and_prunes_siblings() -> Non
         assert _child_refs(tree, NodeRef("os_window", "100")) == [NodeRef("tab", "10")]
         assert _child_refs(tree, NodeRef("tab", "10")) == [NodeRef("pane", "2")]
         assert all(node.data != NodeRef("os_window", "200") for node in tree.root.children)
+        status = app.query_one("#status", Static)
+        assert "Showing 1 of 4 panes" in str(status.content)
+        assert "1 of 3 tabs" in str(status.content)
+        assert "filter: tests" in str(status.content)
 
 
 @pytest.mark.medium
@@ -1156,11 +1194,12 @@ async def test_banded_row_keeps_group_identity_when_selected_or_hovered() -> Non
 
         expected_band = _tree_row_background(dark=app.current_theme.dark, banded=True)
         expected_selection = _selection_background(dark=app.current_theme.dark)
-        assert expected_band in selected_backgrounds
+        assert expected_band not in selected_backgrounds
         assert expected_band in hovered_backgrounds
 
-        # Interaction must never alter guide/disclosure/tree glyphs.
-        assert selected_strip.text == hovered_strip.text
+        # Selection intentionally replaces only the leftmost cell with a cursor bar.
+        assert selected_strip.text.startswith("▎")
+        assert selected_strip.text[1:] == hovered_strip.text[1:]
         assert expected_selection in selected_backgrounds
         assert expected_selection not in hovered_backgrounds
 
@@ -1178,7 +1217,9 @@ async def test_tui_renders_hierarchy_and_selects_active_pane() -> None:
         assert isinstance(header.content, Text)
         assert "HIERARCHY" in header.content.plain
         assert "ID" in header.content.plain
-        assert "STATE" in header.content.plain
+        assert "STATUS" in header.content.plain
+        browser_title = app.query_one("#browser-title", Static)
+        assert "inspect and focus" in str(browser_title.content)
         assert "DETAIL" in header.content.plain
         assert _root_refs(tree) == [NodeRef("os_window", "100"), NodeRef("os_window", "200")]
         assert tree.cursor_node is not None
@@ -1661,6 +1702,6 @@ async def test_stale_activity_result_does_not_overwrite_new_selection() -> None:
         details = app.query_one("#details", Static)
         assert isinstance(details.content, Text)
         assert "RECENT" in details.content.plain
-        assert "Atuin      session-2" in details.content.plain
+        assert "Session ID session-2" in details.content.plain
         assert "Last       current-two" in details.content.plain
         assert "stale-one" not in details.content.plain
