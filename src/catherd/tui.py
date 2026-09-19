@@ -101,7 +101,7 @@ def _display_name(value: str | None, fallback: str) -> str:
 _TREE_HINT_MAX = 36
 _TAB_NAME_WIDTH = 18
 _PANE_NAME_WIDTH = 22
-_TREE_ID_WIDTH = 5
+_TREE_ID_WIDTH = 4
 
 _STYLE_ACTIVE_MARKER = "bold green"
 _STYLE_ACTIVE_BRANCH = "bold cyan"
@@ -326,7 +326,7 @@ def _tab_label(
     label.append("  ")
     label.append(_tree_id(tab.id), style=_STYLE_METADATA)
     if tab.layout:
-        label.append("  ")
+        label.append(" ")
         label.append(tab.layout, style=_STYLE_DESCRIPTOR)
     return label
 
@@ -345,7 +345,7 @@ def _pane_label(
         style=_STYLE_ACTIVE_MARKER if is_active else "",
     )
     label.append(_tree_id(pane.id), style=_STYLE_METADATA)
-    label.append("  ")
+    label.append(" ")
     title = _pane_row_title(pane, tab_title, display_title)
     label.append(
         _fit_tree_column(title, _PANE_NAME_WIDTH),
