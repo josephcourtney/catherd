@@ -105,7 +105,7 @@ def _active_marker(*, active: bool | None) -> str:
 
 
 def _tab_band_background(*, dark: bool) -> str:
-    return "black" if dark else "white"
+    return "bright_black" if dark else "bright_white"
 
 
 def _compact_hint(value: str | None, max_len: int = _TREE_HINT_MAX) -> str | None:
