@@ -6,7 +6,10 @@ from threading import Event
 from typing import TYPE_CHECKING
 
 import pytest
+from rich.segment import Segment
+from rich.style import Style
 from rich.text import Text
+from textual.strip import Strip
 from textual.widgets import Input, Static, Tree
 
 import catherd.tui as tui_module
@@ -18,6 +21,7 @@ from catherd.tui import (
     KittyTree,
     NodeRef,
     _active_marker,
+    _apply_tab_band,
     _compact_hint,
     _compact_process_hint,
     _pane_activity_hint,
@@ -520,6 +524,22 @@ async def test_details_panel_loads_activity_for_highlighted_pane() -> None:
 )
 def test_tab_band_background_tracks_theme(dark, expected) -> None:
     assert _tab_band_background(dark=dark) == expected
+
+
+@pytest.mark.small
+@pytest.mark.parametrize(
+    ("dark", "expected"),
+    [(True, "bright_black"), (False, "bright_white")],
+)
+def test_tab_band_overrides_existing_row_background(dark, expected) -> None:
+    strip = Strip([Segment("row", Style(bgcolor="red"))])
+
+    banded = _apply_tab_band(strip, dark=dark)
+
+    segment = next(iter(banded))
+    assert segment.style is not None
+    assert segment.style.bgcolor is not None
+    assert segment.style.bgcolor.name == expected
 
 
 @pytest.mark.small
