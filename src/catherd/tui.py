@@ -119,7 +119,7 @@ def _active_marker(*, active: bool | None) -> str:
 
 
 def _tab_band_background(*, dark: bool) -> str:
-    return "grey15" if dark else "grey97"
+    return "#262626" if dark else "#f7f7f7"
 
 
 def _apply_tab_band(strip: Strip, *, dark: bool) -> Strip:
