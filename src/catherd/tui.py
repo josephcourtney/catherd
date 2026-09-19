@@ -159,21 +159,8 @@ def _apply_active_branch(strip: Strip) -> Strip:
     return Strip(rendered, strip.cell_length)
 
 
-def _apply_selection_accent(strip: Strip) -> Strip:
-    """Mark the selected row without replacing its group background."""
-    accent = Style.parse(_STYLE_SELECTION)
-    rendered: list[Segment] = []
-    pending = True
-    for segment in strip:
-        if not pending or not segment.text or segment.control is not None:
-            rendered.append(segment)
-            continue
-        style = accent if segment.style is None else segment.style + accent
-        rendered.append(Segment("▌", style))
-        if len(segment.text) > 1:
-            rendered.append(Segment(segment.text[1:], segment.style))
-        pending = False
-    return Strip(rendered, strip.cell_length)
+def _selection_background(*, dark: bool) -> str:
+    return "#35566b" if dark else "#dbe9f2"
 
 
 def _compact_hint(value: str | None, max_len: int = _TREE_HINT_MAX) -> str | None:
@@ -845,12 +832,14 @@ class KittyTree(Tree[NodeRef]):
         base_style: Style,
         style: Style,
     ) -> Text:
-        """Preserve semantic row colors while retaining cursor/hover emphasis."""
-        interaction_style = Style(
-            bold=style.bold,
-            italic=style.italic,
-            underline=style.underline,
-        )
+        """Preserve semantic colors while styling selection inside the label only."""
+        if node is self.cursor_node:
+            interaction_style = Style(
+                bgcolor=_selection_background(dark=self.app.current_theme.dark),
+                bold=True,
+            )
+        else:
+            interaction_style = Style(underline=style.underline)
         return super().render_label(node, base_style, interaction_style)
 
     def clear_bands(self) -> None:
@@ -951,8 +940,6 @@ class KittyTree(Tree[NodeRef]):
 
         if node is not None and node.data in getattr(self, "_active_branch_refs", set()):
             strip = _apply_active_branch(strip)
-        if absolute_line == self.cursor_line:
-            strip = _apply_selection_accent(strip)
         return strip
 
     def action_collapse_or_parent(self) -> None:
@@ -1241,7 +1228,6 @@ class KittyManagerApp(App[None]):
     #kitty-tree > .tree--cursor,
     #kitty-tree:focus > .tree--cursor {
         background: transparent;
-        text-style: bold;
     }
 
     #kitty-tree > .tree--highlight-line {
