@@ -6,7 +6,7 @@
 - replace the colorful binding footer with a restrained command strip and add tree filtering plus jump-to-active navigation.
 - replace the triangle-like active indicator with a circular marker, follow macOS light/dark appearance with Textual's terminal-native ANSI themes, and use theme-aware borders.
 - strengthen visual grouping with section rules and hierarchy weight while suppressing repetitive shell-wrapper hints.
-- add blank separators between tabs and OS windows and subtle alternating background bands across tab subtrees.
+- add blank separators between tabs and OS windows while preserving outline-guide continuity, plus subtle alternating background bands across tab subtrees.
 
 ## [0.18.0] - 2026-09-18
 
