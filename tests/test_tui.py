@@ -24,9 +24,12 @@ from catherd.tui import (
     _apply_tab_band,
     _compact_hint,
     _compact_process_hint,
+    _os_window_label,
     _pane_activity_hint,
+    _pane_label,
     _preferred_textual_theme,
     _tab_band_background,
+    _tab_label,
     containing_os_window_id,
     merge_os_window_destinations,
     merge_tab_destinations,
@@ -364,6 +367,14 @@ def _line_for_ref(tree: Tree[NodeRef], ref: NodeRef) -> int:
     raise AssertionError(msg)
 
 
+def _style_for(text: Text, needle: str) -> Style:
+    offset = text.plain.index(needle)
+    for span in text.spans:
+        if span.start <= offset < span.end:
+            return Style.parse(span.style) if isinstance(span.style, str) else span.style
+    return Style()
+
+
 @pytest.mark.small
 def test_move_destinations_for_pane() -> None:
     destinations = move_destinations(_state(), NodeRef("pane", "1"))
@@ -546,6 +557,63 @@ def test_tab_band_overrides_existing_row_background(dark, expected) -> None:
 def test_active_marker_does_not_reuse_tree_disclosure_triangle() -> None:
     assert _active_marker(active=True) == "● "
     assert _active_marker(active=False) == "  "
+
+
+@pytest.mark.small
+def test_tree_labels_use_semantic_styles_instead_of_dim_metadata() -> None:
+    state = _state()
+    os_window = state.os_windows[0]
+    tab = os_window.tabs[0]
+    pane = tab.panes[0]
+
+    os_label = _os_window_label(os_window)
+    tab_label = _tab_label(tab)
+    pane_label = _pane_label(pane)
+
+    assert _style_for(os_label, "OS ").italic
+    assert _style_for(os_label, "OS ").color.name == "cyan"
+    assert _style_for(os_label, "2t/3p").color.name == "cyan"
+
+    tab_title_style = _style_for(tab_label, "editor")
+    assert tab_title_style.bold
+    assert tab_title_style.underline
+    assert _style_for(tab_label, "[10]").color.name == "cyan"
+    layout_style = _style_for(tab_label, "splits")
+    assert layout_style.italic
+    assert layout_style.color.name == "magenta"
+
+    assert _style_for(pane_label, "nvim").bold
+    assert _style_for(pane_label, "[1]").color.name == "cyan"
+    activity_style = _style_for(pane_label, "uv run pytest")
+    assert activity_style.italic
+    assert activity_style.color.name == "magenta"
+
+    for label in (os_label, tab_label, pane_label):
+        assert not any(_style_for(label, label.plain[span.start : span.end]).dim for span in label.spans)
+
+
+@pytest.mark.small
+def test_inspector_uses_style_not_dimming_to_separate_metadata() -> None:
+    details = selected_details(_state(), NodeRef("pane", "1"), activity=_activity("1"))
+
+    kind_style = _style_for(details, "PANE")
+    assert kind_style.italic
+    assert kind_style.color.name == "cyan"
+    assert _style_for(details, "[1]").color.name == "cyan"
+
+    breadcrumb_style = _style_for(details, "OS 100 > editor [10]")
+    assert breadcrumb_style.italic
+    assert breadcrumb_style.color.name == "cyan"
+
+    detail_label_style = _style_for(details, "CWD")
+    assert detail_label_style.bold
+    assert detail_label_style.color.name == "cyan"
+    assert _style_for(details, "─").color.name == "cyan"
+
+    assert not any(
+        (Style.parse(span.style) if isinstance(span.style, str) else span.style).dim
+        for span in details.spans
+    )
 
 
 @pytest.mark.small
