@@ -127,6 +127,20 @@ def _apply_tab_band(strip: Strip, *, dark: bool) -> Strip:
     )
 
 
+def _apply_active_branch(strip: Strip) -> Strip:
+    accent = Style(color=_STYLE_ACTIVE_BRANCH)
+    rendered: list[Segment] = []
+    in_prefix = True
+    for segment in strip:
+        if in_prefix and not any(character.isalnum() or character in "~/." for character in segment.text):
+            style = accent if segment.style is None else segment.style + accent
+            rendered.append(Segment(segment.text, style, segment.control))
+            continue
+        in_prefix = False
+        rendered.append(segment)
+    return Strip(rendered, strip.cell_length)
+
+
 def _compact_hint(value: str | None, max_len: int = _TREE_HINT_MAX) -> str | None:
     if not value:
         return None
@@ -646,6 +660,10 @@ class KittyTree(Tree[NodeRef]):
 
     def clear_bands(self) -> None:
         self._banded_refs: set[NodeRef] = set()
+        self._active_branch_refs: set[NodeRef] = set()
+
+    def set_active_branch(self, refs: set[NodeRef]) -> None:
+        self._active_branch_refs = refs
 
     def set_banded(self, ref: NodeRef, *, banded: bool) -> None:
         banded_refs = getattr(self, "_banded_refs", set())
@@ -727,14 +745,16 @@ class KittyTree(Tree[NodeRef]):
 
         strip = super().render_line(y)
         if (
-            node is None
-            or node.data not in getattr(self, "_banded_refs", set())
-            or absolute_line == self.cursor_line
-            or absolute_line == self.hover_line
+            node is not None
+            and node.data in getattr(self, "_banded_refs", set())
+            and absolute_line != self.cursor_line
+            and absolute_line != self.hover_line
         ):
-            return strip
+            strip = _apply_tab_band(strip, dark=self.app.current_theme.dark)
 
-        return _apply_tab_band(strip, dark=self.app.current_theme.dark)
+        if node is not None and node.data in getattr(self, "_active_branch_refs", set()):
+            strip = _apply_active_branch(strip)
+        return strip
 
     def action_collapse_or_parent(self) -> None:
         node = self.cursor_node
@@ -862,6 +882,53 @@ class FilterScreen(ModalScreen[str | None]):
         self.dismiss(None)
 
 
+class HelpScreen(ModalScreen[None]):
+    """Compact command reference."""
+
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("escape,?,q", "close", "Close", show=False),
+    ]
+
+    CSS = """
+    HelpScreen {
+        align: center middle;
+    }
+
+    HelpScreen > #help-dialog {
+        width: 64;
+        height: auto;
+        padding: 1 2;
+        border: round $primary;
+        background: $surface;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        yield Static(
+            """[b]Navigate[/b]
+j/k       move selection
+h/l       collapse / expand
+a         jump to active pane
+/         filter
+
+[b]Act[/b]
+Enter/f   focus in Kitty
+r         rename
+m         move
+M         merge tab / OS window
+J/K       reorder pane / tab
+Ctrl-R    refresh
+
+[b]General[/b]
+?         help
+q         quit""",
+            id="help-dialog",
+        )
+
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+
 class DestinationScreen(ModalScreen[Destination | None]):
     """Modal destination picker."""
 
@@ -933,6 +1000,7 @@ class KittyManagerApp(App[None]):
         Binding("J,shift+j", "reorder_forward", "Move down"),
         Binding("K,shift+k", "reorder_backward", "Move up"),
         Binding("ctrl+r", "refresh", "Refresh"),
+        Binding("?", "help", "Help"),
     ]
 
     CSS = """
@@ -942,15 +1010,17 @@ class KittyManagerApp(App[None]):
 
     #kitty-tree {
         width: 1fr;
-        min-width: 30;
+        min-width: 34;
+        overflow-x: hidden;
     }
 
     #details {
-        width: 48;
+        width: 46;
         min-width: 38;
-        max-width: 54;
+        max-width: 52;
         padding: 1 2;
         border-left: solid $border-blurred;
+        overflow-x: hidden;
         overflow-y: auto;
     }
 
@@ -999,7 +1069,7 @@ class KittyManagerApp(App[None]):
         )
         yield Static("Loading Kitty state…", id="status")
         yield Static(
-            "Enter Focus  r Rename  m Move  M Merge  J/K Reorder  / Filter  a Active  ^R Refresh  q Quit",
+            "Enter focus   r rename   m move   / filter   a active   ? help   q quit",
             id="actions",
         )
 
@@ -1095,7 +1165,13 @@ class KittyManagerApp(App[None]):
             return
         location = self.state.find_pane(ref.id)
         if location is not None:
-            node.set_label(_pane_label(location.pane, display_title))
+            node.set_label(
+                _pane_label(
+                    location.pane,
+                    location.tab.title,
+                    display_title,
+                )
+            )
 
     def _expanded_refs(self) -> set[NodeRef]:
         expanded: set[NodeRef] = set()
@@ -1177,6 +1253,20 @@ class KittyManagerApp(App[None]):
         tree = self._tree()
         tree.reset("Kitty")
         tree.clear_bands()
+        active_branch: set[NodeRef] = set()
+        for location in state.iter_panes():
+            if (
+                location.os_window.is_active
+                and location.tab.is_active
+                and location.pane.is_active
+            ):
+                if location.os_window.id is not None:
+                    active_branch.add(NodeRef("os_window", location.os_window.id))
+                if location.tab.id is not None:
+                    active_branch.add(NodeRef("tab", location.tab.id))
+                active_branch.add(NodeRef("pane", location.pane.id))
+                break
+        tree.set_active_branch(active_branch)
         tree.root.expand()
         nodes: dict[NodeRef, TreeNode[NodeRef]] = {}
         visible_windows = [
@@ -1270,7 +1360,11 @@ class KittyManagerApp(App[None]):
                 continue
             pane_ref = NodeRef("pane", pane.id)
             nodes[pane_ref] = node.add_leaf(
-                _pane_label(pane, self._display_names.get(pane_ref)),
+                _pane_label(
+                    pane,
+                    tab.title,
+                    self._display_names.get(pane_ref),
+                ),
                 pane_ref,
             )
             tree.set_banded(pane_ref, banded=banded)
@@ -1318,6 +1412,9 @@ class KittyManagerApp(App[None]):
             self._status("A Kitty operation is still running")
             return
         self.run_worker(self.refresh_state(), group="kitty-refresh", exclusive=True)
+
+    def action_help(self) -> None:
+        self.push_screen(HelpScreen())
 
     def action_filter_tree(self) -> None:
         self.push_screen(FilterScreen(self._filter_query), self._complete_filter)
