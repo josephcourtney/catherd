@@ -1,0 +1,15 @@
+name: Temporary ui-makeover validation
+
+on:
+  push:
+    branches:
+      - ui-makeover
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync
+      - run: uv run just check
