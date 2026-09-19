@@ -104,6 +104,10 @@ def _active_marker(*, active: bool | None) -> str:
     return "● " if active else "  "
 
 
+def _tab_band_background(*, dark: bool) -> str:
+    return "black" if dark else "white"
+
+
 def _compact_hint(value: str | None, max_len: int = _TREE_HINT_MAX) -> str | None:
     if not value:
         return None
@@ -163,8 +167,8 @@ def _preferred_textual_theme() -> str | None:
         return aliases[override]
     if sys.platform == "darwin":
         try:
-            result = subprocess.run(  # noqa: S603, S607 -- fixed macOS system command and arguments
-                ["defaults", "read", "-g", "AppleInterfaceStyle"],
+            result = subprocess.run(  # noqa: S603 -- fixed macOS system command and arguments
+                ["/usr/bin/defaults", "read", "-g", "AppleInterfaceStyle"],
                 check=False,
                 capture_output=True,
                 text=True,
@@ -607,7 +611,7 @@ class KittyTree(Tree[NodeRef]):
         ):
             return strip
 
-        background = "black" if self.app.current_theme.dark else "white"
+        background = _tab_band_background(dark=self.app.current_theme.dark)
         return strip.apply_style(Style(bgcolor=background))
 
     def action_collapse_or_parent(self) -> None:
