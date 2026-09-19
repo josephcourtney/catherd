@@ -115,12 +115,13 @@ _STYLE_ACTIVE_BRANCH = "bold cyan"
 _STYLE_ACTIVE_GUIDE = "cyan"
 _STYLE_KIND = "italic cyan"
 _STYLE_METADATA = "cyan"
-_STYLE_DESCRIPTOR = "italic cyan"
-_STYLE_DETAIL_LABEL = "italic cyan"
+_STYLE_DESCRIPTOR = ""
+_STYLE_DETAIL_LABEL = "italic"
 _STYLE_SECTION = "cyan"
 _STYLE_SECTION_RULE = "cyan"
-_STYLE_BREADCRUMB = "italic cyan"
+_STYLE_BREADCRUMB = "italic"
 _STYLE_HEADER = "bold"
+_STYLE_SELECTION = "bold cyan"
 
 
 def _active_marker(*, active: bool | None) -> str:
@@ -128,28 +129,12 @@ def _active_marker(*, active: bool | None) -> str:
 
 
 def _tab_band_background(*, dark: bool) -> str:
-    return "#272727" if dark else "#f4f4f4"
+    return "#2d3336" if dark else "#f4f4f4"
 
 
-def _tree_row_background(
-    *,
-    dark: bool,
-    banded: bool,
-    selected: bool,
-    hovered: bool,
-) -> str | None:
-    """Return the composed full-row background for the outline table."""
-    if selected:
-        if dark:
-            return "#294f68" if banded else "#31566f"
-        return "#365f7e" if banded else "#3e6786"
-    if hovered:
-        if dark:
-            return "#34383c" if banded else "#30363a"
-        return "#e9eff2" if banded else "#edf3f6"
-    if banded:
-        return _tab_band_background(dark=dark)
-    return None
+def _tree_row_background(*, dark: bool, banded: bool) -> str | None:
+    """Return the full-row group background, independent of interaction state."""
+    return _tab_band_background(dark=dark) if banded else None
 
 
 def _apply_row_background(strip: Strip, background: str) -> Strip:
@@ -171,6 +156,23 @@ def _apply_active_branch(strip: Strip) -> Strip:
             continue
         in_prefix = False
         rendered.append(segment)
+    return Strip(rendered, strip.cell_length)
+
+
+def _apply_selection_accent(strip: Strip) -> Strip:
+    """Mark the selected row without replacing its group background."""
+    accent = Style.parse(_STYLE_SELECTION)
+    rendered: list[Segment] = []
+    pending = True
+    for segment in strip:
+        if not pending or not segment.text or segment.control is not None:
+            rendered.append(segment)
+            continue
+        style = accent if segment.style is None else segment.style + accent
+        rendered.append(Segment("▌", style))
+        if len(segment.text) > 1:
+            rendered.append(Segment(segment.text[1:], segment.style))
+        pending = False
     return Strip(rendered, strip.cell_length)
 
 
@@ -210,6 +212,24 @@ def _compact_process_hint(value: str | None) -> str | None:
         return _compact_hint(value)
     compact = [os.path.basename(part) if part.startswith("/") else part for part in parts]
     return _compact_tokens(compact)
+
+
+def _command_identity(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        parts = shlex.split(value)
+    except ValueError:
+        return None
+    if not parts:
+        return None
+    if "-m" in parts:
+        index = parts.index("-m")
+        if index + 1 < len(parts):
+            return parts[index + 1]
+    if len(parts) >= 3 and parts[0] == "uv" and parts[1] == "run":
+        return os.path.basename(parts[2])
+    return os.path.basename(parts[0])
 
 
 def _pane_activity_hint(pane: Pane) -> str | None:
@@ -271,8 +291,8 @@ def _tree_header() -> Text:
     header.append("  ")
     header.append(_fit_tree_column("ID", _TREE_ID_WIDTH), style=_STYLE_HEADER)
     header.append(" ")
-    header.append(_fit_tree_column("LAYOUT / STATE", _TREE_STATE_WIDTH), style=_STYLE_HEADER)
-    header.append("CURRENT / SUMMARY", style=_STYLE_HEADER)
+    header.append(_fit_tree_column("STATE", _TREE_STATE_WIDTH), style=_STYLE_HEADER)
+    header.append("DETAIL", style=_STYLE_HEADER)
     return header
 
 
@@ -306,6 +326,14 @@ def _pane_row_title(pane: Pane, tab_title: str | None, display_title: str | None
     title = display_title if display_title is not None else pane.title
 
     if title and not _same_identity(title, tab_title):
+        if (
+            pane.current_command
+            and _same_identity(title, pane.current_command)
+            and len(title) > _PANE_HIERARCHY_WIDTH
+        ):
+            identity = _command_identity(pane.current_command)
+            if identity:
+                return identity
         return title
 
     if pane.current_command:
@@ -903,14 +931,14 @@ class KittyTree(Tree[NodeRef]):
             background = _tree_row_background(
                 dark=self.app.current_theme.dark,
                 banded=node.data in getattr(self, "_banded_refs", set()),
-                selected=absolute_line == self.cursor_line,
-                hovered=absolute_line == self.hover_line,
             )
             if background is not None:
                 strip = _apply_row_background(strip, background)
 
         if node is not None and node.data in getattr(self, "_active_branch_refs", set()):
             strip = _apply_active_branch(strip)
+        if absolute_line == self.cursor_line:
+            strip = _apply_selection_accent(strip)
         return strip
 
     def action_collapse_or_parent(self) -> None:
@@ -1194,6 +1222,21 @@ class KittyManagerApp(App[None]):
     #kitty-tree > .tree--guides-hover,
     #kitty-tree > .tree--guides-selected {
         color: $text-muted;
+    }
+
+    #kitty-tree > .tree--cursor,
+    #kitty-tree:focus > .tree--cursor {
+        background: transparent;
+        color: $text;
+        text-style: bold;
+    }
+
+    #kitty-tree > .tree--highlight-line {
+        background: transparent;
+    }
+
+    #kitty-tree > .tree--highlight {
+        text-style: underline;
     }
 
     #details {
