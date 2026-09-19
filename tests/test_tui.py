@@ -22,6 +22,7 @@ from catherd.tui import (
     NodeRef,
     _active_marker,
     _apply_row_background,
+    _apply_selection_accent,
     _compact_hint,
     _compact_process_hint,
     _count_label,
@@ -582,6 +583,45 @@ def test_row_background_spans_whole_strip() -> None:
         assert segment.style is not None
         assert segment.style.bgcolor is not None
         assert segment.style.bgcolor.name == "#f4f4f4"
+
+
+@pytest.mark.small
+def test_selection_accent_preserves_row_background() -> None:
+    strip = Strip([Segment("│ row", Style(bgcolor="#f4f4f4"))])
+
+    selected = _apply_selection_accent(strip)
+
+    assert selected.text == "▌ row"
+    first = list(selected)[0]
+    assert first.style is not None
+    assert first.style.color is not None
+    assert first.style.color.name == "cyan"
+    assert first.style.bgcolor is not None
+    assert first.style.bgcolor.name == "#f4f4f4"
+
+
+@pytest.mark.small
+def test_tree_render_label_does_not_override_semantic_colors() -> None:
+    pane = Pane(id="1", title="nvim", is_active=True)
+    tree = KittyTree("Kitty")
+    label = _pane_label(pane, "editor", active=True)
+    node = tree.root.add_leaf(label, NodeRef("pane", "1"))
+
+    rendered = tree.render_label(
+        node,
+        Style(),
+        Style(color="red", bgcolor="blue", bold=True),
+    )
+
+    id_offset = rendered.plain.index("#1")
+    styles = [
+        Style.parse(span.style) if isinstance(span.style, str) else span.style
+        for span in rendered.spans
+        if span.start <= id_offset < span.end
+    ]
+    assert any(style.color is not None and style.color.name == "cyan" for style in styles)
+    assert all(style.color is None or style.color.name != "red" for style in styles)
+    assert any(style.bold for style in styles)
 
 
 @pytest.mark.small
