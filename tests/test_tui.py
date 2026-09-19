@@ -613,9 +613,9 @@ def test_outline_header_explains_tree_columns() -> None:
 
     assert "HIERARCHY" in header.plain
     assert "ID" in header.plain
-    assert "STATE" in header.plain
-    assert "CURRENT" in header.plain
-    for heading in ("HIERARCHY", "ID", "STATE", "CURRENT"):
+    assert "LAYOUT / STATE" in header.plain
+    assert "CURRENT / SUMMARY" in header.plain
+    for heading in ("HIERARCHY", "ID", "LAYOUT / STATE", "CURRENT / SUMMARY"):
         assert _style_for(header, heading).bold
 
 
@@ -630,7 +630,8 @@ def test_tree_labels_use_semantic_outline_columns() -> None:
     tab_label = _tab_label(tab, active_branch=True)
     pane_label = _pane_label(pane, tab.title, active=True)
 
-    assert os_label.plain.index("OS 100") < os_label.plain.index("active")
+    assert os_label.plain.index("work") < os_label.plain.index("#100")
+    assert os_label.plain.index("#100") < os_label.plain.index("active")
     assert os_label.plain.index("active") < os_label.plain.index("2 tabs · 3 panes")
 
     assert tab_label.plain.index("editor") < tab_label.plain.index("#10")
@@ -811,8 +812,9 @@ def test_active_branch_labels_strengthen_ancestry_without_green_markers() -> Non
 
     assert "● " not in os_label.plain
     assert "● " not in tab_label.plain
-    assert _style_for(os_label, "100").bold
-    assert _style_for(os_label, "100").color.name == "cyan"
+    assert _style_for(os_label, "work").bold
+    assert _style_for(os_label, "work").color.name == "cyan"
+    assert _style_for(os_label, "#100").color.name == "cyan"
     assert _style_for(tab_label, "editor").bold
     assert _style_for(tab_label, "editor").color.name == "cyan"
 
@@ -1076,8 +1078,8 @@ async def test_tui_renders_hierarchy_and_selects_active_pane() -> None:
         assert isinstance(header.content, Text)
         assert "HIERARCHY" in header.content.plain
         assert "ID" in header.content.plain
-        assert "STATE" in header.content.plain
-        assert "CURRENT" in header.content.plain
+        assert "LAYOUT / STATE" in header.content.plain
+        assert "CURRENT / SUMMARY" in header.content.plain
         assert _root_refs(tree) == [NodeRef("os_window", "100"), NodeRef("os_window", "200")]
         assert tree.cursor_node is not None
         assert tree.cursor_node.data == NodeRef("pane", "1")
