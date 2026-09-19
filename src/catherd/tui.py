@@ -1227,7 +1227,6 @@ class KittyManagerApp(App[None]):
     #kitty-tree > .tree--cursor,
     #kitty-tree:focus > .tree--cursor {
         background: transparent;
-        color: $text;
         text-style: bold;
     }
 
