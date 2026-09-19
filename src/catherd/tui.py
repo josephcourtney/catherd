@@ -104,11 +104,11 @@ def _count_label(count: int, singular: str, plural: str | None = None) -> str:
 
 
 _TREE_HINT_MAX = 36
-_OS_HIERARCHY_WIDTH = 28
-_TAB_HIERARCHY_WIDTH = 24
-_PANE_HIERARCHY_WIDTH = 22
+_OS_HIERARCHY_WIDTH = 24
+_TAB_HIERARCHY_WIDTH = 20
+_PANE_HIERARCHY_WIDTH = 18
 _TREE_ID_WIDTH = 5
-_TREE_STATE_WIDTH = 18
+_TREE_STATE_WIDTH = 16
 
 _STYLE_ACTIVE_MARKER = "bold green"
 _STYLE_ACTIVE_BRANCH = "bold cyan"
@@ -1170,7 +1170,7 @@ class KittyManagerApp(App[None]):
 
     #browser {
         width: 2fr;
-        min-width: 54;
+        min-width: 60;
         height: 1fr;
     }
 
