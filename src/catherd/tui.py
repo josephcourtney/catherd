@@ -109,19 +109,25 @@ _OS_HIERARCHY_WIDTH = 24
 _TAB_HIERARCHY_WIDTH = 20
 _PANE_HIERARCHY_WIDTH = 18
 _TREE_ID_WIDTH = 5
-_TREE_STATE_WIDTH = 16
+_TREE_STATUS_WIDTH = 26
 
-_STYLE_ACTIVE_MARKER = "bold green"
-_STYLE_ACTIVE_BRANCH = "bold cyan"
+_STYLE_ACTIVE_BRANCH = "bold"
 _STYLE_ACTIVE_GUIDE = "cyan"
-_STYLE_KIND = "italic cyan"
-_STYLE_METADATA = "cyan"
+_STYLE_KIND = "bold cyan"
+_STYLE_METADATA = "dim"
 _STYLE_DESCRIPTOR = ""
-_STYLE_DETAIL_LABEL = "italic"
-_STYLE_SECTION = "cyan"
+_STYLE_DETAIL_LABEL = "dim"
+_STYLE_SECTION = "bold cyan"
 _STYLE_SECTION_RULE = "cyan"
-_STYLE_BREADCRUMB = "italic"
+_STYLE_BREADCRUMB = "dim"
 _STYLE_HEADER = "bold"
+_STYLE_SELECTION_MARKER = "bold cyan"
+
+_STATUS_STYLES: tuple[tuple[str, str], ...] = (
+    ("● focused", "bold cyan"),
+    ("▶ running", "cyan"),
+    ("○ at prompt", "dim"),
+)
 
 
 def _active_marker(*, active: bool | None) -> str:
@@ -174,6 +180,17 @@ def _apply_active_branch(strip: Strip) -> Strip:
 
 def _selection_background(*, dark: bool) -> str:
     return "#35566b" if dark else "#dbe9f2"
+
+
+def _apply_selection(strip: Strip, background: str) -> Strip:
+    """Apply full-row selection and a persistent left-edge cursor marker."""
+    selected = _apply_row_background(strip, background)
+    if selected.cell_length == 0:
+        return selected
+    marker_style = Style.parse(_STYLE_SELECTION_MARKER) + Style(bgcolor=background)
+    marker = Segment("▎", marker_style)
+    remainder = selected.crop(1, selected.cell_length)
+    return Strip([marker, *remainder], selected.cell_length)
 
 
 def _compact_hint(value: str | None, max_len: int = _TREE_HINT_MAX) -> str | None:
@@ -291,9 +308,19 @@ def _tree_header() -> Text:
     header.append("  ")
     header.append(_fit_tree_column("ID", _TREE_ID_WIDTH), style=_STYLE_HEADER)
     header.append(" ")
-    header.append(_fit_tree_column("STATE", _TREE_STATE_WIDTH), style=_STYLE_HEADER)
+    header.append(_fit_tree_column("STATUS", _TREE_STATUS_WIDTH), style=_STYLE_HEADER)
     header.append("DETAIL", style=_STYLE_HEADER)
     return header
+
+
+def _append_status_field(label: Text, status: str | None) -> None:
+    start = len(label.plain)
+    field = _fit_tree_column(status or "", _TREE_STATUS_WIDTH)
+    label.append(field, style=_STYLE_DESCRIPTOR)
+    for token, style in _STATUS_STYLES:
+        offset = field.find(token)
+        if offset >= 0:
+            label.stylize(style, start + offset, start + offset + len(token))
 
 
 def _append_outline_fields(
@@ -302,8 +329,8 @@ def _append_outline_fields(
     hierarchy: str,
     hierarchy_width: int,
     object_id: str | None,
-    state: str | None,
-    current: str | None,
+    status: str | None,
+    detail: str | None,
     hierarchy_style: str = "",
 ) -> None:
     label.append(_fit_tree_column(hierarchy, hierarchy_width), style=hierarchy_style)
@@ -311,9 +338,9 @@ def _append_outline_fields(
     object_id_text = _tree_id(object_id) if object_id else ""
     label.append(_fit_tree_column(object_id_text, _TREE_ID_WIDTH), style=_STYLE_METADATA)
     label.append(" ")
-    label.append(_fit_tree_column(state or "", _TREE_STATE_WIDTH), style=_STYLE_DESCRIPTOR)
-    if current:
-        label.append(current, style=_STYLE_DESCRIPTOR)
+    _append_status_field(label, status)
+    if detail:
+        label.append(detail, style=_STYLE_DESCRIPTOR)
 
 
 def _same_identity(left: str | None, right: str | None) -> bool:
@@ -351,24 +378,27 @@ def _pane_row_title(pane: Pane, tab_title: str | None, display_title: str | None
     return _display_name(title, "(untitled)")
 
 
-def _pane_state_summary(pane: Pane, *, active: bool) -> str:
+def _pane_status_summary(pane: Pane, *, focused: bool) -> str:
     parts: list[str] = []
-    if active:
-        parts.append("active")
-    if pane.tab_index is not None and pane.tab_count is not None and pane.tab_count > 1:
-        parts.append(f"{pane.tab_index}/{pane.tab_count}")
+    if focused:
+        parts.append("● focused")
     if pane.at_prompt is True:
-        parts.append("prompt")
+        parts.append("○ at prompt")
     elif pane.at_prompt is False:
-        parts.append("running")
+        parts.append("▶ running")
     return " · ".join(parts)
 
 
-def _pane_current_summary(pane: Pane, row_title: str) -> str | None:
+def _pane_detail_summary(pane: Pane, row_title: str) -> str | None:
+    parts: list[str] = []
+    if pane.tab_index is not None and pane.tab_count is not None and pane.tab_count > 1:
+        parts.append(f"{pane.tab_index}/{pane.tab_count}")
     hint = _pane_activity_hint(pane)
     if hint and (not _same_identity(hint, row_title) or len(row_title) > _PANE_HIERARCHY_WIDTH):
-        return hint
-    return None
+        parts.append(hint)
+    if not parts:
+        return None
+    return _compact_hint(" · ".join(parts))
 
 
 def _os_window_label(
@@ -386,8 +416,8 @@ def _os_window_label(
         hierarchy=hierarchy,
         hierarchy_width=_OS_HIERARCHY_WIDTH,
         object_id=os_window.id,
-        state="active" if active_branch else None,
-        current=(
+        status="● focused" if active_branch else None,
+        detail=(
             f"{_count_label(len(os_window.tabs), 'tab')} · "
             f"{_count_label(pane_count, 'pane')}"
         ),
@@ -409,8 +439,15 @@ def _tab_label(
         hierarchy=title,
         hierarchy_width=_TAB_HIERARCHY_WIDTH,
         object_id=tab.id,
-        state=tab.layout,
-        current=None,
+        status="● focused" if active_branch else None,
+        detail=" · ".join(
+            part
+            for part in (
+                _count_label(len(tab.panes), "pane"),
+                tab.layout,
+            )
+            if part
+        ),
         hierarchy_style=_STYLE_ACTIVE_BRANCH if active_branch else "bold",
     )
     return label
@@ -426,28 +463,25 @@ def _pane_label(
     label = Text()
     is_active = bool(pane.is_active) if active is None else active
     title = _pane_row_title(pane, tab_title, display_title)
-    marker = "● " if is_active else "  "
     _append_outline_fields(
         label,
-        hierarchy=f"{marker}{title}",
+        hierarchy=title,
         hierarchy_width=_PANE_HIERARCHY_WIDTH,
         object_id=pane.id,
-        state=_pane_state_summary(pane, active=is_active),
-        current=_pane_current_summary(pane, title),
+        status=_pane_status_summary(pane, focused=is_active),
+        detail=_pane_detail_summary(pane, title),
         hierarchy_style="bold" if is_active else "",
     )
-    if is_active:
-        label.stylize(_STYLE_ACTIVE_MARKER, 0, 1)
     return label
 
 
 def _action_strip_text() -> Text:
     actions = (
-        ("Enter", "focus"),
-        ("/", "filter"),
-        ("a", "active"),
-        ("?", "help"),
-        ("q", "quit"),
+        ("Enter", "Focus"),
+        ("/", "Filter"),
+        ("a", "Focused pane"),
+        ("?", "Help"),
+        ("q", "Quit"),
     )
     text = Text()
     for index, (key, label) in enumerate(actions):
@@ -545,6 +579,35 @@ def _append_section(details: Text, title: str) -> None:
     details.append("\n")
 
 
+def _home_relative_path(value: str | None) -> str | None:
+    if not value:
+        return value
+    home = os.path.expanduser("~")
+    if home and home != "~":
+        if value == home:
+            return "~"
+        prefix = home.rstrip(os.sep) + os.sep
+        if value.startswith(prefix):
+            return "~/" + value[len(prefix) :]
+    return value
+
+
+def _abbreviate_identifier(value: str | None, *, head: int = 8, tail: int = 6) -> str | None:
+    if value is None or len(value) <= head + tail + 1:
+        return value
+    return f"{value[:head]}…{value[-tail:]}"
+
+
+def _command_executable(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        parts = shlex.split(value)
+    except ValueError:
+        return value
+    return parts[0] if parts else None
+
+
 def _append_identity(
     details: Text,
     kind: str,
@@ -594,7 +657,7 @@ def _prompt_state(pane: Pane) -> str | None:
     if pane.at_prompt is True:
         return "at prompt"
     if pane.at_prompt is False:
-        return "command running"
+        return "running"
     return None
 
 
@@ -611,7 +674,13 @@ def _os_window_details(
     title = display_title if display_title is not None else os_window.title
     _append_identity(details, "OS window", _display_name(title, f"OS {os_window.id or '?'}"), os_window.id)
     _append_section(details, "Summary")
-    _append_property(details, "State", "active" if os_window.is_active else "inactive")
+    focused = bool(os_window.is_active)
+    _append_property(
+        details,
+        "Focus",
+        "focused" if focused else "not focused",
+        value_style="bold" if focused else "",
+    )
     _append_property(details, "Tabs", len(os_window.tabs))
     _append_property(details, "Panes", sum(len(tab.panes) for tab in os_window.tabs))
     return details
@@ -632,8 +701,13 @@ def _tab_details(
     breadcrumb = f"OS #{os_window.id or '?'}"
     _append_identity(details, "Tab", _display_name(title, "(untitled)"), tab.id, breadcrumb)
     _append_section(details, "Summary")
-    state_value = "active" if os_window.is_active and tab.is_active else "inactive"
-    _append_property(details, "State", state_value)
+    focused = bool(os_window.is_active and tab.is_active)
+    _append_property(
+        details,
+        "Focus",
+        "focused" if focused else "not focused",
+        value_style="bold" if focused else "",
+    )
     _append_property(details, "Layout", tab.layout)
     _append_property(details, "Panes", len(tab.panes))
     return details
@@ -651,39 +725,36 @@ def _pane_position_long(pane: Pane) -> str | None:
     return f"{pane.tab_index} of {pane.tab_count}"
 
 
-def _pane_state_label(*, active: bool) -> str:
-    if active:
-        return "● ACTIVE"
-    return "○ inactive"
-
-
-def _append_pane_state(details: Text, pane: Pane, *, active: bool) -> None:
-    _append_section(details, "State")
-    details.append(
-        _pane_state_label(active=active),
-        style=_STYLE_ACTIVE_MARKER if active else "",
+def _append_pane_status(details: Text, pane: Pane, *, focused: bool) -> None:
+    _append_section(details, "Status")
+    _append_property(
+        details,
+        "Focus",
+        "focused" if focused else "not focused",
+        value_style="bold" if focused else "",
     )
-    details.append("\n")
-    prompt = _prompt_state(pane)
-    if prompt:
-        details.append(prompt.capitalize())
-        details.append("\n")
+    activity = _prompt_state(pane)
+    _append_property(
+        details,
+        "Activity",
+        activity,
+        value_style="bold" if activity == "running" else "",
+    )
 
     flags: list[str] = []
     if pane.title_overridden:
-        flags.append("Title locked")
+        flags.append("title locked")
     if pane.needs_attention:
-        flags.append("Needs attention")
+        flags.append("needs attention")
     if pane.has_activity_since_last_focus:
-        flags.append("Activity since focus")
-    for flag in flags:
-        details.append(flag, style=_STYLE_METADATA)
-        details.append("\n")
+        flags.append("activity since focus")
+    if flags:
+        _append_property(details, "Flags", ", ".join(flags), value_style="dim")
 
 
 def _append_pane_location(details: Text, pane: Pane) -> None:
     _append_section(details, "Location")
-    _append_property(details, "Path", pane.cwd, value_style="bold")
+    _append_property(details, "Path", _home_relative_path(pane.cwd), value_style="bold")
     _append_property(details, "Pane", _pane_position_long(pane))
     _append_property(details, "Size", _pane_size(pane))
     _append_property(details, "Neighbors", _pane_neighbors(pane))
@@ -710,16 +781,28 @@ def _shell_command(pane: Pane) -> str | None:
 
 def _append_pane_process(details: Text, pane: Pane) -> None:
     foreground = None if _is_shell_wrapper(pane.foreground_cmd) else pane.foreground_cmd
-    shell = _shell_command(pane)
-    if not any((pane.current_command, foreground, shell)) and pane.pid is None:
+    shell_command = _shell_command(pane)
+    shell_executable = _command_executable(shell_command)
+    shell_name = os.path.basename(shell_executable) if shell_executable else None
+    if not any((pane.current_command, foreground, shell_executable)) and pane.pid is None:
         return
 
     _append_section(details, "Process")
-    _append_property(details, "Command", pane.current_command, value_style="bold")
+    _append_property(
+        details,
+        "Command",
+        _compact_hint(pane.current_command, max_len=32),
+        value_style="bold",
+    )
     if foreground and not _same_identity(foreground, pane.current_command):
-        _append_property(details, "Foreground", foreground)
-    if shell and not _same_identity(shell, foreground):
-        _append_property(details, "Shell", shell)
+        _append_property(details, "Foreground", _compact_hint(foreground, max_len=32))
+    _append_property(details, "Shell", shell_name, value_style="bold" if shell_name else "")
+    if shell_executable and shell_executable != shell_name:
+        _append_property(
+            details,
+            "Executable",
+            _home_relative_path(shell_executable),
+        )
     _append_property(details, "PID", pane.pid)
 
 
@@ -740,10 +823,10 @@ def _append_session(
     _append_property(
         details,
         "Last",
-        activity.last_command or "No completed command",
+        _compact_hint(activity.last_command, max_len=32) or "No completed command",
         value_style="bold" if activity.last_command else "",
     )
-    _append_property(details, "Atuin", activity.session_id)
+    _append_property(details, "Session ID", _abbreviate_identifier(activity.session_id))
 
 
 def _pane_details(
@@ -761,11 +844,11 @@ def _pane_details(
     details = Text()
     title = display_title if display_title is not None else pane.title
     tab_title = _display_name(location.tab.title, "(untitled)")
-    breadcrumb = f"OS #{location.os_window.id or '?'} > {tab_title} #{location.tab.id or '?'}"
+    breadcrumb = f"OS #{location.os_window.id or '?'} › {tab_title} #{location.tab.id or '?'}"
     _append_identity(details, "Pane", _display_name(title, "(untitled)"), pane.id, breadcrumb)
 
-    active = bool(location.os_window.is_active and location.tab.is_active and pane.is_active)
-    _append_pane_state(details, pane, active=active)
+    focused = bool(location.os_window.is_active and location.tab.is_active and pane.is_active)
+    _append_pane_status(details, pane, focused=focused)
     _append_pane_location(details, pane)
     _append_pane_process(details, pane)
     _append_session(details, activity=activity, activity_loading=activity_loading)
@@ -845,14 +928,11 @@ class KittyTree(Tree[NodeRef]):
         base_style: Style,
         style: Style,
     ) -> Text:
-        """Preserve semantic colors while styling selection inside the label only."""
-        if node is self.cursor_node:
-            interaction_style = Style(
-                bgcolor=_selection_background(dark=self.app.current_theme.dark),
-                bold=True,
-            )
-        else:
-            interaction_style = Style(underline=style.underline)
+        """Preserve semantic colors; row selection is rendered separately."""
+        interaction_style = Style(
+            bold=node is self.cursor_node,
+            underline=style.underline,
+        )
         return super().render_label(node, base_style, interaction_style)
 
     def clear_bands(self) -> None:
@@ -943,25 +1023,20 @@ class KittyTree(Tree[NodeRef]):
         strip = super().render_line(y)
         strip = strip.extend_cell_length(self.size.width, self.rich_style)
 
+        dark = self.app.current_theme.dark
         if node is not None and node.data is not None:
-            dark = self.app.current_theme.dark
             background = _tree_row_background(
                 dark=dark,
                 banded=node.data in getattr(self, "_banded_refs", set()),
             )
             if background is not None:
-                strip = _apply_row_background(
-                    strip,
-                    background,
-                    preserve_background=(
-                        _selection_background(dark=dark)
-                        if absolute_line == self.cursor_line
-                        else None
-                    ),
-                )
+                strip = _apply_row_background(strip, background)
 
         if node is not None and node.data in getattr(self, "_active_branch_refs", set()):
             strip = _apply_active_branch(strip)
+
+        if node is not None and node.data is not None and absolute_line == self.cursor_line:
+            strip = _apply_selection(strip, _selection_background(dark=dark))
         return strip
 
     def action_collapse_or_parent(self) -> None:
@@ -1114,10 +1189,12 @@ class HelpScreen(ModalScreen[None]):
     @staticmethod
     def compose() -> ComposeResult:
         yield Static(
-            """[b]Navigate[/b]
+            """[b]Kitty sessions[/b] — inspect and focus tabs/panes.
+
+[b]Navigate[/b]
 j/k       move selection
 h/l       collapse / expand
-a         jump to active pane
+a         jump to focused pane
 /         filter
 
 [b]Act[/b]
@@ -1197,12 +1274,13 @@ class KittyManagerApp(App[None]):
     TITLE = "catherd"
     SUB_TITLE = "Kitty organizer"
     TREE_LABEL: ClassVar[str] = "Kitty"
+    BROWSER_TITLE: ClassVar[str] = "Kitty sessions — inspect and focus"
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("q", "quit", "Quit"),
         Binding("escape", "clear_filter", "Clear filter", show=False),
         Binding("/", "filter_tree", "Filter"),
-        Binding("a", "jump_active", "Active"),
+        Binding("a", "jump_active", "Focused pane"),
         Binding("r", "rename_selected", "Rename"),
         Binding("m", "move_selected", "Move"),
         Binding("M,shift+m", "merge_selected", "Merge"),
@@ -1230,9 +1308,10 @@ class KittyManagerApp(App[None]):
     }
 
     #tree-header {
-        height: 1;
+        height: 2;
         padding: 0 1;
         color: $text-muted;
+        border-bottom: solid $border-blurred;
     }
 
     #kitty-tree {
@@ -1318,7 +1397,7 @@ class KittyManagerApp(App[None]):
         tree.root.expand()
         yield Horizontal(
             Vertical(
-                Static(self.TREE_LABEL, id="browser-title"),
+                Static(self.BROWSER_TITLE, id="browser-title"),
                 Static(_tree_header(), id="tree-header"),
                 tree,
                 id="browser",
@@ -1350,6 +1429,39 @@ class KittyManagerApp(App[None]):
 
     def _details(self) -> Static:
         return self.query_one("#details", Static)
+
+    def _visible_counts(self) -> tuple[int, int, int]:
+        windows = tabs = panes = 0
+        for node in _walk_nodes(self._tree().root):
+            ref = node.data
+            if ref is None:
+                continue
+            if ref.kind == "os_window":
+                windows += 1
+            elif ref.kind == "tab":
+                tabs += 1
+            else:
+                panes += 1
+        return windows, tabs, panes
+
+    def _status_summary(self) -> str:
+        tab_count = sum(1 for _ in self.state.iter_tabs())
+        if self._filter_query:
+            _, visible_tabs, visible_panes = self._visible_counts()
+            return (
+                f"Showing {visible_panes} of {self.state.pane_count} panes · "
+                f"{visible_tabs} of {tab_count} tabs · filter: {self._filter_query}"
+            )
+        return " · ".join(
+            (
+                _count_label(len(self.state.os_windows), "OS window"),
+                _count_label(tab_count, "tab"),
+                _count_label(self.state.pane_count, "pane"),
+            )
+        )
+
+    def _show_status_summary(self) -> None:
+        self._status(self._status_summary())
 
     def _show_details(self, ref: NodeRef | None) -> None:
         if ref is None:
@@ -1675,17 +1787,7 @@ class KittyManagerApp(App[None]):
         selected = preferred or self._logical_selection or self._selected_ref()
         expanded = self._expanded_refs() if tree.root.children else None
         self._render_state(state, preferred=selected, expanded=expanded)
-        tab_count = sum(1 for _ in state.iter_tabs())
-        summary = " · ".join(
-            (
-                _count_label(len(state.os_windows), "OS window"),
-                _count_label(tab_count, "tab"),
-                _count_label(state.pane_count, "pane"),
-            )
-        )
-        if self._filter_query:
-            summary += f" · filter: {self._filter_query}"
-        self._status(summary)
+        self._show_status_summary()
 
     def action_refresh(self) -> None:
         if self._mutation_active:
@@ -1708,7 +1810,7 @@ class KittyManagerApp(App[None]):
             preferred=self._selected_ref(),
             expanded=self._expanded_refs(),
         )
-        self._status("Filter cleared")
+        self._show_status_summary()
 
     def _complete_filter(self, query: str | None) -> None:
         if query is None:
@@ -1719,15 +1821,12 @@ class KittyManagerApp(App[None]):
             preferred=self._selected_ref(),
             expanded=self._expanded_refs(),
         )
-        if query:
-            self._status(f"Filter: {query}")
-        else:
-            self._status("Filter cleared")
+        self._show_status_summary()
 
     def action_jump_active(self) -> None:
         active = self._initial_ref(self.state)
         if active is None:
-            self._status("No active Kitty object")
+            self._status("No focused Kitty pane")
             return
         self._filter_query = ""
         self._render_state(
@@ -1735,7 +1834,7 @@ class KittyManagerApp(App[None]):
             preferred=active,
             expanded=self._expanded_refs(),
         )
-        self._status("Selected active Kitty pane")
+        self._show_status_summary()
 
     def on_tree_node_highlighted(self, event: Tree.NodeHighlighted[NodeRef]) -> None:
         if event.node.data is not None:
