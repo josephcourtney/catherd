@@ -279,14 +279,17 @@ def _pane_label(
     pane: Pane,
     tab_title: str | None = None,
     display_title: str | None = None,
+    *,
+    active: bool | None = None,
 ) -> Text:
     label = Text()
+    is_active = pane.is_active if active is None else active
     label.append(
-        _active_marker(active=pane.is_active),
-        style=_STYLE_ACTIVE_MARKER if pane.is_active else "",
+        _active_marker(active=is_active),
+        style=_STYLE_ACTIVE_MARKER if is_active else "",
     )
     title = _pane_row_title(pane, tab_title, display_title)
-    label.append(_fit_tree_column(title), style="bold" if pane.is_active else "")
+    label.append(_fit_tree_column(title), style="bold" if is_active else "")
     label.append(f"  #{pane.id:<4}", style=_STYLE_METADATA)
     hint = _pane_activity_hint(pane)
     if hint and not _same_identity(hint, title):
@@ -484,7 +487,7 @@ def _tab_details(
     tokens = [(f"{len(tab.panes)} panes", "")]
     if tab.layout:
         tokens.append((tab.layout, _STYLE_DESCRIPTOR))
-    if tab.is_active:
+    if os_window.is_active and tab.is_active:
         tokens.insert(0, ("active branch", _STYLE_ACTIVE_BRANCH))
     _append_tokens(details, tokens)
     return details
@@ -501,9 +504,9 @@ def _pane_size(pane: Pane) -> str | None:
     return f"{pane.cols}×{pane.rows}"  # ruff: ignore[ambiguous-unicode-character-string]
 
 
-def _append_pane_status(details: Text, pane: Pane) -> None:
+def _append_pane_status(details: Text, pane: Pane, *, active: bool) -> None:
     tokens: list[tuple[str, str]] = []
-    tokens.append(("● active", _STYLE_ACTIVE_MARKER) if pane.is_active else ("inactive", ""))
+    tokens.append(("● active", _STYLE_ACTIVE_MARKER) if active else ("inactive", ""))
     prompt = _prompt_state(pane)
     if prompt:
         tokens.append((prompt, ""))
@@ -602,7 +605,8 @@ def _pane_details(
     breadcrumb = f"OS {location.os_window.id or '?'} > {tab_title} #{location.tab.id or '?'}"
     _append_identity(details, "Pane", _display_name(title, "(untitled)"), pane.id, breadcrumb)
     _append_pane_context(details, pane)
-    _append_pane_status(details, pane)
+    active = bool(location.os_window.is_active and location.tab.is_active and pane.is_active)
+    _append_pane_status(details, pane, active=active)
     _append_pane_process(details, pane)
     _append_session(details, activity=activity, activity_loading=activity_loading)
     return details
@@ -629,6 +633,7 @@ def selected_details(
         display_title=display_title,
     )
 
+
 def containing_os_window_id(state: KittyState, ref: NodeRef) -> str | None:
     """Return the OS window containing a referenced tree object."""
     if ref.kind == "os_window":
@@ -644,6 +649,22 @@ def _walk_nodes(node: TreeNode[NodeRef]) -> Iterator[TreeNode[NodeRef]]:
     yield node
     for child in node.children:
         yield from _walk_nodes(child)
+
+
+def _active_branch_refs(state: KittyState) -> set[NodeRef]:
+    for location in state.iter_panes():
+        if (
+            location.os_window.is_active
+            and location.tab.is_active
+            and location.pane.is_active
+        ):
+            refs = {NodeRef("pane", location.pane.id)}
+            if location.tab.id is not None:
+                refs.add(NodeRef("tab", location.tab.id))
+            if location.os_window.id is not None:
+                refs.add(NodeRef("os_window", location.os_window.id))
+            return refs
+    return set()
 
 
 class KittyTree(Tree[NodeRef]):
@@ -1170,6 +1191,11 @@ class KittyManagerApp(App[None]):
                     location.pane,
                     location.tab.title,
                     display_title,
+                    active=bool(
+                        location.os_window.is_active
+                        and location.tab.is_active
+                        and location.pane.is_active
+                    ),
                 )
             )
 
@@ -1253,20 +1279,7 @@ class KittyManagerApp(App[None]):
         tree = self._tree()
         tree.reset("Kitty")
         tree.clear_bands()
-        active_branch: set[NodeRef] = set()
-        for location in state.iter_panes():
-            if (
-                location.os_window.is_active
-                and location.tab.is_active
-                and location.pane.is_active
-            ):
-                if location.os_window.id is not None:
-                    active_branch.add(NodeRef("os_window", location.os_window.id))
-                if location.tab.id is not None:
-                    active_branch.add(NodeRef("tab", location.tab.id))
-                active_branch.add(NodeRef("pane", location.pane.id))
-                break
-        tree.set_active_branch(active_branch)
+        tree.set_active_branch(_active_branch_refs(state))
         tree.root.expand()
         nodes: dict[NodeRef, TreeNode[NodeRef]] = {}
         visible_windows = [
@@ -1329,6 +1342,7 @@ class KittyManagerApp(App[None]):
                 expanded,
                 reveal_all=reveal_all,
                 banded=bool(index % 2),
+                active_branch=bool(os_window.is_active and tab.is_active),
             )
 
     def _add_tab(
@@ -1340,6 +1354,7 @@ class KittyManagerApp(App[None]):
         *,
         reveal_all: bool = False,
         banded: bool = False,
+        active_branch: bool = False,
     ) -> None:
         if tab.id is None:
             return
@@ -1364,6 +1379,7 @@ class KittyManagerApp(App[None]):
                     pane,
                     tab.title,
                     self._display_names.get(pane_ref),
+                    active=bool(active_branch and pane.is_active),
                 ),
                 pane_ref,
             )
