@@ -435,28 +435,26 @@ def test_selected_title_uses_hierarchy() -> None:
 def test_selected_details_for_os_window() -> None:
     details = selected_details(_state(), NodeRef("os_window", "100"))
 
-    assert "OS WINDOW" in details.plain
-    assert "work  [100]" in details.plain
-    assert "CONTENTS" in details.plain
-    assert "Tabs" in details.plain
-    assert "2" in details.plain
-    assert "Panes" in details.plain
-    assert "3" in details.plain
-    assert "Kitty active" in details.plain
+    assert "OS WINDOW 100" in details.plain
+    assert "work" in details.plain
+    assert "SUMMARY" in details.plain
+    assert "● active" in details.plain
+    assert "2 tabs" in details.plain
+    assert "3 panes" in details.plain
+    assert "CONTENTS" not in details.plain
 
 
 @pytest.mark.small
 def test_selected_details_for_tab() -> None:
     details = selected_details(_state(), NodeRef("tab", "10"))
 
-    assert "TAB" in details.plain
-    assert "editor  [10]" in details.plain
+    assert "TAB 10" in details.plain
+    assert "editor" in details.plain
     assert "OS 100" in details.plain
-    assert "CONTENTS" in details.plain
-    assert "Layout" in details.plain
+    assert "SUMMARY" in details.plain
+    assert "active branch" in details.plain
+    assert "2 panes" in details.plain
     assert "splits" in details.plain
-    assert "Panes" in details.plain
-    assert "2" in details.plain
 
 
 @pytest.mark.small
@@ -467,25 +465,24 @@ def test_selected_details_for_pane_with_activity() -> None:
         activity=_activity("1"),
     )
 
-    assert "PANE" in details.plain
-    assert "nvim  [1]" in details.plain
-    assert "OS 100 > editor [10]" in details.plain
-    assert "LOCATION" in details.plain
-    assert "LOCATION ─" in details.plain
-    assert "/code/project" in details.plain
-    assert "1 of 2" in details.plain
-    assert "R:2" in details.plain
+    assert "PANE 1" in details.plain
+    assert "nvim" in details.plain
+    assert "OS 100 > editor #10" in details.plain
+    assert "cwd /code/project" in details.plain
+    assert "STATUS" in details.plain
+    assert "● active" in details.plain
+    assert "command running" in details.plain
+    assert "pane 1/2" in details.plain
     assert "120×40" in details.plain  # ruff: ignore[ambiguous-unicode-character-string]
-    assert "PROCESS ─" in details.plain
+    assert "R:2" in details.plain
+    assert "PROCESS" in details.plain
     assert "uv run pytest" in details.plain
     assert "/bin/zsh -l" in details.plain
-    assert "STATE ─" in details.plain
-    assert "command running" in details.plain
-    assert "Attention" in details.plain
-    assert "ATUIN ─" in details.plain
-    assert "session-1" in details.plain
-    assert "pytest -q" in details.plain
-    assert "Title locked" not in details.plain
+    assert "SESSION" in details.plain
+    assert "last pytest -q" in details.plain
+    assert "atuin session-1" in details.plain
+    assert "LOCATION" not in details.plain
+    assert "STATE" not in details.plain
 
 
 @pytest.mark.small
@@ -496,9 +493,8 @@ def test_selected_details_for_pane_loading() -> None:
         activity_loading=True,
     )
 
-    assert "ATUIN" in details.plain
-    assert "Session" in details.plain
-    assert details.plain.count("loading...") == 2
+    assert "SESSION" in details.plain
+    assert details.plain.count("loading…") == 1
 
 
 @pytest.mark.medium
@@ -521,7 +517,7 @@ async def test_details_panel_loads_activity_for_highlighted_pane() -> None:
         await app.workers.wait_for_complete()
         details = app.query_one("#details", Static)
         assert isinstance(details.content, Text)
-        assert "ATUIN" in details.content.plain
+        assert "SESSION" in details.content.plain
         assert "session-live" in details.content.plain
         assert "uv run pytest" in details.content.plain
 
@@ -568,25 +564,26 @@ def test_tree_labels_use_semantic_styles_instead_of_dim_metadata() -> None:
 
     os_label = _os_window_label(os_window)
     tab_label = _tab_label(tab)
-    pane_label = _pane_label(pane)
+    pane_label = _pane_label(pane, tab.title)
 
+    assert "● " not in os_label.plain
     assert _style_for(os_label, "OS ").italic
     assert _style_for(os_label, "OS ").color.name == "cyan"
-    assert _style_for(os_label, "2t/3p").color.name == "cyan"
+    assert _style_for(os_label, "2 tabs · 3 panes").color.name == "cyan"
 
     tab_title_style = _style_for(tab_label, "editor")
     assert tab_title_style.bold
-    assert tab_title_style.underline
-    assert _style_for(tab_label, "[10]").color.name == "cyan"
+    assert not tab_title_style.underline
+    assert _style_for(tab_label, "#10").color.name == "cyan"
     layout_style = _style_for(tab_label, "splits")
     assert layout_style.italic
-    assert layout_style.color.name == "magenta"
+    assert layout_style.color.name == "cyan"
 
     assert _style_for(pane_label, "nvim").bold
-    assert _style_for(pane_label, "[1]").color.name == "cyan"
+    assert _style_for(pane_label, "#1").color.name == "cyan"
     activity_style = _style_for(pane_label, "uv run pytest")
     assert activity_style.italic
-    assert activity_style.color.name == "magenta"
+    assert activity_style.color.name == "cyan"
 
     for label in (os_label, tab_label, pane_label):
         assert not any(
@@ -602,14 +599,15 @@ def test_inspector_uses_style_not_dimming_to_separate_metadata() -> None:
     kind_style = _style_for(details, "PANE")
     assert kind_style.italic
     assert kind_style.color.name == "cyan"
-    assert _style_for(details, "[1]").color.name == "cyan"
+    assert _style_for(details, "1").color.name == "cyan"
 
-    breadcrumb_style = _style_for(details, "OS 100 > editor [10]")
+    breadcrumb_style = _style_for(details, "OS 100 > editor #10")
     assert breadcrumb_style.italic
     assert breadcrumb_style.color.name == "cyan"
 
-    detail_label_style = _style_for(details, "CWD")
-    assert detail_label_style.bold
+    detail_label_style = _style_for(details, "cwd")
+    assert detail_label_style.italic
+    assert not detail_label_style.bold
     assert detail_label_style.color.name == "cyan"
     assert _style_for(details, "─").color.name == "cyan"
 
@@ -702,13 +700,53 @@ async def test_tree_rows_are_compact_and_mark_kitty_active() -> None:
         assert isinstance(pane.label, Text)
         assert "● " in pane.label.plain
         assert "nvim" in pane.label.plain
-        assert "[1]" in pane.label.plain
+        assert "#1" in pane.label.plain
         assert "uv run pytest" in pane.label.plain
         assert "/code/project" not in pane.label.plain
 
         inactive = _find_node(tree, NodeRef("pane", "2"))
         assert isinstance(inactive.label, Text)
         assert "● " not in inactive.label.plain
+
+
+@pytest.mark.small
+def test_redundant_pane_title_falls_back_to_process_identity() -> None:
+    pane = Pane(
+        id="12",
+        title="~/code/AirBattery",
+        root_cmdline="/opt/homebrew/bin/zsh",
+    )
+
+    label = _pane_label(pane, "~/code/AirBattery")
+
+    assert "~/code/AirBattery" not in label.plain
+    assert "zsh" in label.plain
+    assert "#12" in label.plain
+
+
+@pytest.mark.medium
+async def test_only_active_pane_has_green_marker_and_branch_is_tracked() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: KittyTree = app.query_one("#kitty-tree", KittyTree)
+
+        os_label = _find_node(tree, NodeRef("os_window", "100")).label
+        tab_label = _find_node(tree, NodeRef("tab", "10")).label
+        pane_label = _find_node(tree, NodeRef("pane", "1")).label
+        assert isinstance(os_label, Text)
+        assert isinstance(tab_label, Text)
+        assert isinstance(pane_label, Text)
+        assert "● " not in os_label.plain
+        assert "● " not in tab_label.plain
+        assert "● " in pane_label.plain
+        assert tree._active_branch_refs == {
+            NodeRef("os_window", "100"),
+            NodeRef("tab", "10"),
+            NodeRef("pane", "1"),
+        }
 
 
 @pytest.mark.medium
@@ -720,9 +758,11 @@ async def test_action_strip_is_quiet_static_help() -> None:
         await pilot.pause()
         actions = app.query_one("#actions", Static)
         assert isinstance(actions.content, str)
-        assert "/ Filter" in actions.content
-        assert "a Active" in actions.content
-        assert "J/K Reorder" in actions.content
+        assert "/ filter" in actions.content
+        assert "a active" in actions.content
+        assert "? help" in actions.content
+        assert "J/K" not in actions.content
+        assert "Merge" not in actions.content
 
 
 @pytest.mark.medium
