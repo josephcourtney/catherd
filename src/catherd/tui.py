@@ -572,8 +572,8 @@ def _append_section(details: Text, title: str) -> None:
 def _home_relative_path(value: str | None) -> str | None:
     if not value:
         return value
-    home = pathlib.Path("~").expanduser()
-    if home and home != "~":
+    home = str(pathlib.Path.home())
+    if home:
         if value == home:
             return "~"
         prefix = home.rstrip(os.sep) + os.sep
@@ -1155,6 +1155,8 @@ class HelpScreen(ModalScreen[None]):
         Binding("escape,?,q", "close", "Close", show=False),
     ]
 
+    HELP_DIALOG_ID: ClassVar[str] = "help-dialog"
+
     CSS = """
     HelpScreen {
         align: center middle;
@@ -1169,8 +1171,7 @@ class HelpScreen(ModalScreen[None]):
     }
     """
 
-    @staticmethod
-    def compose() -> ComposeResult:
+    def compose(self) -> ComposeResult:
         yield Static(
             """[b]Kitty sessions[/b] — inspect and focus tabs/panes.
 
@@ -1191,7 +1192,7 @@ Ctrl-R    refresh
 [b]General[/b]
 ?         help
 q         quit""",
-            id="help-dialog",
+            id=self.HELP_DIALOG_ID,
         )
 
     def action_close(self) -> None:
