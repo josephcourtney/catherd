@@ -99,9 +99,11 @@ def _display_name(value: str | None, fallback: str) -> str:
 
 
 _TREE_HINT_MAX = 36
-_TAB_NAME_WIDTH = 18
-_PANE_NAME_WIDTH = 22
-_TREE_ID_WIDTH = 4
+_OS_HIERARCHY_WIDTH = 28
+_TAB_HIERARCHY_WIDTH = 24
+_PANE_HIERARCHY_WIDTH = 20
+_TREE_ID_WIDTH = 5
+_TREE_STATE_WIDTH = 18
 
 _STYLE_ACTIVE_MARKER = "bold green"
 _STYLE_ACTIVE_BRANCH = "bold cyan"
@@ -113,6 +115,7 @@ _STYLE_DETAIL_LABEL = "italic cyan"
 _STYLE_SECTION = "cyan"
 _STYLE_SECTION_RULE = "cyan"
 _STYLE_BREADCRUMB = "italic cyan"
+_STYLE_HEADER = "bold"
 
 
 def _active_marker(*, active: bool | None) -> str:
@@ -120,28 +123,36 @@ def _active_marker(*, active: bool | None) -> str:
 
 
 def _tab_band_background(*, dark: bool) -> str:
-    return "#262626" if dark else "#f7f7f7"
+    return "#272727" if dark else "#f4f4f4"
 
 
-def _apply_tab_band(strip: Strip, *, dark: bool) -> Strip:
-    """Tint only the meaningful row content, not the full tree width."""
-    style = Style(bgcolor=_tab_band_background(dark=dark))
-    segments = list(strip)
-    last_content = max(
-        (
-            index
-            for index, segment in enumerate(segments)
-            if segment.text.strip()
-        ),
-        default=-1,
+def _tree_row_background(
+    *,
+    dark: bool,
+    banded: bool,
+    selected: bool,
+    hovered: bool,
+) -> str | None:
+    """Return the composed full-row background for the outline table."""
+    if selected:
+        if dark:
+            return "#294f68" if banded else "#31566f"
+        return "#365f7e" if banded else "#3e6786"
+    if hovered:
+        if dark:
+            return "#34383c" if banded else "#30363a"
+        return "#e9eff2" if banded else "#edf3f6"
+    if banded:
+        return _tab_band_background(dark=dark)
+    return None
+
+
+def _apply_row_background(strip: Strip, background: str) -> Strip:
+    style = Style(bgcolor=background)
+    return Strip(
+        list(Segment.apply_style(strip, post_style=style)),
+        strip.cell_length,
     )
-    rendered = [
-        next(iter(Segment.apply_style((segment,), post_style=style)))
-        if index <= last_content
-        else segment
-        for index, segment in enumerate(segments)
-    ]
-    return Strip(rendered, strip.cell_length)
 
 
 def _apply_active_branch(strip: Strip) -> Strip:
@@ -248,6 +259,38 @@ def _tree_id(value: str | None) -> str:
     return f"#{value or '?':<{_TREE_ID_WIDTH - 1}}"
 
 
+def _tree_header() -> Text:
+    header = Text()
+    header.append("  ")
+    header.append(_fit_tree_column("HIERARCHY", _OS_HIERARCHY_WIDTH), style=_STYLE_HEADER)
+    header.append("  ")
+    header.append(_fit_tree_column("ID", _TREE_ID_WIDTH), style=_STYLE_HEADER)
+    header.append(" ")
+    header.append(_fit_tree_column("STATE", _TREE_STATE_WIDTH), style=_STYLE_HEADER)
+    header.append("CURRENT", style=_STYLE_HEADER)
+    return header
+
+
+def _append_outline_fields(
+    label: Text,
+    *,
+    hierarchy: str,
+    hierarchy_width: int,
+    object_id: str | None,
+    state: str | None,
+    current: str | None,
+    hierarchy_style: str = "",
+) -> None:
+    label.append(_fit_tree_column(hierarchy, hierarchy_width), style=hierarchy_style)
+    label.append("  ")
+    object_id_text = _tree_id(object_id) if object_id else ""
+    label.append(_fit_tree_column(object_id_text, _TREE_ID_WIDTH), style=_STYLE_METADATA)
+    label.append(" ")
+    label.append(_fit_tree_column(state or "", _TREE_STATE_WIDTH), style=_STYLE_DESCRIPTOR)
+    if current:
+        label.append(current, style=_STYLE_DESCRIPTOR)
+
+
 def _same_identity(left: str | None, right: str | None) -> bool:
     if not left or not right:
         return False
@@ -275,20 +318,24 @@ def _pane_row_title(pane: Pane, tab_title: str | None, display_title: str | None
     return _display_name(title, "(untitled)")
 
 
-def _pane_row_metadata(pane: Pane, row_title: str) -> str | None:
+def _pane_state_summary(pane: Pane, *, active: bool) -> str:
     parts: list[str] = []
+    if active:
+        parts.append("active")
     if pane.tab_index is not None and pane.tab_count is not None and pane.tab_count > 1:
         parts.append(f"{pane.tab_index}/{pane.tab_count}")
     if pane.at_prompt is True:
         parts.append("prompt")
-    elif pane.at_prompt is False and not pane.current_command:
+    elif pane.at_prompt is False:
         parts.append("running")
+    return " · ".join(parts)
 
+
+def _pane_current_summary(pane: Pane, row_title: str) -> str | None:
     hint = _pane_activity_hint(pane)
     if hint and not _same_identity(hint, row_title):
-        parts.append(hint)
-
-    return " · ".join(parts) or None
+        return hint
+    return None
 
 
 def _os_window_label(
@@ -298,17 +345,19 @@ def _os_window_label(
     active_branch: bool = False,
 ) -> Text:
     label = Text()
-    name_style = _STYLE_ACTIVE_BRANCH if active_branch else "bold"
-    label.append("OS ", style=_STYLE_KIND)
-    label.append(_display_name(os_window.id, "?"), style=name_style)
     title = display_title if display_title is not None else os_window.title
+    hierarchy = f"OS {os_window.id or '?'}"
     if title:
-        label.append("  ")
-        label.append(title, style=name_style)
+        hierarchy += f"  {title}"
     pane_count = sum(len(tab.panes) for tab in os_window.tabs)
-    label.append(
-        f"  {len(os_window.tabs)} tabs · {pane_count} panes",
-        style=_STYLE_METADATA,
+    _append_outline_fields(
+        label,
+        hierarchy=hierarchy,
+        hierarchy_width=_OS_HIERARCHY_WIDTH,
+        object_id=None,
+        state="active" if active_branch else None,
+        current=f"{len(os_window.tabs)} tabs · {pane_count} panes",
+        hierarchy_style=_STYLE_ACTIVE_BRANCH if active_branch else "bold",
     )
     return label
 
@@ -321,13 +370,15 @@ def _tab_label(
 ) -> Text:
     label = Text()
     title = _display_name(display_title if display_title is not None else tab.title, "(untitled)")
-    name_style = _STYLE_ACTIVE_BRANCH if active_branch else "bold"
-    label.append(_fit_tree_column(title, _TAB_NAME_WIDTH), style=name_style)
-    label.append("  ")
-    label.append(_tree_id(tab.id), style=_STYLE_METADATA)
-    if tab.layout:
-        label.append(" ")
-        label.append(tab.layout, style=_STYLE_DESCRIPTOR)
+    _append_outline_fields(
+        label,
+        hierarchy=title,
+        hierarchy_width=_TAB_HIERARCHY_WIDTH,
+        object_id=tab.id,
+        state=tab.layout,
+        current=None,
+        hierarchy_style=_STYLE_ACTIVE_BRANCH if active_branch else "bold",
+    )
     return label
 
 
@@ -340,29 +391,25 @@ def _pane_label(
 ) -> Text:
     label = Text()
     is_active = pane.is_active if active is None else active
-    label.append(
-        _active_marker(active=is_active),
-        style=_STYLE_ACTIVE_MARKER if is_active else "",
-    )
-    label.append(_tree_id(pane.id), style=_STYLE_METADATA)
-    label.append(" ")
     title = _pane_row_title(pane, tab_title, display_title)
-    label.append(
-        _fit_tree_column(title, _PANE_NAME_WIDTH),
-        style="bold" if is_active else "",
+    marker = "● " if is_active else "  "
+    _append_outline_fields(
+        label,
+        hierarchy=f"{marker}{title}",
+        hierarchy_width=_PANE_HIERARCHY_WIDTH,
+        object_id=pane.id,
+        state=_pane_state_summary(pane, active=is_active),
+        current=_pane_current_summary(pane, title),
+        hierarchy_style="bold" if is_active else "",
     )
-    metadata = _pane_row_metadata(pane, title)
-    if metadata:
-        label.append("  ")
-        label.append(metadata, style=_STYLE_DESCRIPTOR)
+    if is_active:
+        label.stylize(_STYLE_ACTIVE_MARKER, 0, 1)
     return label
 
 
 def _action_strip_text() -> Text:
     actions = (
         ("Enter", "focus"),
-        ("r", "rename"),
-        ("m", "move"),
         ("/", "filter"),
         ("a", "active"),
         ("?", "help"),
