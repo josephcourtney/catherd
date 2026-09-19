@@ -1182,6 +1182,12 @@ class KittyManagerApp(App[None]):
         overflow-x: hidden;
     }
 
+    #kitty-tree > .tree--guides,
+    #kitty-tree > .tree--guides-hover,
+    #kitty-tree > .tree--guides-selected {
+        color: $text-muted;
+    }
+
     #details {
         width: 1fr;
         min-width: 34;
