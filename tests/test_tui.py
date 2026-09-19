@@ -832,7 +832,7 @@ async def test_action_strip_is_quiet_static_help() -> None:
         assert "J/K" not in actions.content.plain
         assert "Merge" not in actions.content.plain
         assert _style_for(actions.content, "Enter").bold
-        assert _style_for(actions.content, "focus").bold is not True
+        assert not _style_for(actions.content, "focus").bold
 
 
 @pytest.mark.medium
