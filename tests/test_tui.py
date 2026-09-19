@@ -21,7 +21,7 @@ from catherd.tui import (
     KittyTree,
     NodeRef,
     _active_marker,
-    _apply_tab_band,
+    _apply_row_background,
     _compact_hint,
     _compact_process_hint,
     _os_window_label,
@@ -30,6 +30,8 @@ from catherd.tui import (
     _preferred_textual_theme,
     _tab_band_background,
     _tab_label,
+    _tree_header,
+    _tree_row_background,
     containing_os_window_id,
     merge_os_window_destinations,
     merge_tab_destinations,
@@ -435,26 +437,25 @@ def test_selected_title_uses_hierarchy() -> None:
 def test_selected_details_for_os_window() -> None:
     details = selected_details(_state(), NodeRef("os_window", "100"))
 
-    assert "OS WINDOW 100" in details.plain
+    assert "OS WINDOW #100" in details.plain
     assert "work" in details.plain
     assert "SUMMARY" in details.plain
-    assert "● active" in details.plain
-    assert "2 tabs" in details.plain
-    assert "3 panes" in details.plain
-    assert "CONTENTS" not in details.plain
+    assert "State    active" in details.plain
+    assert "Tabs     2" in details.plain
+    assert "Panes    3" in details.plain
 
 
 @pytest.mark.small
 def test_selected_details_for_tab() -> None:
     details = selected_details(_state(), NodeRef("tab", "10"))
 
-    assert "TAB 10" in details.plain
+    assert "TAB #10" in details.plain
     assert "editor" in details.plain
-    assert "OS 100" in details.plain
+    assert "OS #100" in details.plain
     assert "SUMMARY" in details.plain
-    assert "active branch" in details.plain
-    assert "2 panes" in details.plain
-    assert "splits" in details.plain
+    assert "State    active" in details.plain
+    assert "Layout   splits" in details.plain
+    assert "Panes    2" in details.plain
 
 
 @pytest.mark.small
@@ -465,26 +466,28 @@ def test_selected_details_for_pane_with_activity() -> None:
         activity=_activity("1"),
     )
 
-    assert "PANE 1" in details.plain
+    assert "PANE #1" in details.plain
     assert "nvim" in details.plain
-    assert "OS 100 > editor #10" in details.plain
-    assert "/code/project" in details.plain
-    assert "cwd " not in details.plain
-    assert "STATUS" in details.plain
-    assert "● active" in details.plain
-    assert "command running" in details.plain
-    assert "pane 1/2" in details.plain
-    assert "120×40" in details.plain  # ruff: ignore[ambiguous-unicode-character-string]
-    assert "R:2" in details.plain
+    assert "OS #100 > editor #10" in details.plain
+
+    assert "STATE" in details.plain
+    assert "● ACTIVE" in details.plain
+    assert "Command running" in details.plain
+
+    assert "LOCATION" in details.plain
+    assert "Path     /code/project" in details.plain
+    assert "Pane     1 of 2" in details.plain
+    assert "Size     120 × 40" in details.plain  # ruff: ignore[ambiguous-unicode-character-string]
+    assert "NeighborsR:2" in details.plain
+
     assert "PROCESS" in details.plain
-    assert "uv run pytest" in details.plain
-    assert "/bin/zsh -l" in details.plain
+    assert "Command  uv run pytest" in details.plain
+    assert "Foregroundnvim" in details.plain
+    assert "Shell    /bin/zsh -l" in details.plain
+
     assert "RECENT" in details.plain
-    assert "pytest -q" in details.plain
-    assert "Atuin session-1" in details.plain
-    assert "SESSION" not in details.plain
-    assert "LOCATION" not in details.plain
-    assert "STATE" not in details.plain
+    assert "Last     pytest -q" in details.plain
+    assert "Atuin    session-1" in details.plain
 
 
 @pytest.mark.small
@@ -496,7 +499,19 @@ def test_selected_details_for_pane_loading() -> None:
     )
 
     assert "RECENT" in details.plain
-    assert details.plain.count("loading…") == 1
+    assert "Last     loading…" in details.plain
+
+
+@pytest.mark.small
+def test_selected_details_explains_empty_recent_command() -> None:
+    details = selected_details(
+        _state(),
+        NodeRef("pane", "1"),
+        activity=PaneActivity(session_id="session-1", last_command=None),
+    )
+
+    assert "Last     No completed command" in details.plain
+    assert "Atuin    session-1" in details.plain
 
 
 @pytest.mark.medium
@@ -529,18 +544,48 @@ async def test_details_panel_loads_activity_for_highlighted_pane() -> None:
 @pytest.mark.small
 @pytest.mark.parametrize(
     ("dark", "expected"),
-    [(True, "#262626"), (False, "#f7f7f7")],
+    [(True, "#272727"), (False, "#f4f4f4")],
 )
 def test_tab_band_background_tracks_theme(dark, expected) -> None:
     assert _tab_band_background(dark=dark) == expected
 
 
 @pytest.mark.small
-@pytest.mark.parametrize(
-    ("dark", "expected"),
-    [(True, "#262626"), (False, "#f7f7f7")],
-)
-def test_tab_band_tints_content_without_filling_unused_width(dark, expected) -> None:
+def test_tree_row_background_preserves_grouping_through_hover_and_selection() -> None:
+    assert _tree_row_background(
+        dark=False,
+        banded=True,
+        selected=False,
+        hovered=False,
+    ) == "#f4f4f4"
+    assert _tree_row_background(
+        dark=False,
+        banded=True,
+        selected=False,
+        hovered=True,
+    ) == "#e9eff2"
+    assert _tree_row_background(
+        dark=False,
+        banded=False,
+        selected=False,
+        hovered=True,
+    ) == "#edf3f6"
+    assert _tree_row_background(
+        dark=False,
+        banded=True,
+        selected=True,
+        hovered=True,
+    ) == "#365f7e"
+    assert _tree_row_background(
+        dark=False,
+        banded=False,
+        selected=True,
+        hovered=True,
+    ) == "#3e6786"
+
+
+@pytest.mark.small
+def test_row_background_spans_whole_strip() -> None:
     strip = Strip(
         [
             Segment("row", Style(bgcolor="red")),
@@ -548,15 +593,12 @@ def test_tab_band_tints_content_without_filling_unused_width(dark, expected) -> 
         ]
     )
 
-    banded = _apply_tab_band(strip, dark=dark)
-    segments = list(banded)
+    styled = _apply_row_background(strip, "#f4f4f4")
 
-    assert segments[0].style is not None
-    assert segments[0].style.bgcolor is not None
-    assert segments[0].style.bgcolor.name == expected
-    assert segments[1].style is not None
-    assert segments[1].style.bgcolor is not None
-    assert segments[1].style.bgcolor.name == "red"
+    for segment in styled:
+        assert segment.style is not None
+        assert segment.style.bgcolor is not None
+        assert segment.style.bgcolor.name == "#f4f4f4"
 
 
 @pytest.mark.small
@@ -566,65 +608,63 @@ def test_active_marker_does_not_reuse_tree_disclosure_triangle() -> None:
 
 
 @pytest.mark.small
-def test_tree_labels_use_semantic_styles_instead_of_dim_metadata() -> None:
+def test_outline_header_explains_tree_columns() -> None:
+    header = _tree_header()
+
+    assert "HIERARCHY" in header.plain
+    assert "ID" in header.plain
+    assert "STATE" in header.plain
+    assert "CURRENT" in header.plain
+    for heading in ("HIERARCHY", "ID", "STATE", "CURRENT"):
+        assert _style_for(header, heading).bold
+
+
+@pytest.mark.small
+def test_tree_labels_use_semantic_outline_columns() -> None:
     state = _state()
     os_window = state.os_windows[0]
     tab = os_window.tabs[0]
     pane = tab.panes[0]
 
-    os_label = _os_window_label(os_window)
-    tab_label = _tab_label(tab)
-    pane_label = _pane_label(pane, tab.title)
+    os_label = _os_window_label(os_window, active_branch=True)
+    tab_label = _tab_label(tab, active_branch=True)
+    pane_label = _pane_label(pane, tab.title, active=True)
 
-    assert "● " not in os_label.plain
-    assert _style_for(os_label, "OS ").italic
-    assert _style_for(os_label, "OS ").color.name == "cyan"
-    assert _style_for(os_label, "2 tabs · 3 panes").color.name == "cyan"
+    assert os_label.plain.index("OS 100") < os_label.plain.index("active")
+    assert os_label.plain.index("active") < os_label.plain.index("2 tabs · 3 panes")
 
-    tab_title_style = _style_for(tab_label, "editor")
-    assert tab_title_style.bold
-    assert not tab_title_style.underline
-    assert _style_for(tab_label, "#10").color.name == "cyan"
-    layout_style = _style_for(tab_label, "splits")
-    assert layout_style.italic
-    assert layout_style.color.name == "cyan"
+    assert tab_label.plain.index("editor") < tab_label.plain.index("#10")
+    assert tab_label.plain.index("#10") < tab_label.plain.index("splits")
 
-    assert pane_label.plain.index("#1") < pane_label.plain.index("nvim")
-    assert _style_for(pane_label, "nvim").bold
+    assert pane_label.plain.index("nvim") < pane_label.plain.index("#1")
+    assert pane_label.plain.index("#1") < pane_label.plain.index("active")
+    assert pane_label.plain.index("active") < pane_label.plain.index("uv run pytest")
+
+    assert _style_for(tab_label, "editor").bold
+    assert _style_for(tab_label, "editor").color.name == "cyan"
     assert _style_for(pane_label, "#1").color.name == "cyan"
-    activity_style = _style_for(pane_label, "uv run pytest")
-    assert activity_style.italic
-    assert activity_style.color.name == "cyan"
-
-    for label in (os_label, tab_label, pane_label):
-        assert not any(
-            (Style.parse(span.style) if isinstance(span.style, str) else span.style).dim
-            for span in label.spans
-        )
+    assert _style_for(pane_label, "uv run pytest").italic
 
 
 @pytest.mark.small
-def test_inspector_uses_style_not_dimming_to_separate_metadata() -> None:
+def test_inspector_uses_labels_to_explain_values() -> None:
     details = selected_details(_state(), NodeRef("pane", "1"), activity=_activity("1"))
 
     kind_style = _style_for(details, "PANE")
     assert kind_style.italic
     assert kind_style.color.name == "cyan"
-    assert _style_for(details, "1").color.name == "cyan"
+    assert _style_for(details, "#1").color.name == "cyan"
 
-    breadcrumb_style = _style_for(details, "OS 100 > editor #10")
+    breadcrumb_style = _style_for(details, "OS #100 > editor #10")
     assert breadcrumb_style.italic
     assert breadcrumb_style.color.name == "cyan"
 
-    section_style = _style_for(details, "STATUS")
-    assert not section_style.bold
-    assert section_style.color.name == "cyan"
+    assert _style_for(details, "STATE").color.name == "cyan"
+    assert _style_for(details, "Path").italic
+    assert _style_for(details, "Path").color.name == "cyan"
+    assert _style_for(details, "/code/project").bold
     assert _style_for(details, "─").color.name == "cyan"
 
-    assert not any(
-        (Style.parse(span.style) if isinstance(span.style, str) else span.style).dim
-        for span in details.spans
-    )
 
 
 @pytest.mark.small
