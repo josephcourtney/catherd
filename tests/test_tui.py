@@ -24,6 +24,7 @@ from catherd.tui import (
     _apply_row_background,
     _compact_hint,
     _compact_process_hint,
+    _count_label,
     _os_window_label,
     _pane_activity_hint,
     _pane_label,
@@ -421,6 +422,14 @@ def test_containing_os_window_id_resolves_all_node_kinds() -> None:
     assert containing_os_window_id(state, NodeRef("os_window", "100")) == "100"
     assert containing_os_window_id(state, NodeRef("tab", "10")) == "100"
     assert containing_os_window_id(state, NodeRef("pane", "1")) == "100"
+
+
+@pytest.mark.small
+def test_count_label_uses_singular_and_plural_grammar() -> None:
+    assert _count_label(1, "OS window") == "1 OS window"
+    assert _count_label(2, "OS window") == "2 OS windows"
+    assert _count_label(1, "pane") == "1 pane"
+    assert _count_label(2, "pane") == "2 panes"
 
 
 @pytest.mark.small
