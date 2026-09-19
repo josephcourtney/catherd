@@ -774,7 +774,7 @@ def test_inspector_uses_labels_to_explain_values() -> None:
 
 @pytest.mark.small
 def test_home_relative_paths_and_opaque_ids_are_compact(monkeypatch) -> None:
-    monkeypatch.setattr(tui_module.os.path, "expanduser", lambda _value: "/Users/example")
+    monkeypatch.setattr(tui_module.pathlib.Path, "home", classmethod(lambda cls: cls("/Users/example")))
 
     assert _home_relative_path("/Users/example/code/catherd") == "~/code/catherd"
     assert _home_relative_path("/var/work") == "/var/work"
