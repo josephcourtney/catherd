@@ -594,11 +594,42 @@ class KittyTree(Tree[NodeRef]):
             return
         super().action_select_cursor()
 
+    def _render_spacer_line(self, absolute_line: int) -> Strip:
+        line = self._tree_lines[absolute_line]
+        guide_style = self.get_component_rich_style("tree--guides", partial=True)
+        guides_hidden = self.get_component_styles("tree--guides").color.a == 0
+
+        if self.show_guides and not guides_hidden:
+            lines = self.LINES["default"]
+            if guide_style.bold:
+                lines = self.LINES["bold"]
+            elif guide_style.underline2:
+                lines = self.LINES["double"]
+            guide_depth = max(0, self.guide_depth - 2)
+
+            def guide_text(characters: str) -> str:
+                return f"{characters[0]}{characters[1] * guide_depth} "
+
+            space = guide_text(lines[0])
+            vertical = guide_text(lines[1])
+        else:
+            space = vertical = " " * self.guide_depth
+
+        guides = Text()
+        for ancestor in line.path[1:-1]:
+            guides.append(space if ancestor.is_last else vertical, style=guide_style)
+        guides.append(vertical, style=guide_style)
+
+        strip = Strip(list(guides.render(self.app.console)))
+        strip = strip.extend_cell_length(self.size.width, self.rich_style)
+        scroll_x = self.scroll_offset.x
+        return strip.crop(scroll_x, scroll_x + self.size.width)
+
     def render_line(self, y: int) -> Strip:
         absolute_line = y + self.scroll_offset.y
         node = self.get_node_at_line(absolute_line)
         if node is not None and node is not self.root and node.data is None:
-            return Strip.blank(self.size.width, self.rich_style)
+            return self._render_spacer_line(absolute_line)
 
         strip = super().render_line(y)
         if (
