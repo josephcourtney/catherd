@@ -840,7 +840,7 @@ def _pane_details(
     details = Text()
     title = display_title if display_title is not None else pane.title
     tab_title = _display_name(location.tab.title, "(untitled)")
-    breadcrumb = f"OS #{location.os_window.id or '?'} › {tab_title} #{location.tab.id or '?'}"
+    breadcrumb = f"OS #{location.os_window.id or '?'} › {tab_title} #{location.tab.id or '?'}"  # ruff: ignore[ambiguous-unicode-character-string]
     _append_identity(details, "Pane", _display_name(title, "(untitled)"), pane.id, breadcrumb)
 
     focused = bool(location.os_window.is_active and location.tab.is_active and pane.is_active)
