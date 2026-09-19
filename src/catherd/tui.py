@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Literal, Protocol
 
+from rich.segment import Segment
 from rich.style import Style
 from rich.text import Text
 from textual.app import App
@@ -106,6 +107,14 @@ def _active_marker(*, active: bool | None) -> str:
 
 def _tab_band_background(*, dark: bool) -> str:
     return "bright_black" if dark else "bright_white"
+
+
+def _apply_tab_band(strip: Strip, *, dark: bool) -> Strip:
+    style = Style(bgcolor=_tab_band_background(dark=dark))
+    return Strip(
+        Segment.apply_style(strip, post_style=style),
+        strip.cell_length,
+    )
 
 
 def _compact_hint(value: str | None, max_len: int = _TREE_HINT_MAX) -> str | None:
@@ -646,8 +655,7 @@ class KittyTree(Tree[NodeRef]):
         ):
             return strip
 
-        background = _tab_band_background(dark=self.app.current_theme.dark)
-        return strip.apply_style(Style(bgcolor=background))
+        return _apply_tab_band(strip, dark=self.app.current_theme.dark)
 
     def action_collapse_or_parent(self) -> None:
         node = self.cursor_node
