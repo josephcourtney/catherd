@@ -259,7 +259,7 @@ def _pane_row_title(pane: Pane, tab_title: str | None, display_title: str | None
     if title and not _same_identity(title, tab_title):
         return title
 
-    if pane.current_command and not _same_identity(pane.current_command, tab_title):
+    if pane.current_command:
         return _compact_hint(pane.current_command) or pane.current_command
 
     if pane.foreground_cmd and not _is_shell_wrapper(pane.foreground_cmd):
