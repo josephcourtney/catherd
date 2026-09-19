@@ -98,6 +98,11 @@ def _display_name(value: str | None, fallback: str) -> str:
     return value or fallback
 
 
+def _count_label(count: int, singular: str, plural: str | None = None) -> str:
+    word = singular if count == 1 else (plural or f"{singular}s")
+    return f"{count} {word}"
+
+
 _TREE_HINT_MAX = 36
 _OS_HIERARCHY_WIDTH = 28
 _TAB_HIERARCHY_WIDTH = 24
@@ -354,7 +359,10 @@ def _os_window_label(
         hierarchy_width=_OS_HIERARCHY_WIDTH,
         object_id=os_window.id,
         state="active" if active_branch else None,
-        current=f"{len(os_window.tabs)} tabs · {pane_count} panes",
+        current=(
+            f"{_count_label(len(os_window.tabs), 'tab')} · "
+            f"{_count_label(pane_count, 'pane')}"
+        ),
         hierarchy_style=_STYLE_ACTIVE_BRANCH if active_branch else "bold",
     )
     return label
@@ -1602,8 +1610,13 @@ class KittyManagerApp(App[None]):
         selected = preferred or self._logical_selection or self._selected_ref()
         expanded = self._expanded_refs() if tree.root.children else None
         self._render_state(state, preferred=selected, expanded=expanded)
-        summary = (
-            f"{len(state.os_windows)} OS windows · {sum(1 for _ in state.iter_tabs())} tabs · {state.pane_count} panes"
+        tab_count = sum(1 for _ in state.iter_tabs())
+        summary = " · ".join(
+            (
+                _count_label(len(state.os_windows), "OS window"),
+                _count_label(tab_count, "tab"),
+                _count_label(state.pane_count, "pane"),
+            )
         )
         if self._filter_query:
             summary += f" · filter: {self._filter_query}"
