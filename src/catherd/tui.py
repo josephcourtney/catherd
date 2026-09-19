@@ -99,12 +99,14 @@ def _display_name(value: str | None, fallback: str) -> str:
 
 
 _TREE_HINT_MAX = 36
+_TREE_NAME_WIDTH = 24
 
 _STYLE_ACTIVE_MARKER = "bold green"
+_STYLE_ACTIVE_BRANCH = "cyan"
 _STYLE_KIND = "italic cyan"
 _STYLE_METADATA = "cyan"
-_STYLE_DESCRIPTOR = "italic magenta"
-_STYLE_DETAIL_LABEL = "bold cyan"
+_STYLE_DESCRIPTOR = "italic cyan"
+_STYLE_DETAIL_LABEL = "italic cyan"
 _STYLE_SECTION_RULE = "cyan"
 _STYLE_BREADCRUMB = "italic cyan"
 
@@ -205,9 +207,35 @@ def _preferred_textual_theme() -> str | None:
     return None
 
 
+def _fit_tree_column(value: str, width: int = _TREE_NAME_WIDTH) -> str:
+    if len(value) > width:
+        value = value[: width - 1].rstrip() + "…"
+    return f"{value:<{width}}"
+
+
+def _same_identity(left: str | None, right: str | None) -> bool:
+    if not left or not right:
+        return False
+    return left.strip().casefold() == right.strip().casefold()
+
+
+def _pane_row_title(pane: Pane, tab_title: str | None, display_title: str | None = None) -> str:
+    title = display_title if display_title is not None else pane.title
+    if title and not _same_identity(title, tab_title):
+        return title
+
+    for candidate in (pane.root_cmdline, pane.foreground_cmd):
+        compact = _compact_process_hint(candidate)
+        if compact and not _same_identity(compact, tab_title):
+            return compact
+
+    if pane.current_command and not _same_identity(pane.current_command, tab_title):
+        return _compact_hint(pane.current_command) or pane.current_command
+    return _display_name(title, "(untitled)")
+
+
 def _os_window_label(os_window: OsWindow, display_title: str | None = None) -> Text:
     label = Text()
-    label.append(_active_marker(active=os_window.is_active), style=_STYLE_ACTIVE_MARKER if os_window.is_active else "")
     label.append("OS ", style=_STYLE_KIND)
     label.append(_display_name(os_window.id, "?"), style="bold")
     title = display_title if display_title is not None else os_window.title
@@ -215,32 +243,40 @@ def _os_window_label(os_window: OsWindow, display_title: str | None = None) -> T
         label.append("  ")
         label.append(title, style="bold")
     pane_count = sum(len(tab.panes) for tab in os_window.tabs)
-    label.append(f"  {len(os_window.tabs)}t/{pane_count}p", style=_STYLE_METADATA)
+    label.append(
+        f"  {len(os_window.tabs)} tabs · {pane_count} panes",
+        style=_STYLE_METADATA,
+    )
     return label
 
 
 def _tab_label(tab: Tab, display_title: str | None = None) -> Text:
     label = Text()
-    label.append(_active_marker(active=tab.is_active), style=_STYLE_ACTIVE_MARKER if tab.is_active else "")
-    title = display_title if display_title is not None else tab.title
-    title_style = "bold underline" if tab.is_active else "bold"
-    label.append(_display_name(title, "(untitled)"), style=title_style)
+    title = _display_name(display_title if display_title is not None else tab.title, "(untitled)")
+    label.append(_fit_tree_column(title), style="bold")
     if tab.id:
-        label.append(f"  [{tab.id}]", style=_STYLE_METADATA)
+        label.append(f"  #{tab.id:<4}", style=_STYLE_METADATA)
     if tab.layout:
-        label.append(f"  {tab.layout}", style=_STYLE_DESCRIPTOR)
+        label.append(f" {tab.layout}", style=_STYLE_DESCRIPTOR)
     return label
 
 
-def _pane_label(pane: Pane, display_title: str | None = None) -> Text:
+def _pane_label(
+    pane: Pane,
+    tab_title: str | None = None,
+    display_title: str | None = None,
+) -> Text:
     label = Text()
-    label.append(_active_marker(active=pane.is_active), style=_STYLE_ACTIVE_MARKER if pane.is_active else "")
-    title = display_title if display_title is not None else pane.title
-    label.append(_display_name(title, "(untitled)"), style="bold" if pane.is_active else "")
-    label.append(f"  [{pane.id}]", style=_STYLE_METADATA)
+    label.append(
+        _active_marker(active=pane.is_active),
+        style=_STYLE_ACTIVE_MARKER if pane.is_active else "",
+    )
+    title = _pane_row_title(pane, tab_title, display_title)
+    label.append(_fit_tree_column(title), style="bold" if pane.is_active else "")
+    label.append(f"  #{pane.id:<4}", style=_STYLE_METADATA)
     hint = _pane_activity_hint(pane)
-    if hint:
-        label.append(f"  {hint}", style=_STYLE_DESCRIPTOR)
+    if hint and not _same_identity(hint, title):
+        label.append(f" {hint}", style=_STYLE_DESCRIPTOR)
     return label
 
 
