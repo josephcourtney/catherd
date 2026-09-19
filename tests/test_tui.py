@@ -15,6 +15,7 @@ from catherd.model import KittyState, OsWindow, Pane, Tab
 from catherd.tui import (
     Destination,
     KittyManagerApp,
+    KittyTree,
     NodeRef,
     _active_marker,
     _compact_hint,
@@ -766,7 +767,7 @@ async def test_tui_renders_hierarchy_and_selects_active_pane() -> None:
     async with app.run_test() as pilot:
         await pilot.pause()
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
-        assert len(tree.root.children) == 2
+        assert _root_refs(tree) == [NodeRef("os_window", "100"), NodeRef("os_window", "200")]
         assert tree.cursor_node is not None
         assert tree.cursor_node.data == NodeRef("pane", "1")
         assert _find_node(tree, NodeRef("tab", "10")).is_expanded
