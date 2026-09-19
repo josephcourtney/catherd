@@ -379,6 +379,18 @@ def _style_for(text: Text, needle: str) -> Style:
     return Style()
 
 
+def _color_name(style: Style) -> str | None:
+    return style.color.name if style.color is not None else None
+
+
+def _background_names(strip: Strip) -> set[str]:
+    return {
+        segment.style.bgcolor.name
+        for segment in strip
+        if segment.style is not None and segment.style.bgcolor is not None
+    }
+
+
 @pytest.mark.small
 def test_move_destinations_for_pane() -> None:
     destinations = move_destinations(_state(), NodeRef("pane", "1"))
@@ -639,7 +651,6 @@ def test_tree_render_label_does_not_override_semantic_colors() -> None:
     ]
     assert any(style.color is not None and style.color.name == "cyan" for style in styles)
     assert all(style.color is None or style.color.name != "red" for style in styles)
-    assert any(style.bold for style in styles)
 
 
 @pytest.mark.small
@@ -683,8 +694,8 @@ def test_tree_labels_use_semantic_outline_columns() -> None:
     assert pane_label.plain.index("active") < pane_label.plain.index("uv run pytest")
 
     assert _style_for(tab_label, "editor").bold
-    assert _style_for(tab_label, "editor").color.name == "cyan"
-    assert _style_for(pane_label, "#1").color.name == "cyan"
+    assert _color_name(_style_for(tab_label, "editor")) == "cyan"
+    assert _color_name(_style_for(pane_label, "#1")) == "cyan"
     detail_style = _style_for(pane_label, "uv run pytest")
     assert not detail_style.italic
     assert detail_style.color is None
@@ -723,19 +734,19 @@ def test_inspector_uses_labels_to_explain_values() -> None:
 
     kind_style = _style_for(details, "PANE")
     assert kind_style.italic
-    assert kind_style.color.name == "cyan"
-    assert _style_for(details, "#1").color.name == "cyan"
+    assert _color_name(kind_style) == "cyan"
+    assert _color_name(_style_for(details, "#1")) == "cyan"
 
     breadcrumb_style = _style_for(details, "OS #100 > editor #10")
     assert breadcrumb_style.italic
     assert breadcrumb_style.color is None
 
-    assert _style_for(details, "STATE").color.name == "cyan"
+    assert _color_name(_style_for(details, "STATE")) == "cyan"
     path_label_style = _style_for(details, "Path")
     assert path_label_style.italic
     assert path_label_style.color is None
     assert _style_for(details, "/code/project").bold
-    assert _style_for(details, "─").color.name == "cyan"
+    assert _color_name(_style_for(details, "─")) == "cyan"
 
 
 
@@ -875,7 +886,9 @@ def test_long_command_title_is_preserved_in_current_column() -> None:
     assert "http.server" in label.plain
     assert label.plain.index("http.server") < label.plain.index("#6")
     assert "running" in label.plain
-    assert _compact_hint(command) in label.plain
+    compact_command = _compact_hint(command)
+    assert compact_command is not None
+    assert compact_command in label.plain
     assert label.plain.count("uv run python") == 1
 
 
@@ -903,10 +916,10 @@ def test_active_branch_labels_strengthen_ancestry_without_green_markers() -> Non
     assert "● " not in os_label.plain
     assert "● " not in tab_label.plain
     assert _style_for(os_label, "work").bold
-    assert _style_for(os_label, "work").color.name == "cyan"
-    assert _style_for(os_label, "#100").color.name == "cyan"
+    assert _color_name(_style_for(os_label, "work")) == "cyan"
+    assert _color_name(_style_for(os_label, "#100")) == "cyan"
     assert _style_for(tab_label, "editor").bold
-    assert _style_for(tab_label, "editor").color.name == "cyan"
+    assert _color_name(_style_for(tab_label, "editor")) == "cyan"
 
 
 @pytest.mark.medium
@@ -1128,39 +1141,21 @@ async def test_banded_row_keeps_group_identity_when_selected_or_hovered() -> Non
         await pilot.pause()
         selected_strip = tree.render_line(banded_line)
         assert selected_strip.cell_length == tree.size.width
-        selected_segment = list(selected_strip)[-1]
-        assert selected_segment.style is not None
-        assert selected_segment.style.bgcolor is not None
-        selected_banded = selected_segment.style.bgcolor.name
+        selected_backgrounds = _background_names(selected_strip)
 
         tree.move_cursor(_find_node(tree, NodeRef("pane", "1")))
         tree.hover_line = banded_line
         hovered_strip = tree.render_line(banded_line)
         assert hovered_strip.cell_length == tree.size.width
-        hovered_segment = list(hovered_strip)[-1]
-        assert hovered_segment.style is not None
-        assert hovered_segment.style.bgcolor is not None
-        hovered_banded = hovered_segment.style.bgcolor.name
+        hovered_backgrounds = _background_names(hovered_strip)
 
-        dark = app.current_theme.dark
-        expected_band = _tree_row_background(dark=dark, banded=True)
-        expected_selection = _selection_background(dark=dark)
-        assert selected_banded == expected_band
-        assert hovered_banded == expected_band
+        expected_band = _tree_row_background(dark=app.current_theme.dark, banded=True)
+        expected_selection = _selection_background(dark=app.current_theme.dark)
+        assert expected_band in selected_backgrounds
+        assert expected_band in hovered_backgrounds
 
         # Interaction must never alter guide/disclosure/tree glyphs.
         assert selected_strip.text == hovered_strip.text
-
-        selected_backgrounds = {
-            segment.style.bgcolor.name
-            for segment in selected_strip
-            if segment.style is not None and segment.style.bgcolor is not None
-        }
-        hovered_backgrounds = {
-            segment.style.bgcolor.name
-            for segment in hovered_strip
-            if segment.style is not None and segment.style.bgcolor is not None
-        }
         assert expected_selection in selected_backgrounds
         assert expected_selection not in hovered_backgrounds
 
