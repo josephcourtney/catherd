@@ -11,11 +11,13 @@ from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Literal, Protocol
 
+from rich.style import Style
 from rich.text import Text
 from textual.app import App
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
+from textual.strip import Strip
 from textual.widgets import Input, Label, OptionList, Static, Tree
 from textual.widgets.option_list import Option
 
@@ -539,7 +541,7 @@ def _walk_nodes(node: TreeNode[NodeRef]) -> Iterator[TreeNode[NodeRef]]:
 
 
 class KittyTree(Tree[NodeRef]):
-    """Tree with Vim-like navigation."""
+    """Tree with Vim-like navigation and lightweight group banding."""
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("enter,f,F", "focus_kitty", "Focus"),
@@ -549,6 +551,64 @@ class KittyTree(Tree[NodeRef]):
         Binding("h", "collapse_or_parent", "Collapse", show=False),
         Binding("l", "expand_or_child", "Expand", show=False),
     ]
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._banded_refs: set[NodeRef] = set()
+
+    def clear_bands(self) -> None:
+        self._banded_refs.clear()
+
+    def set_banded(self, ref: NodeRef, *, banded: bool) -> None:
+        if banded:
+            self._banded_refs.add(ref)
+        else:
+            self._banded_refs.discard(ref)
+
+    def _selectable_line(self, start: int, step: int) -> int | None:
+        line = start
+        while 0 <= line <= self.last_line:
+            node = self.get_node_at_line(line)
+            if node is not None and node.data is not None:
+                return line
+            line += step
+        return None
+
+    def action_cursor_up(self) -> None:
+        start = self.last_line if self.cursor_line == -1 else self.cursor_line - 1
+        line = self._selectable_line(start, -1)
+        if line is not None:
+            self.move_cursor_to_line(line)
+
+    def action_cursor_down(self) -> None:
+        start = 0 if self.cursor_line == -1 else self.cursor_line + 1
+        line = self._selectable_line(start, 1)
+        if line is not None:
+            self.move_cursor_to_line(line)
+
+    def action_select_cursor(self) -> None:
+        node = self.cursor_node
+        if node is None or node.data is None:
+            return
+        super().action_select_cursor()
+
+    def render_line(self, y: int) -> Strip:
+        absolute_line = y + self.scroll_offset.y
+        node = self.get_node_at_line(absolute_line)
+        if node is not None and node.data is None:
+            return Strip.blank(self.size.width, self.rich_style)
+
+        strip = super().render_line(y)
+        if (
+            node is None
+            or node.data not in self._banded_refs
+            or absolute_line == self.cursor_line
+            or absolute_line == self.hover_line
+        ):
+            return strip
+
+        background = "black" if self.app.current_theme.dark else "white"
+        return strip.apply_style(Style(bgcolor=background))
 
     def action_collapse_or_parent(self) -> None:
         node = self.cursor_node
@@ -567,7 +627,9 @@ class KittyTree(Tree[NodeRef]):
         if node.is_collapsed:
             node.expand()
             return
-        self.move_cursor(node.children[0])
+        child = next((candidate for candidate in node.children if candidate.data is not None), None)
+        if child is not None:
+            self.move_cursor(child)
 
     async def action_focus_kitty(self) -> None:
         await self.app.run_action("focus_selected")
@@ -988,9 +1050,17 @@ class KittyManagerApp(App[None]):
     ) -> None:
         tree = self._tree()
         tree.reset("Kitty")
+        tree.clear_bands()
         tree.root.expand()
         nodes: dict[NodeRef, TreeNode[NodeRef]] = {}
-        for os_window in state.os_windows:
+        visible_windows = [
+            os_window
+            for os_window in state.os_windows
+            if not self._filter_query or self._os_window_matches_filter(os_window)
+        ]
+        for index, os_window in enumerate(visible_windows):
+            if index:
+                tree.root.add_leaf(" ", None)
             self._add_os_window(tree.root, os_window, nodes, expanded)
         self.state = state
         target = preferred or self._logical_selection or self._initial_ref(state)
@@ -1028,8 +1098,22 @@ class KittyManagerApp(App[None]):
             expand=bool(self._filter_query) or expanded is None or ref in expanded,
         )
         nodes[ref] = node
-        for tab in os_window.tabs:
-            self._add_tab(node, tab, nodes, expanded, reveal_all=reveal_all)
+        visible_tabs = [
+            tab
+            for tab in os_window.tabs
+            if reveal_all or not self._filter_query or self._tab_matches_filter(tab)
+        ]
+        for index, tab in enumerate(visible_tabs):
+            if index:
+                node.add_leaf(" ", None)
+            self._add_tab(
+                node,
+                tab,
+                nodes,
+                expanded,
+                reveal_all=reveal_all,
+                banded=bool(index % 2),
+            )
 
     def _add_tab(
         self,
@@ -1039,6 +1123,7 @@ class KittyManagerApp(App[None]):
         expanded: set[NodeRef] | None,
         *,
         reveal_all: bool = False,
+        banded: bool = False,
     ) -> None:
         if tab.id is None:
             return
@@ -1052,6 +1137,8 @@ class KittyManagerApp(App[None]):
             expand=bool(self._filter_query) or expanded is None or ref in expanded,
         )
         nodes[ref] = node
+        tree = self._tree()
+        tree.set_banded(ref, banded=banded)
         for pane in tab.panes:
             if self._filter_query and not reveal_panes and not self._pane_matches_filter(pane):
                 continue
@@ -1060,6 +1147,7 @@ class KittyManagerApp(App[None]):
                 _pane_label(pane, self._display_names.get(pane_ref)),
                 pane_ref,
             )
+            tree.set_banded(pane_ref, banded=banded)
 
     def _schedule_cursor_restore(self, tree: KittyTree, node: TreeNode[NodeRef]) -> None:
         parent = node.parent
