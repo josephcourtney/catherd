@@ -553,44 +553,18 @@ async def test_details_panel_loads_activity_for_highlighted_pane() -> None:
 @pytest.mark.small
 @pytest.mark.parametrize(
     ("dark", "expected"),
-    [(True, "#272727"), (False, "#f4f4f4")],
+    [(True, "#2d3336"), (False, "#f4f4f4")],
 )
 def test_tab_band_background_tracks_theme(dark, expected) -> None:
     assert _tab_band_background(dark=dark) == expected
 
 
 @pytest.mark.small
-def test_tree_row_background_preserves_grouping_through_hover_and_selection() -> None:
-    assert _tree_row_background(
-        dark=False,
-        banded=True,
-        selected=False,
-        hovered=False,
-    ) == "#f4f4f4"
-    assert _tree_row_background(
-        dark=False,
-        banded=True,
-        selected=False,
-        hovered=True,
-    ) == "#e9eff2"
-    assert _tree_row_background(
-        dark=False,
-        banded=False,
-        selected=False,
-        hovered=True,
-    ) == "#edf3f6"
-    assert _tree_row_background(
-        dark=False,
-        banded=True,
-        selected=True,
-        hovered=True,
-    ) == "#365f7e"
-    assert _tree_row_background(
-        dark=False,
-        banded=False,
-        selected=True,
-        hovered=True,
-    ) == "#3e6786"
+def test_tree_row_background_depends_only_on_grouping() -> None:
+    assert _tree_row_background(dark=False, banded=True) == "#f4f4f4"
+    assert _tree_row_background(dark=True, banded=True) == "#2d3336"
+    assert _tree_row_background(dark=False, banded=False) is None
+    assert _tree_row_background(dark=True, banded=False) is None
 
 
 @pytest.mark.small
@@ -622,9 +596,9 @@ def test_outline_header_explains_tree_columns() -> None:
 
     assert "HIERARCHY" in header.plain
     assert "ID" in header.plain
-    assert "LAYOUT / STATE" in header.plain
-    assert "CURRENT / SUMMARY" in header.plain
-    for heading in ("HIERARCHY", "ID", "LAYOUT / STATE", "CURRENT / SUMMARY"):
+    assert "STATE" in header.plain
+    assert "DETAIL" in header.plain
+    for heading in ("HIERARCHY", "ID", "STATE", "DETAIL"):
         assert _style_for(header, heading).bold
 
 
@@ -653,7 +627,12 @@ def test_tree_labels_use_semantic_outline_columns() -> None:
     assert _style_for(tab_label, "editor").bold
     assert _style_for(tab_label, "editor").color.name == "cyan"
     assert _style_for(pane_label, "#1").color.name == "cyan"
-    assert _style_for(pane_label, "uv run pytest").italic
+    detail_style = _style_for(pane_label, "uv run pytest")
+    assert not detail_style.italic
+    assert detail_style.color is None
+    state_style = _style_for(tab_label, "splits")
+    assert not state_style.italic
+    assert state_style.color is None
 
 
 @pytest.mark.small
@@ -691,11 +670,12 @@ def test_inspector_uses_labels_to_explain_values() -> None:
 
     breadcrumb_style = _style_for(details, "OS #100 > editor #10")
     assert breadcrumb_style.italic
-    assert breadcrumb_style.color.name == "cyan"
+    assert breadcrumb_style.color is None
 
     assert _style_for(details, "STATE").color.name == "cyan"
-    assert _style_for(details, "Path").italic
-    assert _style_for(details, "Path").color.name == "cyan"
+    path_label_style = _style_for(details, "Path")
+    assert path_label_style.italic
+    assert path_label_style.color is None
     assert _style_for(details, "/code/project").bold
     assert _style_for(details, "─").color.name == "cyan"
 
@@ -834,9 +814,11 @@ def test_long_command_title_is_preserved_in_current_column() -> None:
 
     label = _pane_label(pane, "~/code/lecgan")
 
-    assert "uv run python" in label.plain
+    assert "http.server" in label.plain
+    assert label.plain.index("http.server") < label.plain.index("#6")
     assert "running" in label.plain
     assert _compact_hint(command) in label.plain
+    assert label.plain.count("uv run python") == 1
 
 
 @pytest.mark.small
@@ -1103,18 +1085,11 @@ async def test_banded_row_keeps_group_identity_when_selected_or_hovered() -> Non
         hovered_banded = hovered_segment.style.bgcolor.name
 
         dark = app.current_theme.dark
-        assert selected_banded == _tree_row_background(
-            dark=dark,
-            banded=True,
-            selected=True,
-            hovered=False,
-        )
-        assert hovered_banded == _tree_row_background(
-            dark=dark,
-            banded=True,
-            selected=False,
-            hovered=True,
-        )
+        expected_band = _tree_row_background(dark=dark, banded=True)
+        assert selected_banded == expected_band
+        assert hovered_banded == expected_band
+        assert selected_strip.text.startswith("▌")
+        assert not hovered_strip.text.startswith("▌")
 
 
 @pytest.mark.medium
@@ -1130,8 +1105,8 @@ async def test_tui_renders_hierarchy_and_selects_active_pane() -> None:
         assert isinstance(header.content, Text)
         assert "HIERARCHY" in header.content.plain
         assert "ID" in header.content.plain
-        assert "LAYOUT / STATE" in header.content.plain
-        assert "CURRENT / SUMMARY" in header.content.plain
+        assert "STATE" in header.content.plain
+        assert "DETAIL" in header.content.plain
         assert _root_refs(tree) == [NodeRef("os_window", "100"), NodeRef("os_window", "200")]
         assert tree.cursor_node is not None
         assert tree.cursor_node.data == NodeRef("pane", "1")
