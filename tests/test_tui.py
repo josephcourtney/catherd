@@ -440,9 +440,9 @@ def test_selected_details_for_os_window() -> None:
     assert "OS WINDOW #100" in details.plain
     assert "work" in details.plain
     assert "SUMMARY" in details.plain
-    assert "State    active" in details.plain
-    assert "Tabs     2" in details.plain
-    assert "Panes    3" in details.plain
+    assert "State      active" in details.plain
+    assert "Tabs       2" in details.plain
+    assert "Panes      3" in details.plain
 
 
 @pytest.mark.small
@@ -453,9 +453,9 @@ def test_selected_details_for_tab() -> None:
     assert "editor" in details.plain
     assert "OS #100" in details.plain
     assert "SUMMARY" in details.plain
-    assert "State    active" in details.plain
-    assert "Layout   splits" in details.plain
-    assert "Panes    2" in details.plain
+    assert "State      active" in details.plain
+    assert "Layout     splits" in details.plain
+    assert "Panes      2" in details.plain
 
 
 @pytest.mark.small
@@ -475,19 +475,19 @@ def test_selected_details_for_pane_with_activity() -> None:
     assert "Command running" in details.plain
 
     assert "LOCATION" in details.plain
-    assert "Path     /code/project" in details.plain
-    assert "Pane     1 of 2" in details.plain
-    assert "Size     120 × 40" in details.plain  # ruff: ignore[ambiguous-unicode-character-string]
-    assert "NeighborsR:2" in details.plain
+    assert "Path       /code/project" in details.plain
+    assert "Pane       1 of 2" in details.plain
+    assert "Size       120 × 40" in details.plain  # ruff: ignore[ambiguous-unicode-character-string]
+    assert "Neighbors  R:2" in details.plain
 
     assert "PROCESS" in details.plain
-    assert "Command  uv run pytest" in details.plain
-    assert "Foregroundnvim" in details.plain
-    assert "Shell    /bin/zsh -l" in details.plain
+    assert "Command    uv run pytest" in details.plain
+    assert "Foreground nvim" in details.plain
+    assert "Shell      /bin/zsh -l" in details.plain
 
     assert "RECENT" in details.plain
-    assert "Last     pytest -q" in details.plain
-    assert "Atuin    session-1" in details.plain
+    assert "Last       pytest -q" in details.plain
+    assert "Atuin      session-1" in details.plain
 
 
 @pytest.mark.small
@@ -499,7 +499,7 @@ def test_selected_details_for_pane_loading() -> None:
     )
 
     assert "RECENT" in details.plain
-    assert "Last     loading…" in details.plain
+    assert "Last       loading…" in details.plain
 
 
 @pytest.mark.small
@@ -510,8 +510,8 @@ def test_selected_details_explains_empty_recent_command() -> None:
         activity=PaneActivity(session_id="session-1", last_command=None),
     )
 
-    assert "Last     No completed command" in details.plain
-    assert "Atuin    session-1" in details.plain
+    assert "Last       No completed command" in details.plain
+    assert "Atuin      session-1" in details.plain
 
 
 @pytest.mark.medium
@@ -869,10 +869,16 @@ async def test_action_strip_is_quiet_static_help() -> None:
         assert "/ filter" in actions.content.plain
         assert "a active" in actions.content.plain
         assert "? help" in actions.content.plain
+        assert "r rename" not in actions.content.plain
+        assert "m move" not in actions.content.plain
         assert "J/K" not in actions.content.plain
         assert "Merge" not in actions.content.plain
         assert _style_for(actions.content, "Enter").bold
         assert not _style_for(actions.content, "focus").bold
+
+        footer = app.query_one("#footer")
+        status = app.query_one("#status", Static)
+        assert footer is status.parent
 
 
 @pytest.mark.medium
@@ -1022,6 +1028,13 @@ async def test_tui_renders_hierarchy_and_selects_active_pane() -> None:
     async with app.run_test() as pilot:
         await pilot.pause()
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        assert not tree.show_root
+        header = app.query_one("#tree-header", Static)
+        assert isinstance(header.content, Text)
+        assert "HIERARCHY" in header.content.plain
+        assert "ID" in header.content.plain
+        assert "STATE" in header.content.plain
+        assert "CURRENT" in header.content.plain
         assert _root_refs(tree) == [NodeRef("os_window", "100"), NodeRef("os_window", "200")]
         assert tree.cursor_node is not None
         assert tree.cursor_node.data == NodeRef("pane", "1")
