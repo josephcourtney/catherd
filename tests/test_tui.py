@@ -825,12 +825,14 @@ async def test_action_strip_is_quiet_static_help() -> None:
     async with app.run_test() as pilot:
         await pilot.pause()
         actions = app.query_one("#actions", Static)
-        assert isinstance(actions.content, str)
-        assert "/ filter" in actions.content
-        assert "a active" in actions.content
-        assert "? help" in actions.content
-        assert "J/K" not in actions.content
-        assert "Merge" not in actions.content
+        assert isinstance(actions.content, Text)
+        assert "/ filter" in actions.content.plain
+        assert "a active" in actions.content.plain
+        assert "? help" in actions.content.plain
+        assert "J/K" not in actions.content.plain
+        assert "Merge" not in actions.content.plain
+        assert _style_for(actions.content, "Enter").bold
+        assert _style_for(actions.content, "focus").bold is not True
 
 
 @pytest.mark.medium
