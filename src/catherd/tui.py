@@ -357,6 +357,25 @@ def _pane_label(
     return label
 
 
+def _action_strip_text() -> Text:
+    actions = (
+        ("Enter", "focus"),
+        ("r", "rename"),
+        ("m", "move"),
+        ("/", "filter"),
+        ("a", "active"),
+        ("?", "help"),
+        ("q", "quit"),
+    )
+    text = Text()
+    for index, (key, label) in enumerate(actions):
+        if index:
+            text.append("   ")
+        text.append(key, style="bold")
+        text.append(f" {label}")
+    return text
+
+
 def _matches_query(query: str, *values: object | None) -> bool:
     needle = query.casefold()
     return any(value is not None and needle in str(value).casefold() for value in values)
@@ -1157,10 +1176,7 @@ class KittyManagerApp(App[None]):
             id="main",
         )
         yield Static("Loading Kitty state…", id="status")
-        yield Static(
-            "Enter focus   r rename   m move   / filter   a active   ? help   q quit",
-            id="actions",
-        )
+        yield Static(_action_strip_text(), id="actions")
 
     async def on_mount(self) -> None:
         await self.refresh_state()
