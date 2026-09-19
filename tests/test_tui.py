@@ -497,7 +497,7 @@ def test_selected_details_for_pane_with_activity() -> None:
 
     assert "PANE #1" in details.plain
     assert "nvim" in details.plain
-    assert "OS #100 › editor #10" in details.plain
+    assert "OS #100 › editor #10" in details.plain  # ruff: ignore[ambiguous-unicode-character-string]
 
     assert "STATUS" in details.plain
     assert "Focus      focused" in details.plain
@@ -760,7 +760,7 @@ def test_inspector_uses_labels_to_explain_values() -> None:
     assert id_style.dim
     assert id_style.color is None
 
-    breadcrumb_style = _style_for(details, "OS #100 › editor #10")
+    breadcrumb_style = _style_for(details, "OS #100 › editor #10")  # ruff: ignore[ambiguous-unicode-character-string]
     assert breadcrumb_style.dim
     assert not breadcrumb_style.italic
     assert breadcrumb_style.color is None
@@ -782,7 +782,7 @@ def test_home_relative_paths_and_opaque_ids_are_compact(monkeypatch) -> None:
     monkeypatch.setattr(tui_module.os.path, "expanduser", lambda _value: "/Users/example")
 
     assert _home_relative_path("/Users/example/code/catherd") == "~/code/catherd"
-    assert _home_relative_path("/tmp/work") == "/tmp/work"
+    assert _home_relative_path("/var/work") == "/var/work"
     assert _abbreviate_identifier("01a0b73179e7711183ac42d84ca228c5") == "01a0b731…a228c5"
 
 
