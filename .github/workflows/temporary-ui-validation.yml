@@ -5,31 +5,20 @@ on:
     branches:
       - ui-makeover
 
-permissions:
-  contents: write
-
 jobs:
   check:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v7
       - run: uv sync
-      - name: Normalize changed files
-        run: |
-          uv run ruff check --fix src/catherd/tui.py tests/test_tui.py
-          uv run ruff format src/catherd/tui.py tests/test_tui.py
-          if ! git diff --quiet -- src/catherd/tui.py tests/test_tui.py; then
-            git config user.name github-actions[bot]
-            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-            git add src/catherd/tui.py tests/test_tui.py
-            git commit -m "format and lint TUI refinement"
-            git push
-          fi
+      - name: Format changed files
+        run: uv run ruff format --check src/catherd/tui.py tests/test_tui.py
       - name: Lint changed files
         run: uv run ruff check --no-fix src/catherd/tui.py tests/test_tui.py
-      - name: Typecheck repository
+      - name: Typecheck source and tests
         run: uv run ty check src tests
-      - name: TUI tests
-        run: uv run pytest --no-cov tests/test_tui.py
+      - name: Import architecture
+        run: uv run lint-imports --cache-dir .cache/import-linter --verbose --config import-linter.toml
+      - name: Full test suite
+        run: uv run pytest --no-cov tests
