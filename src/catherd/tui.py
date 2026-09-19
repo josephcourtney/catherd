@@ -121,7 +121,6 @@ _STYLE_SECTION = "cyan"
 _STYLE_SECTION_RULE = "cyan"
 _STYLE_BREADCRUMB = "italic"
 _STYLE_HEADER = "bold"
-_STYLE_SELECTION = "bold cyan"
 
 
 def _active_marker(*, active: bool | None) -> str:
