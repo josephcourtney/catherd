@@ -130,10 +130,6 @@ _STATUS_STYLES: tuple[tuple[str, str], ...] = (
 )
 
 
-def _active_marker(*, active: bool | None) -> str:
-    return "● " if active else "  "
-
-
 def _tab_band_background(*, dark: bool) -> str:
     return "#2d3336" if dark else "#f4f4f4"
 
