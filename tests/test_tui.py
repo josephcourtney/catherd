@@ -468,7 +468,8 @@ def test_selected_details_for_pane_with_activity() -> None:
     assert "PANE 1" in details.plain
     assert "nvim" in details.plain
     assert "OS 100 > editor #10" in details.plain
-    assert "cwd /code/project" in details.plain
+    assert "/code/project" in details.plain
+    assert "cwd " not in details.plain
     assert "STATUS" in details.plain
     assert "● active" in details.plain
     assert "command running" in details.plain
@@ -478,9 +479,10 @@ def test_selected_details_for_pane_with_activity() -> None:
     assert "PROCESS" in details.plain
     assert "uv run pytest" in details.plain
     assert "/bin/zsh -l" in details.plain
-    assert "SESSION" in details.plain
-    assert "last pytest -q" in details.plain
-    assert "atuin session-1" in details.plain
+    assert "RECENT" in details.plain
+    assert "pytest -q" in details.plain
+    assert "Atuin session-1" in details.plain
+    assert "SESSION" not in details.plain
     assert "LOCATION" not in details.plain
     assert "STATE" not in details.plain
 
@@ -493,7 +495,7 @@ def test_selected_details_for_pane_loading() -> None:
         activity_loading=True,
     )
 
-    assert "SESSION" in details.plain
+    assert "RECENT" in details.plain
     assert details.plain.count("loading…") == 1
 
 
@@ -517,7 +519,7 @@ async def test_details_panel_loads_activity_for_highlighted_pane() -> None:
         await app.workers.wait_for_complete()
         details = app.query_one("#details", Static)
         assert isinstance(details.content, Text)
-        assert "SESSION" in details.content.plain
+        assert "RECENT" in details.content.plain
         assert "session-live" in details.content.plain
         assert "uv run pytest" in details.content.plain
 
@@ -527,7 +529,7 @@ async def test_details_panel_loads_activity_for_highlighted_pane() -> None:
 @pytest.mark.small
 @pytest.mark.parametrize(
     ("dark", "expected"),
-    [(True, "bright_black"), (False, "bright_white")],
+    [(True, "grey15"), (False, "grey97")],
 )
 def test_tab_band_background_tracks_theme(dark, expected) -> None:
     assert _tab_band_background(dark=dark) == expected
@@ -538,15 +540,23 @@ def test_tab_band_background_tracks_theme(dark, expected) -> None:
     ("dark", "expected"),
     [(True, "bright_black"), (False, "bright_white")],
 )
-def test_tab_band_overrides_existing_row_background(dark, expected) -> None:
-    strip = Strip([Segment("row", Style(bgcolor="red"))])
+def test_tab_band_tints_content_without_filling_unused_width(dark, expected) -> None:
+    strip = Strip(
+        [
+            Segment("row", Style(bgcolor="red")),
+            Segment("      ", Style(bgcolor="red")),
+        ]
+    )
 
     banded = _apply_tab_band(strip, dark=dark)
+    segments = list(banded)
 
-    segment = next(iter(banded))
-    assert segment.style is not None
-    assert segment.style.bgcolor is not None
-    assert segment.style.bgcolor.name == expected
+    assert segments[0].style is not None
+    assert segments[0].style.bgcolor is not None
+    assert segments[0].style.bgcolor.name == expected
+    assert segments[1].style is not None
+    assert segments[1].style.bgcolor is not None
+    assert segments[1].style.bgcolor.name == "red"
 
 
 @pytest.mark.small
@@ -579,6 +589,7 @@ def test_tree_labels_use_semantic_styles_instead_of_dim_metadata() -> None:
     assert layout_style.italic
     assert layout_style.color.name == "cyan"
 
+    assert pane_label.plain.index("#1") < pane_label.plain.index("nvim")
     assert _style_for(pane_label, "nvim").bold
     assert _style_for(pane_label, "#1").color.name == "cyan"
     activity_style = _style_for(pane_label, "uv run pytest")
@@ -605,10 +616,9 @@ def test_inspector_uses_style_not_dimming_to_separate_metadata() -> None:
     assert breadcrumb_style.italic
     assert breadcrumb_style.color.name == "cyan"
 
-    detail_label_style = _style_for(details, "cwd")
-    assert detail_label_style.italic
-    assert not detail_label_style.bold
-    assert detail_label_style.color.name == "cyan"
+    section_style = _style_for(details, "STATUS")
+    assert not section_style.bold
+    assert section_style.color.name == "cyan"
     assert _style_for(details, "─").color.name == "cyan"
 
     assert not any(
@@ -724,6 +734,9 @@ def test_redundant_pane_title_falls_back_to_process_identity() -> None:
         id="12",
         title="~/code/AirBattery",
         root_cmdline="/opt/homebrew/bin/zsh",
+        at_prompt=True,
+        tab_index=1,
+        tab_count=2,
     )
 
     label = _pane_label(pane, "~/code/AirBattery")
@@ -731,6 +744,37 @@ def test_redundant_pane_title_falls_back_to_process_identity() -> None:
     assert "~/code/AirBattery" not in label.plain
     assert "zsh" in label.plain
     assert "#12" in label.plain
+    assert "1/2" in label.plain
+    assert "prompt" in label.plain
+
+
+@pytest.mark.small
+def test_repeated_pane_title_prefers_current_command_over_shell() -> None:
+    pane = Pane(
+        id="17",
+        title="catherd tui",
+        current_command="catherd tui",
+        root_cmdline="/opt/homebrew/bin/zsh",
+    )
+
+    label = _pane_label(pane, "catherd tui")
+
+    assert "catherd tui" in label.plain
+    assert "zsh" not in label.plain
+
+
+@pytest.mark.small
+def test_active_branch_labels_strengthen_ancestry_without_green_markers() -> None:
+    state = _state()
+    os_label = _os_window_label(state.os_windows[0], active_branch=True)
+    tab_label = _tab_label(state.os_windows[0].tabs[0], active_branch=True)
+
+    assert "● " not in os_label.plain
+    assert "● " not in tab_label.plain
+    assert _style_for(os_label, "100").bold
+    assert _style_for(os_label, "100").color.name == "cyan"
+    assert _style_for(tab_label, "editor").bold
+    assert _style_for(tab_label, "editor").color.name == "cyan"
 
 
 @pytest.mark.medium
