@@ -106,7 +106,7 @@ def _count_label(count: int, singular: str, plural: str | None = None) -> str:
 _TREE_HINT_MAX = 36
 _OS_HIERARCHY_WIDTH = 28
 _TAB_HIERARCHY_WIDTH = 24
-_PANE_HIERARCHY_WIDTH = 20
+_PANE_HIERARCHY_WIDTH = 22
 _TREE_ID_WIDTH = 5
 _TREE_STATE_WIDTH = 18
 
@@ -266,7 +266,7 @@ def _tree_id(value: str | None) -> str:
 
 def _tree_header() -> Text:
     header = Text()
-    header.append(" ")
+    header.append("     ")
     header.append(_fit_tree_column("HIERARCHY", _OS_HIERARCHY_WIDTH), style=_STYLE_HEADER)
     header.append("  ")
     header.append(_fit_tree_column("ID", _TREE_ID_WIDTH), style=_STYLE_HEADER)
