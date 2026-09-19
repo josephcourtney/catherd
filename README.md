@@ -10,7 +10,7 @@ Run:
 catherd tui
 ```
 
-The TUI displays Kitty's hierarchy as OS windows → tabs → panes. The tree is intentionally compact: it shows identity plus one meaningful activity/layout hint, while the fixed-width inspector separates richer metadata with labeled section rules. A persistent `●` marks the object currently active in Kitty; the highlighted row is the selection inside catherd. Generic shell-wrapper process hints are suppressed. Mouse clicks only change the catherd selection, while focusing the corresponding Kitty object is explicit.
+The TUI displays Kitty's hierarchy as OS windows → tabs → panes. The tree is intentionally compact: it shows identity plus one meaningful activity/layout hint, separates tab and OS-window groups with blank rows, and gives alternating tab subtrees a subtle theme-aware background band. The fixed-width inspector separates richer metadata with labeled section rules. A persistent `●` marks the object currently active in Kitty; the highlighted row is the selection inside catherd. Generic shell-wrapper process hints are suppressed. Mouse clicks only change the catherd selection, while focusing the corresponding Kitty object is explicit.
 
 | Key | Action |
 | --- | --- |
