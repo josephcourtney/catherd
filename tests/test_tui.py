@@ -790,6 +790,23 @@ def test_redundant_pane_title_falls_back_to_process_identity() -> None:
 
 
 @pytest.mark.small
+def test_long_command_title_is_preserved_in_current_column() -> None:
+    command = "uv run python -m http.server --bind 127.0.0.1"
+    pane = Pane(
+        id="6",
+        title=command,
+        current_command=command,
+        at_prompt=False,
+    )
+
+    label = _pane_label(pane, "~/code/lecgan")
+
+    assert "uv run python" in label.plain
+    assert "running" in label.plain
+    assert command in label.plain
+
+
+@pytest.mark.small
 def test_repeated_pane_title_prefers_current_command_over_shell() -> None:
     pane = Pane(
         id="17",
