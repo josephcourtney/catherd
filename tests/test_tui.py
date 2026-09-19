@@ -380,15 +380,20 @@ def _style_for(text: Text, needle: str) -> Style:
 
 
 def _color_name(style: Style) -> str | None:
-    return style.color.name if style.color is not None else None
+    color = style.color
+    return color.name if color is not None else None
+
+
+def _background_name(style: Style | None) -> str | None:
+    if style is None:
+        return None
+    background = style.bgcolor
+    return background.name if background is not None else None
 
 
 def _background_names(strip: Strip) -> set[str]:
-    return {
-        segment.style.bgcolor.name
-        for segment in strip
-        if segment.style is not None and segment.style.bgcolor is not None
-    }
+    names = (_background_name(segment.style) for segment in strip)
+    return {name for name in names if name is not None}
 
 
 @pytest.mark.small
@@ -649,8 +654,8 @@ def test_tree_render_label_does_not_override_semantic_colors() -> None:
         for span in rendered.spans
         if span.start <= id_offset < span.end
     ]
-    assert any(style.color is not None and style.color.name == "cyan" for style in styles)
-    assert all(style.color is None or style.color.name != "red" for style in styles)
+    assert any(_color_name(style) == "cyan" for style in styles)
+    assert all(_color_name(style) != "red" for style in styles)
 
 
 @pytest.mark.small
