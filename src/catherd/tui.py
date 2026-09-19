@@ -137,12 +137,25 @@ def _tree_row_background(*, dark: bool, banded: bool) -> str | None:
     return _tab_band_background(dark=dark) if banded else None
 
 
-def _apply_row_background(strip: Strip, background: str) -> Strip:
+def _apply_row_background(
+    strip: Strip,
+    background: str,
+    *,
+    preserve_background: str | None = None,
+) -> Strip:
     style = Style(bgcolor=background)
-    return Strip(
-        list(Segment.apply_style(strip, post_style=style)),
-        strip.cell_length,
-    )
+    rendered: list[Segment] = []
+    for segment in strip:
+        segment_background = segment.style.bgcolor if segment.style is not None else None
+        if (
+            preserve_background is not None
+            and segment_background is not None
+            and segment_background.name == preserve_background
+        ):
+            rendered.append(segment)
+            continue
+        rendered.extend(Segment.apply_style((segment,), post_style=style))
+    return Strip(rendered, strip.cell_length)
 
 
 def _apply_active_branch(strip: Strip) -> Strip:
@@ -931,12 +944,21 @@ class KittyTree(Tree[NodeRef]):
         strip = strip.extend_cell_length(self.size.width, self.rich_style)
 
         if node is not None and node.data is not None:
+            dark = self.app.current_theme.dark
             background = _tree_row_background(
-                dark=self.app.current_theme.dark,
+                dark=dark,
                 banded=node.data in getattr(self, "_banded_refs", set()),
             )
             if background is not None:
-                strip = _apply_row_background(strip, background)
+                strip = _apply_row_background(
+                    strip,
+                    background,
+                    preserve_background=(
+                        _selection_background(dark=dark)
+                        if absolute_line == self.cursor_line
+                        else None
+                    ),
+                )
 
         if node is not None and node.data in getattr(self, "_active_branch_refs", set()):
             strip = _apply_active_branch(strip)
