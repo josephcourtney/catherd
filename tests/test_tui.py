@@ -648,6 +648,30 @@ def test_tree_labels_use_semantic_outline_columns() -> None:
 
 
 @pytest.mark.small
+def test_outline_columns_align_across_tree_depths() -> None:
+    state = _state()
+    os_window = state.os_windows[0]
+    tab = os_window.tabs[0]
+    pane = tab.panes[0]
+
+    os_label = _os_window_label(os_window, active_branch=True)
+    tab_label = _tab_label(tab, active_branch=True)
+    pane_label = _pane_label(pane, tab.title, active=True)
+
+    # Textual uses four cells per hierarchy level. Expandable OS/tab rows
+    # also receive a two-cell disclosure prefix; pane leaves do not.
+    os_id_cell = 4 + 2 + os_label.plain.index("#100")
+    tab_id_cell = 8 + 2 + tab_label.plain.index("#10")
+    pane_id_cell = 12 + pane_label.plain.index("#1")
+    assert os_id_cell == tab_id_cell == pane_id_cell
+
+    os_state_cell = 4 + 2 + os_label.plain.index("active")
+    tab_state_cell = 8 + 2 + tab_label.plain.index("splits")
+    pane_state_cell = 12 + pane_label.plain.index("active")
+    assert os_state_cell == tab_state_cell == pane_state_cell
+
+
+@pytest.mark.small
 def test_inspector_uses_labels_to_explain_values() -> None:
     details = selected_details(_state(), NodeRef("pane", "1"), activity=_activity("1"))
 
