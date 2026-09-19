@@ -540,7 +540,7 @@ def _append_property(
 ) -> None:
     if value is None or value == "":
         return
-    details.append(f"{label:<9}", style=_STYLE_DETAIL_LABEL)
+    details.append(f"{label:<11}", style=_STYLE_DETAIL_LABEL)
     details.append(str(value), style=value_style)
     details.append("\n")
 
