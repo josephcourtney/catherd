@@ -5,17 +5,28 @@ on:
     branches:
       - ui-makeover
 
+permissions:
+  contents: write
+
 jobs:
   check:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v7
       - run: uv sync
-      - name: Show formatter changes
+      - name: Normalize changed files
         run: |
+          uv run ruff check --fix src/catherd/tui.py tests/test_tui.py
           uv run ruff format src/catherd/tui.py tests/test_tui.py
-          git diff -- src/catherd/tui.py tests/test_tui.py
+          if ! git diff --quiet -- src/catherd/tui.py tests/test_tui.py; then
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git add src/catherd/tui.py tests/test_tui.py
+            git commit -m "format and lint TUI refinement"
+            git push
+          fi
       - name: Lint changed files
         run: uv run ruff check --no-fix src/catherd/tui.py tests/test_tui.py
       - name: Typecheck repository
