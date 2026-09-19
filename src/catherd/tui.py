@@ -556,18 +556,16 @@ class KittyTree(Tree[NodeRef]):
         Binding("l", "expand_or_child", "Expand", show=False),
     ]
 
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+    def clear_bands(self) -> None:
         self._banded_refs: set[NodeRef] = set()
 
-    def clear_bands(self) -> None:
-        self._banded_refs.clear()
-
     def set_banded(self, ref: NodeRef, *, banded: bool) -> None:
+        banded_refs = getattr(self, "_banded_refs", set())
         if banded:
-            self._banded_refs.add(ref)
+            banded_refs.add(ref)
         else:
-            self._banded_refs.discard(ref)
+            banded_refs.discard(ref)
+        self._banded_refs = banded_refs
 
     def _selectable_line(self, start: int, step: int) -> int | None:
         line = start
@@ -599,13 +597,13 @@ class KittyTree(Tree[NodeRef]):
     def render_line(self, y: int) -> Strip:
         absolute_line = y + self.scroll_offset.y
         node = self.get_node_at_line(absolute_line)
-        if node is not None and node.data is None:
+        if node is not None and node is not self.root and node.data is None:
             return Strip.blank(self.size.width, self.rich_style)
 
         strip = super().render_line(y)
         if (
             node is None
-            or node.data not in self._banded_refs
+            or node.data not in getattr(self, "_banded_refs", set())
             or absolute_line == self.cursor_line
             or absolute_line == self.hover_line
         ):
