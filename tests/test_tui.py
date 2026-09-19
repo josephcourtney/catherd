@@ -21,6 +21,7 @@ from catherd.tui import (
     _compact_process_hint,
     _pane_activity_hint,
     _preferred_textual_theme,
+    _tab_band_background,
     containing_os_window_id,
     merge_os_window_destinations,
     merge_tab_destinations,
@@ -345,6 +346,10 @@ def _child_refs(tree: Tree[NodeRef], ref: NodeRef) -> list[NodeRef]:
     return [data for child in _find_node(tree, ref).children if (data := child.data) is not None]
 
 
+def _root_refs(tree: Tree[NodeRef]) -> list[NodeRef]:
+    return [data for child in tree.root.children if (data := child.data) is not None]
+
+
 def _line_for_ref(tree: Tree[NodeRef], ref: NodeRef) -> int:
     for line in range(tree.last_line + 1):
         node = tree.get_node_at_line(line)
@@ -508,6 +513,15 @@ async def test_details_panel_loads_activity_for_highlighted_pane() -> None:
 
 
 @pytest.mark.small
+@pytest.mark.parametrize(
+    ("dark", "expected"),
+    [(True, "black"), (False, "white")],
+)
+def test_tab_band_background_tracks_theme(dark, expected) -> None:
+    assert _tab_band_background(dark=dark) == expected
+
+
+@pytest.mark.small
 def test_active_marker_does_not_reuse_tree_disclosure_triangle() -> None:
     assert _active_marker(active=True) == "● "
     assert _active_marker(active=False) == "  "
@@ -656,7 +670,7 @@ async def test_escape_clears_tree_filter() -> None:
 
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
         assert app._filter_query == ""
-        assert len(tree.root.children) == 2
+        assert _root_refs(tree) == [NodeRef("os_window", "100"), NodeRef("os_window", "200")]
 
 
 @pytest.mark.medium
@@ -680,6 +694,68 @@ async def test_jump_active_clears_filter_and_selects_active_pane() -> None:
         assert tree.cursor_node.data == NodeRef("pane", "1")
         assert app._filter_query == ""
         assert _find_node(tree, NodeRef("os_window", "200"))
+
+
+@pytest.mark.medium
+async def test_tree_inserts_blank_spacing_between_tabs_and_windows() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+
+        assert [child.data for child in tree.root.children] == [
+            NodeRef("os_window", "100"),
+            None,
+            NodeRef("os_window", "200"),
+        ]
+        os_node = _find_node(tree, NodeRef("os_window", "100"))
+        assert [child.data for child in os_node.children] == [
+            NodeRef("tab", "10"),
+            None,
+            NodeRef("tab", "11"),
+        ]
+
+        spacer = tree.root.children[1]
+        spacer_line = next(
+            line
+            for line in range(tree.last_line + 1)
+            if tree.get_node_at_line(line) is spacer
+        )
+        assert tree.render_line(spacer_line).text.strip() == ""
+
+
+@pytest.mark.medium
+async def test_tree_navigation_skips_blank_spacers() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        tree.move_cursor(_find_node(tree, NodeRef("pane", "2")))
+
+        await pilot.press("j")
+        await pilot.pause()
+
+        assert tree.cursor_node is not None
+        assert tree.cursor_node.data == NodeRef("tab", "11")
+
+
+@pytest.mark.medium
+async def test_alternate_tab_subtree_is_banded() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: KittyTree = app.query_one("#kitty-tree", KittyTree)
+
+        assert NodeRef("tab", "10") not in tree._banded_refs
+        assert NodeRef("pane", "1") not in tree._banded_refs
+        assert NodeRef("tab", "11") in tree._banded_refs
+        assert NodeRef("pane", "3") in tree._banded_refs
 
 
 @pytest.mark.medium
