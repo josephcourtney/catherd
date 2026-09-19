@@ -1054,6 +1054,7 @@ async def test_banded_row_keeps_group_identity_when_selected_or_hovered() -> Non
         tree.move_cursor(banded_node)
         await pilot.pause()
         selected_strip = tree.render_line(banded_line)
+        assert selected_strip.cell_length == tree.size.width
         selected_segment = list(selected_strip)[-1]
         assert selected_segment.style is not None
         assert selected_segment.style.bgcolor is not None
@@ -1062,6 +1063,7 @@ async def test_banded_row_keeps_group_identity_when_selected_or_hovered() -> Non
         tree.move_cursor(_find_node(tree, NodeRef("pane", "1")))
         tree.hover_line = banded_line
         hovered_strip = tree.render_line(banded_line)
+        assert hovered_strip.cell_length == tree.size.width
         hovered_segment = list(hovered_strip)[-1]
         assert hovered_segment.style is not None
         assert hovered_segment.style.bgcolor is not None
