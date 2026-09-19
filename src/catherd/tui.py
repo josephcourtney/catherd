@@ -623,7 +623,7 @@ def _pane_position_long(pane: Pane) -> str | None:
     return f"{pane.tab_index} of {pane.tab_count}"
 
 
-def _pane_state_label(pane: Pane, *, active: bool) -> str:
+def _pane_state_label(*, active: bool) -> str:
     if active:
         return "● ACTIVE"
     return "○ inactive"
@@ -632,7 +632,7 @@ def _pane_state_label(pane: Pane, *, active: bool) -> str:
 def _append_pane_state(details: Text, pane: Pane, *, active: bool) -> None:
     _append_section(details, "State")
     details.append(
-        _pane_state_label(pane, active=active),
+        _pane_state_label(active=active),
         style=_STYLE_ACTIVE_MARKER if active else "",
     )
     details.append("\n")
