@@ -718,13 +718,27 @@ async def test_tree_inserts_blank_spacing_between_tabs_and_windows() -> None:
             NodeRef("tab", "11"),
         ]
 
-        spacer = tree.root.children[1]
-        spacer_line = next(
+        window_spacer = tree.root.children[1]
+        window_spacer_line = next(
             line
             for line in range(tree.last_line + 1)
-            if tree.get_node_at_line(line) is spacer
+            if tree.get_node_at_line(line) is window_spacer
         )
-        assert tree.render_line(spacer_line).text.strip() == ""
+        window_gap = tree.render_line(window_spacer_line).text
+        assert "│" in window_gap
+        assert "├" not in window_gap
+        assert "└" not in window_gap
+
+        tab_spacer = os_node.children[1]
+        tab_spacer_line = next(
+            line
+            for line in range(tree.last_line + 1)
+            if tree.get_node_at_line(line) is tab_spacer
+        )
+        tab_gap = tree.render_line(tab_spacer_line).text
+        assert "│" in tab_gap
+        assert "├" not in tab_gap
+        assert "└" not in tab_gap
 
 
 @pytest.mark.medium
