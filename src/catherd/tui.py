@@ -261,7 +261,7 @@ def _tree_id(value: str | None) -> str:
 
 def _tree_header() -> Text:
     header = Text()
-    header.append("  ")
+    header.append(" ")
     header.append(_fit_tree_column("HIERARCHY", _OS_HIERARCHY_WIDTH), style=_STYLE_HEADER)
     header.append("  ")
     header.append(_fit_tree_column("ID", _TREE_ID_WIDTH), style=_STYLE_HEADER)
