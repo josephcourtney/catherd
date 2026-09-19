@@ -516,7 +516,7 @@ async def test_details_panel_loads_activity_for_highlighted_pane() -> None:
 @pytest.mark.small
 @pytest.mark.parametrize(
     ("dark", "expected"),
-    [(True, "black"), (False, "white")],
+    [(True, "bright_black"), (False, "bright_white")],
 )
 def test_tab_band_background_tracks_theme(dark, expected) -> None:
     assert _tab_band_background(dark=dark) == expected
