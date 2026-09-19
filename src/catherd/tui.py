@@ -256,11 +256,11 @@ def _same_identity(left: str | None, right: str | None) -> bool:
 def _pane_row_title(pane: Pane, tab_title: str | None, display_title: str | None = None) -> str:
     title = display_title if display_title is not None else pane.title
 
-    if pane.current_command and not _same_identity(pane.current_command, tab_title):
-        return _compact_hint(pane.current_command) or pane.current_command
-
     if title and not _same_identity(title, tab_title):
         return title
+
+    if pane.current_command and not _same_identity(pane.current_command, tab_title):
+        return _compact_hint(pane.current_command) or pane.current_command
 
     if pane.foreground_cmd and not _is_shell_wrapper(pane.foreground_cmd):
         compact = _compact_process_hint(pane.foreground_cmd)
