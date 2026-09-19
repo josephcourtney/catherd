@@ -594,8 +594,7 @@ class KittyTree(Tree[NodeRef]):
             return
         super().action_select_cursor()
 
-    def _render_spacer_line(self, absolute_line: int) -> Strip:
-        line = self._tree_lines[absolute_line]
+    def _render_spacer_line(self, node: TreeNode[NodeRef]) -> Strip:
         guide_style = self.get_component_rich_style("tree--guides", partial=True)
         guides_hidden = self.get_component_styles("tree--guides").color.a == 0
 
@@ -615,8 +614,15 @@ class KittyTree(Tree[NodeRef]):
         else:
             space = vertical = " " * self.guide_depth
 
+        ancestors: list[TreeNode[NodeRef]] = []
+        ancestor = node.parent
+        while ancestor is not None and ancestor is not self.root:
+            ancestors.append(ancestor)
+            ancestor = ancestor.parent
+        ancestors.reverse()
+
         guides = Text()
-        for ancestor in line.path[1:-1]:
+        for ancestor in ancestors:
             guides.append(space if ancestor.is_last else vertical, style=guide_style)
         guides.append(vertical, style=guide_style)
 
@@ -629,7 +635,7 @@ class KittyTree(Tree[NodeRef]):
         absolute_line = y + self.scroll_offset.y
         node = self.get_node_at_line(absolute_line)
         if node is not None and node is not self.root and node.data is None:
-            return self._render_spacer_line(absolute_line)
+            return self._render_spacer_line(node)
 
         strip = super().render_line(y)
         if (
