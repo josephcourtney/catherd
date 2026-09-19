@@ -591,12 +591,10 @@ def test_tree_row_background_depends_only_on_grouping() -> None:
 
 @pytest.mark.small
 def test_row_background_spans_whole_strip() -> None:
-    strip = Strip(
-        [
-            Segment("row", Style(bgcolor="red")),
-            Segment("      ", Style(bgcolor="red")),
-        ]
-    )
+    strip = Strip([
+        Segment("row", Style(bgcolor="red")),
+        Segment("      ", Style(bgcolor="red")),
+    ])
 
     styled = _apply_row_background(strip, "#f4f4f4")
 
@@ -617,12 +615,10 @@ def test_selection_background_tracks_theme(dark, expected) -> None:
 
 @pytest.mark.small
 def test_zebra_background_preserves_compact_selection_background() -> None:
-    strip = Strip(
-        [
-            Segment("selected", Style(bgcolor="#dbe9f2")),
-            Segment(" rest", Style()),
-        ]
-    )
+    strip = Strip([
+        Segment("selected", Style(bgcolor="#dbe9f2")),
+        Segment(" rest", Style()),
+    ])
 
     styled = _apply_row_background(
         strip,
@@ -776,7 +772,6 @@ def test_inspector_uses_labels_to_explain_values() -> None:
     assert _color_name(_style_for(details, "─")) == "cyan"
 
 
-
 @pytest.mark.small
 def test_home_relative_paths_and_opaque_ids_are_compact(monkeypatch) -> None:
     monkeypatch.setattr(tui_module.os.path, "expanduser", lambda _value: "/Users/example")
@@ -849,9 +844,7 @@ def test_shell_wrapper_is_omitted_from_pane_activity_hint() -> None:
 
 @pytest.mark.small
 def test_compact_process_hint_strips_absolute_paths() -> None:
-    hint = _compact_process_hint(
-        "/Users/me/.local/bin/atuin-patched-18.22.0 pty-proxy --shell /opt/homebrew/bin/zsh"
-    )
+    hint = _compact_process_hint("/Users/me/.local/bin/atuin-patched-18.22.0 pty-proxy --shell /opt/homebrew/bin/zsh")
 
     assert hint == "atuin-patched-18.22.0 pty-proxy ..."
     assert "/Users/me" not in hint
@@ -1115,9 +1108,7 @@ async def test_tree_inserts_blank_spacing_between_tabs_and_windows() -> None:
 
         window_spacer = tree.root.children[1]
         window_spacer_line = next(
-            line
-            for line in range(tree.last_line + 1)
-            if tree.get_node_at_line(line) is window_spacer
+            line for line in range(tree.last_line + 1) if tree.get_node_at_line(line) is window_spacer
         )
         window_gap = tree.render_line(window_spacer_line).text
         assert "│" in window_gap
@@ -1125,11 +1116,7 @@ async def test_tree_inserts_blank_spacing_between_tabs_and_windows() -> None:
         assert "└" not in window_gap
 
         tab_spacer = os_node.children[1]
-        tab_spacer_line = next(
-            line
-            for line in range(tree.last_line + 1)
-            if tree.get_node_at_line(line) is tab_spacer
-        )
+        tab_spacer_line = next(line for line in range(tree.last_line + 1) if tree.get_node_at_line(line) is tab_spacer)
         tab_gap = tree.render_line(tab_spacer_line).text
         assert "│" in tab_gap
         assert "├" not in tab_gap

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import os
+import pathlib
 import shlex
-import subprocess  # noqa: S404 -- fixed macOS system appearance query
+import subprocess  # ruff: ignore[suspicious-subprocess-import] -- fixed macOS system appearance query
 import sys
 from dataclasses import dataclass
 from functools import partial
@@ -223,7 +224,7 @@ def _compact_process_hint(value: str | None) -> str | None:
         parts = shlex.split(value)
     except ValueError:
         return _compact_hint(value)
-    compact = [os.path.basename(part) if part.startswith("/") else part for part in parts]
+    compact = [pathlib.Path(part).name if part.startswith("/") else part for part in parts]
     return _compact_tokens(compact)
 
 
@@ -241,8 +242,8 @@ def _command_identity(value: str | None) -> str | None:
         if index + 1 < len(parts):
             return parts[index + 1]
     if len(parts) >= _UV_RUN_COMMAND_MIN_PARTS and parts[0] == "uv" and parts[1] == "run":
-        return os.path.basename(parts[2])
-    return os.path.basename(parts[0])
+        return pathlib.Path(parts[2]).name
+    return pathlib.Path(parts[0]).name
 
 
 def _pane_activity_hint(pane: Pane) -> str | None:
@@ -266,7 +267,7 @@ def _preferred_textual_theme() -> str | None:
         return aliases[override]
     if sys.platform == "darwin":
         try:
-            result = subprocess.run(  # noqa: S603 -- fixed macOS system command and arguments
+            result = subprocess.run(
                 ["/usr/bin/defaults", "read", "-g", "AppleInterfaceStyle"],
                 check=False,
                 capture_output=True,
@@ -349,11 +350,7 @@ def _pane_row_title(pane: Pane, tab_title: str | None, display_title: str | None
     title = display_title if display_title is not None else pane.title
 
     if title and not _same_identity(title, tab_title):
-        if (
-            pane.current_command
-            and _same_identity(title, pane.current_command)
-            and len(title) > _PANE_HIERARCHY_WIDTH
-        ):
+        if pane.current_command and _same_identity(title, pane.current_command) and len(title) > _PANE_HIERARCHY_WIDTH:
             identity = _command_identity(pane.current_command)
             if identity:
                 return identity
@@ -413,10 +410,7 @@ def _os_window_label(
         hierarchy_width=_OS_HIERARCHY_WIDTH,
         object_id=os_window.id,
         status="● focused" if active_branch else None,
-        detail=(
-            f"{_count_label(len(os_window.tabs), 'tab')} · "
-            f"{_count_label(pane_count, 'pane')}"
-        ),
+        detail=(f"{_count_label(len(os_window.tabs), 'tab')} · {_count_label(pane_count, 'pane')}"),
         hierarchy_style=_STYLE_ACTIVE_BRANCH if active_branch else "bold",
     )
     return label
@@ -578,7 +572,7 @@ def _append_section(details: Text, title: str) -> None:
 def _home_relative_path(value: str | None) -> str | None:
     if not value:
         return value
-    home = os.path.expanduser("~")
+    home = pathlib.Path("~").expanduser()
     if home and home != "~":
         if value == home:
             return "~"
@@ -779,7 +773,7 @@ def _append_pane_process(details: Text, pane: Pane) -> None:
     foreground = None if _is_shell_wrapper(pane.foreground_cmd) else pane.foreground_cmd
     shell_command = _shell_command(pane)
     shell_executable = _command_executable(shell_command)
-    shell_name = os.path.basename(shell_executable) if shell_executable else None
+    shell_name = pathlib.Path(shell_executable).name if shell_executable else None
     if not any((pane.current_command, foreground, shell_executable)) and pane.pid is None:
         return
 
@@ -892,11 +886,7 @@ def _walk_nodes(node: TreeNode[NodeRef]) -> Iterator[TreeNode[NodeRef]]:
 
 def _active_branch_refs(state: KittyState) -> set[NodeRef]:
     for location in state.iter_panes():
-        if (
-            location.os_window.is_active
-            and location.tab.is_active
-            and location.pane.is_active
-        ):
+        if location.os_window.is_active and location.tab.is_active and location.pane.is_active:
             refs = {NodeRef("pane", location.pane.id)}
             if location.tab.id is not None:
                 refs.add(NodeRef("tab", location.tab.id))
@@ -1445,13 +1435,11 @@ class KittyManagerApp(App[None]):
                 f"Showing {visible_panes} of {self.state.pane_count} panes · "
                 f"{visible_tabs} of {tab_count} tabs · filter: {self._filter_query}"
             )
-        return " · ".join(
-            (
-                _count_label(len(self.state.os_windows), "OS window"),
-                _count_label(tab_count, "tab"),
-                _count_label(self.state.pane_count, "pane"),
-            )
-        )
+        return " · ".join((
+            _count_label(len(self.state.os_windows), "OS window"),
+            _count_label(tab_count, "tab"),
+            _count_label(self.state.pane_count, "pane"),
+        ))
 
     def _show_status_summary(self) -> None:
         self._status(self._status_summary())
@@ -1547,11 +1535,7 @@ class KittyManagerApp(App[None]):
                     location.pane,
                     location.tab.title,
                     display_title,
-                    active=bool(
-                        location.os_window.is_active
-                        and location.tab.is_active
-                        and location.pane.is_active
-                    ),
+                    active=bool(location.os_window.is_active and location.tab.is_active and location.pane.is_active),
                 )
             )
 
@@ -1688,9 +1672,7 @@ class KittyManagerApp(App[None]):
         )
         nodes[ref] = node
         visible_tabs = [
-            tab
-            for tab in os_window.tabs
-            if reveal_all or not self._filter_query or self._tab_matches_filter(tab)
+            tab for tab in os_window.tabs if reveal_all or not self._filter_query or self._tab_matches_filter(tab)
         ]
         for index, tab in enumerate(visible_tabs):
             if index:
