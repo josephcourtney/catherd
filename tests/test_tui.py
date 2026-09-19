@@ -589,7 +589,10 @@ def test_tree_labels_use_semantic_styles_instead_of_dim_metadata() -> None:
     assert activity_style.color.name == "magenta"
 
     for label in (os_label, tab_label, pane_label):
-        assert not any(_style_for(label, label.plain[span.start : span.end]).dim for span in label.spans)
+        assert not any(
+            (Style.parse(span.style) if isinstance(span.style, str) else span.style).dim
+            for span in label.spans
+        )
 
 
 @pytest.mark.small
