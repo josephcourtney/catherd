@@ -105,6 +105,7 @@ _TREE_ID_WIDTH = 5
 
 _STYLE_ACTIVE_MARKER = "bold green"
 _STYLE_ACTIVE_BRANCH = "bold cyan"
+_STYLE_ACTIVE_GUIDE = "cyan"
 _STYLE_KIND = "italic cyan"
 _STYLE_METADATA = "cyan"
 _STYLE_DESCRIPTOR = "italic cyan"
@@ -144,7 +145,7 @@ def _apply_tab_band(strip: Strip, *, dark: bool) -> Strip:
 
 
 def _apply_active_branch(strip: Strip) -> Strip:
-    accent = Style.parse(_STYLE_ACTIVE_BRANCH)
+    accent = Style.parse(_STYLE_ACTIVE_GUIDE)
     rendered: list[Segment] = []
     in_prefix = True
     for segment in strip:
