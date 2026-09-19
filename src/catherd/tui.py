@@ -545,12 +545,6 @@ def _append_property(
     details.append("\n")
 
 
-def _pane_position(pane: Pane) -> str | None:
-    if pane.tab_index is None or pane.tab_count is None:
-        return None
-    return f"pane {pane.tab_index}/{pane.tab_count}"
-
-
 def _pane_neighbors(pane: Pane) -> str | None:
     items = (
         ("L", pane.neighbors_left),
@@ -568,14 +562,6 @@ def _prompt_state(pane: Pane) -> str | None:
     if pane.at_prompt is False:
         return "command running"
     return None
-
-
-def _append_tokens(details: Text, tokens: list[tuple[str, str]]) -> None:
-    for index, (value, style) in enumerate(tokens):
-        if index:
-            details.append(" · ", style=_STYLE_METADATA)
-        details.append(value, style=style)
-    details.append("\n")
 
 
 def _os_window_details(
