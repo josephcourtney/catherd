@@ -529,7 +529,7 @@ async def test_details_panel_loads_activity_for_highlighted_pane() -> None:
 @pytest.mark.small
 @pytest.mark.parametrize(
     ("dark", "expected"),
-    [(True, "grey15"), (False, "grey97")],
+    [(True, "#262626"), (False, "#f7f7f7")],
 )
 def test_tab_band_background_tracks_theme(dark, expected) -> None:
     assert _tab_band_background(dark=dark) == expected
@@ -538,7 +538,7 @@ def test_tab_band_background_tracks_theme(dark, expected) -> None:
 @pytest.mark.small
 @pytest.mark.parametrize(
     ("dark", "expected"),
-    [(True, "grey15"), (False, "grey97")],
+    [(True, "#262626"), (False, "#f7f7f7")],
 )
 def test_tab_band_tints_content_without_filling_unused_width(dark, expected) -> None:
     strip = Strip(
