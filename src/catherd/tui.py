@@ -135,7 +135,7 @@ def _apply_tab_band(strip: Strip, *, dark: bool) -> Strip:
         default=-1,
     )
     rendered = [
-        Segment.apply_style((segment,), post_style=style)[0]
+        next(iter(Segment.apply_style((segment,), post_style=style)))
         if index <= last_content
         else segment
         for index, segment in enumerate(segments)
