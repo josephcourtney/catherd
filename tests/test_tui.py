@@ -22,7 +22,6 @@ from catherd.tui import (
     NodeRef,
     _active_marker,
     _apply_row_background,
-    _apply_selection_accent,
     _compact_hint,
     _compact_process_hint,
     _count_label,
@@ -30,6 +29,7 @@ from catherd.tui import (
     _pane_activity_hint,
     _pane_label,
     _preferred_textual_theme,
+    _selection_background,
     _tab_band_background,
     _tab_label,
     _tree_header,
@@ -586,18 +586,36 @@ def test_row_background_spans_whole_strip() -> None:
 
 
 @pytest.mark.small
-def test_selection_accent_preserves_row_background() -> None:
-    strip = Strip([Segment("│ row", Style(bgcolor="#f4f4f4"))])
+@pytest.mark.parametrize(
+    ("dark", "expected"),
+    [(True, "#35566b"), (False, "#dbe9f2")],
+)
+def test_selection_background_tracks_theme(dark, expected) -> None:
+    assert _selection_background(dark=dark) == expected
 
-    selected = _apply_selection_accent(strip)
 
-    assert selected.text == "▌ row"
-    first = list(selected)[0]
-    assert first.style is not None
-    assert first.style.color is not None
-    assert first.style.color.name == "cyan"
-    assert first.style.bgcolor is not None
-    assert first.style.bgcolor.name == "#f4f4f4"
+@pytest.mark.small
+def test_zebra_background_preserves_compact_selection_background() -> None:
+    strip = Strip(
+        [
+            Segment("selected", Style(bgcolor="#dbe9f2")),
+            Segment(" rest", Style()),
+        ]
+    )
+
+    styled = _apply_row_background(
+        strip,
+        "#f4f4f4",
+        preserve_background="#dbe9f2",
+    )
+    segments = list(styled)
+
+    assert segments[0].style is not None
+    assert segments[0].style.bgcolor is not None
+    assert segments[0].style.bgcolor.name == "#dbe9f2"
+    assert segments[1].style is not None
+    assert segments[1].style.bgcolor is not None
+    assert segments[1].style.bgcolor.name == "#f4f4f4"
 
 
 @pytest.mark.small
@@ -1126,10 +1144,25 @@ async def test_banded_row_keeps_group_identity_when_selected_or_hovered() -> Non
 
         dark = app.current_theme.dark
         expected_band = _tree_row_background(dark=dark, banded=True)
+        expected_selection = _selection_background(dark=dark)
         assert selected_banded == expected_band
         assert hovered_banded == expected_band
-        assert selected_strip.text.startswith("▌")
-        assert not hovered_strip.text.startswith("▌")
+
+        # Interaction must never alter guide/disclosure/tree glyphs.
+        assert selected_strip.text == hovered_strip.text
+
+        selected_backgrounds = {
+            segment.style.bgcolor.name
+            for segment in selected_strip
+            if segment.style is not None and segment.style.bgcolor is not None
+        }
+        hovered_backgrounds = {
+            segment.style.bgcolor.name
+            for segment in hovered_strip
+            if segment.style is not None and segment.style.bgcolor is not None
+        }
+        assert expected_selection in selected_backgrounds
+        assert expected_selection not in hovered_backgrounds
 
 
 @pytest.mark.medium
