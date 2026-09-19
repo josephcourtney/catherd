@@ -100,6 +100,14 @@ def _display_name(value: str | None, fallback: str) -> str:
 
 _TREE_HINT_MAX = 36
 
+_STYLE_ACTIVE_MARKER = "bold green"
+_STYLE_KIND = "italic cyan"
+_STYLE_METADATA = "cyan"
+_STYLE_DESCRIPTOR = "italic magenta"
+_STYLE_DETAIL_LABEL = "bold cyan"
+_STYLE_SECTION_RULE = "cyan"
+_STYLE_BREADCRUMB = "italic cyan"
+
 
 def _active_marker(*, active: bool | None) -> str:
     return "● " if active else "  "
@@ -199,39 +207,40 @@ def _preferred_textual_theme() -> str | None:
 
 def _os_window_label(os_window: OsWindow, display_title: str | None = None) -> Text:
     label = Text()
-    label.append(_active_marker(active=os_window.is_active), style="bold" if os_window.is_active else "")
-    label.append("OS ", style="dim")
+    label.append(_active_marker(active=os_window.is_active), style=_STYLE_ACTIVE_MARKER if os_window.is_active else "")
+    label.append("OS ", style=_STYLE_KIND)
     label.append(_display_name(os_window.id, "?"), style="bold")
     title = display_title if display_title is not None else os_window.title
     if title:
         label.append("  ")
         label.append(title, style="bold")
     pane_count = sum(len(tab.panes) for tab in os_window.tabs)
-    label.append(f"  {len(os_window.tabs)}t/{pane_count}p", style="dim")
+    label.append(f"  {len(os_window.tabs)}t/{pane_count}p", style=_STYLE_METADATA)
     return label
 
 
 def _tab_label(tab: Tab, display_title: str | None = None) -> Text:
     label = Text()
-    label.append(_active_marker(active=tab.is_active), style="bold" if tab.is_active else "")
+    label.append(_active_marker(active=tab.is_active), style=_STYLE_ACTIVE_MARKER if tab.is_active else "")
     title = display_title if display_title is not None else tab.title
-    label.append(_display_name(title, "(untitled)"), style="bold")
+    title_style = "bold underline" if tab.is_active else "bold"
+    label.append(_display_name(title, "(untitled)"), style=title_style)
     if tab.id:
-        label.append(f"  [{tab.id}]", style="dim")
+        label.append(f"  [{tab.id}]", style=_STYLE_METADATA)
     if tab.layout:
-        label.append(f"  {tab.layout}", style="dim")
+        label.append(f"  {tab.layout}", style=_STYLE_DESCRIPTOR)
     return label
 
 
 def _pane_label(pane: Pane, display_title: str | None = None) -> Text:
     label = Text()
-    label.append(_active_marker(active=pane.is_active), style="bold" if pane.is_active else "")
+    label.append(_active_marker(active=pane.is_active), style=_STYLE_ACTIVE_MARKER if pane.is_active else "")
     title = display_title if display_title is not None else pane.title
-    label.append(_display_name(title, "(untitled)"))
-    label.append(f"  [{pane.id}]", style="dim")
+    label.append(_display_name(title, "(untitled)"), style="bold" if pane.is_active else "")
+    label.append(f"  [{pane.id}]", style=_STYLE_METADATA)
     hint = _pane_activity_hint(pane)
     if hint:
-        label.append(f"  {hint}", style="dim")
+        label.append(f"  {hint}", style=_STYLE_DESCRIPTOR)
     return label
 
 
@@ -328,14 +337,14 @@ def _append_section(details: Text, title: str) -> None:
     label = title.upper()
     details.append(label, style="bold")
     details.append(" ")
-    details.append("─" * max(2, 32 - len(label)), style="dim")
+    details.append("─" * max(2, 32 - len(label)), style=_STYLE_SECTION_RULE)
     details.append("\n")
 
 
 def _append_detail(details: Text, label: str, value: object | None) -> None:
     if value is None or value == "":
         return
-    details.append(f"{label:<16}", style="dim")
+    details.append(f"{label:<16}", style=_STYLE_DETAIL_LABEL)
     details.append(_detail_value(value))
     details.append("\n")
 
@@ -347,14 +356,14 @@ def _append_identity(
     object_id: str | None,
     breadcrumb: str | None = None,
 ) -> None:
-    details.append(kind.upper(), style="dim")
+    details.append(kind.upper(), style=_STYLE_KIND)
     details.append("\n")
     details.append(_display_name(title, "(untitled)"), style="bold")
     if object_id:
-        details.append(f"  [{object_id}]", style="dim")
+        details.append(f"  [{object_id}]", style=_STYLE_METADATA)
     details.append("\n")
     if breadcrumb:
-        details.append(breadcrumb, style="dim")
+        details.append(breadcrumb, style=_STYLE_BREADCRUMB)
         details.append("\n")
 
 
