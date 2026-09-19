@@ -900,13 +900,17 @@ class KittyTree(Tree[NodeRef]):
             return self._render_spacer_line(node)
 
         strip = super().render_line(y)
-        if (
-            node is not None
-            and node.data in getattr(self, "_banded_refs", set())
-            and absolute_line != self.cursor_line
-            and absolute_line != self.hover_line
-        ):
-            strip = _apply_tab_band(strip, dark=self.app.current_theme.dark)
+        strip = strip.extend_cell_length(self.size.width, self.rich_style)
+
+        if node is not None and node.data is not None:
+            background = _tree_row_background(
+                dark=self.app.current_theme.dark,
+                banded=node.data in getattr(self, "_banded_refs", set()),
+                selected=absolute_line == self.cursor_line,
+                hovered=absolute_line == self.hover_line,
+            )
+            if background is not None:
+                strip = _apply_row_background(strip, background)
 
         if node is not None and node.data in getattr(self, "_active_branch_refs", set()):
             strip = _apply_active_branch(strip)
@@ -1164,29 +1168,54 @@ class KittyManagerApp(App[None]):
         height: 1fr;
     }
 
+    #browser {
+        width: 2fr;
+        min-width: 54;
+        height: 1fr;
+    }
+
+    #browser-title {
+        height: 1;
+        padding: 0 1;
+        text-style: bold;
+    }
+
+    #tree-header {
+        height: 1;
+        padding: 0 1;
+        color: $text-muted;
+    }
+
     #kitty-tree {
-        width: 3fr;
-        min-width: 34;
+        width: 1fr;
+        height: 1fr;
+        min-width: 50;
         overflow-x: hidden;
     }
 
     #details {
-        width: 2fr;
-        min-width: 38;
-        max-width: 60;
+        width: 1fr;
+        min-width: 34;
+        max-width: 52;
         padding: 1 2;
         border-left: solid $border-blurred;
         overflow-x: hidden;
         overflow-y: auto;
     }
 
+    #footer {
+        height: 1;
+    }
+
     #status {
+        width: 1fr;
         height: 1;
         padding: 0 1;
         color: $text-muted;
     }
 
     #actions {
+        width: auto;
         height: 1;
         padding: 0 1;
         color: $text-muted;
@@ -1217,14 +1246,23 @@ class KittyManagerApp(App[None]):
     def compose(self) -> ComposeResult:
         tree: KittyTree = KittyTree(self.TREE_LABEL, id="kitty-tree")
         tree.auto_expand = False
+        tree.show_root = False
         tree.root.expand()
         yield Horizontal(
-            tree,
+            Vertical(
+                Static(self.TREE_LABEL, id="browser-title"),
+                Static(_tree_header(), id="tree-header"),
+                tree,
+                id="browser",
+            ),
             Static("Select an OS window, tab, or pane", id="details"),
             id="main",
         )
-        yield Static("Loading Kitty state…", id="status")
-        yield Static(_action_strip_text(), id="actions")
+        yield Horizontal(
+            Static("Loading Kitty state…", id="status"),
+            Static(_action_strip_text(), id="actions"),
+            id="footer",
+        )
 
     async def on_mount(self) -> None:
         await self.refresh_state()
