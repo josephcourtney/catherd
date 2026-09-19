@@ -338,10 +338,7 @@ def _pane_state_summary(pane: Pane, *, active: bool) -> str:
 
 def _pane_current_summary(pane: Pane, row_title: str) -> str | None:
     hint = _pane_activity_hint(pane)
-    if hint and (
-        not _same_identity(hint, row_title)
-        or len(row_title) > _PANE_HIERARCHY_WIDTH
-    ):
+    if hint and (not _same_identity(hint, row_title) or len(row_title) > _PANE_HIERARCHY_WIDTH):
         return hint
     return None
 
