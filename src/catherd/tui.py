@@ -144,7 +144,7 @@ def _apply_tab_band(strip: Strip, *, dark: bool) -> Strip:
 
 
 def _apply_active_branch(strip: Strip) -> Strip:
-    accent = Style(color=_STYLE_ACTIVE_BRANCH)
+    accent = Style.parse(_STYLE_ACTIVE_BRANCH)
     rendered: list[Segment] = []
     in_prefix = True
     for segment in strip:
@@ -297,13 +297,13 @@ def _os_window_label(
     active_branch: bool = False,
 ) -> Text:
     label = Text()
-    branch_style = _STYLE_ACTIVE_BRANCH if active_branch else ""
+    name_style = _STYLE_ACTIVE_BRANCH if active_branch else "bold"
     label.append("OS ", style=_STYLE_KIND)
-    label.append(_display_name(os_window.id, "?"), style=f"bold {branch_style}".strip())
+    label.append(_display_name(os_window.id, "?"), style=name_style)
     title = display_title if display_title is not None else os_window.title
     if title:
         label.append("  ")
-        label.append(title, style=f"bold {branch_style}".strip())
+        label.append(title, style=name_style)
     pane_count = sum(len(tab.panes) for tab in os_window.tabs)
     label.append(
         f"  {len(os_window.tabs)} tabs · {pane_count} panes",
