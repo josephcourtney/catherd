@@ -1256,12 +1256,25 @@ class KittyManagerApp(App[None]):
         if ref.kind == "os_window":
             os_window = self.state.find_os_window(ref.id)
             if os_window is not None:
-                node.set_label(_os_window_label(os_window, display_title))
+                node.set_label(
+                    _os_window_label(
+                        os_window,
+                        display_title,
+                        active_branch=bool(os_window.is_active),
+                    )
+                )
             return
         if ref.kind == "tab":
             found = self.state.find_tab(ref.id)
             if found is not None:
-                node.set_label(_tab_label(found[1], display_title))
+                os_window, tab = found
+                node.set_label(
+                    _tab_label(
+                        tab,
+                        display_title,
+                        active_branch=bool(os_window.is_active and tab.is_active),
+                    )
+                )
             return
         location = self.state.find_pane(ref.id)
         if location is not None:
@@ -1401,7 +1414,11 @@ class KittyManagerApp(App[None]):
         ref = NodeRef("os_window", os_window.id)
         reveal_all = bool(self._filter_query and self._os_window_own_matches_filter(os_window))
         node = root.add(
-            _os_window_label(os_window, self._display_names.get(ref)),
+            _os_window_label(
+                os_window,
+                self._display_names.get(ref),
+                active_branch=bool(os_window.is_active),
+            ),
             ref,
             expand=bool(self._filter_query) or expanded is None or ref in expanded,
         )
@@ -1442,7 +1459,11 @@ class KittyManagerApp(App[None]):
         ref = NodeRef("tab", tab.id)
         reveal_panes = reveal_all or bool(self._filter_query and self._tab_own_matches_filter(tab))
         node = parent.add(
-            _tab_label(tab, self._display_names.get(ref)),
+            _tab_label(
+                tab,
+                self._display_names.get(ref),
+                active_branch=active_branch,
+            ),
             ref,
             expand=bool(self._filter_query) or expanded is None or ref in expanded,
         )
