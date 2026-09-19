@@ -104,6 +104,7 @@ def _count_label(count: int, singular: str, plural: str | None = None) -> str:
 
 
 _TREE_HINT_MAX = 36
+_UV_RUN_COMMAND_MIN_PARTS = 3
 _OS_HIERARCHY_WIDTH = 24
 _TAB_HIERARCHY_WIDTH = 20
 _PANE_HIERARCHY_WIDTH = 18
@@ -226,7 +227,7 @@ def _command_identity(value: str | None) -> str | None:
         index = parts.index("-m")
         if index + 1 < len(parts):
             return parts[index + 1]
-    if len(parts) >= 3 and parts[0] == "uv" and parts[1] == "run":
+    if len(parts) >= _UV_RUN_COMMAND_MIN_PARTS and parts[0] == "uv" and parts[1] == "run":
         return os.path.basename(parts[2])
     return os.path.basename(parts[0])
 
@@ -423,7 +424,7 @@ def _pane_label(
     active: bool | None = None,
 ) -> Text:
     label = Text()
-    is_active = pane.is_active if active is None else active
+    is_active = bool(pane.is_active) if active is None else active
     title = _pane_row_title(pane, tab_title, display_title)
     marker = "● " if is_active else "  "
     _append_outline_fields(
@@ -1110,7 +1111,8 @@ class HelpScreen(ModalScreen[None]):
     }
     """
 
-    def compose(self) -> ComposeResult:
+    @staticmethod
+    def compose() -> ComposeResult:
         yield Static(
             """[b]Navigate[/b]
 j/k       move selection
