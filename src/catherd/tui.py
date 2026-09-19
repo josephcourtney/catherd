@@ -266,8 +266,8 @@ def _tree_header() -> Text:
     header.append("  ")
     header.append(_fit_tree_column("ID", _TREE_ID_WIDTH), style=_STYLE_HEADER)
     header.append(" ")
-    header.append(_fit_tree_column("STATE", _TREE_STATE_WIDTH), style=_STYLE_HEADER)
-    header.append("CURRENT", style=_STYLE_HEADER)
+    header.append(_fit_tree_column("LAYOUT / STATE", _TREE_STATE_WIDTH), style=_STYLE_HEADER)
+    header.append("CURRENT / SUMMARY", style=_STYLE_HEADER)
     return header
 
 
@@ -346,15 +346,13 @@ def _os_window_label(
 ) -> Text:
     label = Text()
     title = display_title if display_title is not None else os_window.title
-    hierarchy = f"OS {os_window.id or '?'}"
-    if title:
-        hierarchy += f"  {title}"
+    hierarchy = _display_name(title, "OS window")
     pane_count = sum(len(tab.panes) for tab in os_window.tabs)
     _append_outline_fields(
         label,
         hierarchy=hierarchy,
         hierarchy_width=_OS_HIERARCHY_WIDTH,
-        object_id=None,
+        object_id=os_window.id,
         state="active" if active_branch else None,
         current=f"{len(os_window.tabs)} tabs · {pane_count} panes",
         hierarchy_style=_STYLE_ACTIVE_BRANCH if active_branch else "bold",
