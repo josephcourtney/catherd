@@ -710,6 +710,15 @@ async def test_tree_rows_are_compact_and_mark_kitty_active() -> None:
 
 
 @pytest.mark.small
+def test_locally_active_pane_is_not_marked_as_globally_active() -> None:
+    pane = Pane(id="12", title="shell", is_active=True)
+
+    label = _pane_label(pane, "other", active=False)
+
+    assert "● " not in label.plain
+
+
+@pytest.mark.small
 def test_redundant_pane_title_falls_back_to_process_identity() -> None:
     pane = Pane(
         id="12",
@@ -747,6 +756,21 @@ async def test_only_active_pane_has_green_marker_and_branch_is_tracked() -> None
             NodeRef("tab", "10"),
             NodeRef("pane", "1"),
         }
+
+
+@pytest.mark.medium
+async def test_help_moves_infrequent_actions_out_of_persistent_footer() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("?")
+        await pilot.pause()
+
+        help_dialog = app.screen.query_one("#help-dialog", Static)
+        assert "M         merge tab / OS window" in str(help_dialog.content)
+        assert "J/K       reorder pane / tab" in str(help_dialog.content)
 
 
 @pytest.mark.medium
