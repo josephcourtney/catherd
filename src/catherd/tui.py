@@ -1782,7 +1782,7 @@ class KittyManagerApp(App[None]):
         if not any(node.data == selected_ref for node in _walk_nodes(event.node)):
             return
         self._logical_selection = collapsed_ref
-        self._tree().call_after_refresh(self._tree().move_cursor, event.node, animate=False)
+        self._tree().move_cursor(event.node, animate=False)
         self._show_details(collapsed_ref)
 
     def on_tree_node_selected(self, event: Tree.NodeSelected[NodeRef]) -> None:
