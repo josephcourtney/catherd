@@ -20,6 +20,25 @@ def test_get_atuin_session_for_window_reads_session(tmp_path, monkeypatch):
 
 
 @pytest.mark.small
+def test_get_atuin_session_for_window_unreadable_is_optional(monkeypatch):
+    class UnreadableSessionFile:
+        @staticmethod
+        def exists():
+            return True
+
+        @staticmethod
+        def read_text(*_args, **_kwargs):
+            raise OSError("permission denied")
+
+        def __str__(self):
+            return "/unreadable/session"
+
+    monkeypatch.setattr(activity, "get_session_file", lambda _window_id: UnreadableSessionFile())
+
+    assert activity.get_atuin_session_for_window("42", verbose=True) is None
+
+
+@pytest.mark.small
 def test_get_pane_activity(monkeypatch):
     monkeypatch.setattr(activity, "get_atuin_session_for_window", lambda _window_id: "session-1")
     monkeypatch.setattr(activity, "get_last_command_for_atuin_session", lambda _session_id: "pytest")
