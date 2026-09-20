@@ -106,11 +106,11 @@ def _count_label(count: int, singular: str, plural: str | None = None) -> str:
 
 _TREE_HINT_MAX = 36
 _UV_RUN_COMMAND_MIN_PARTS = 3
-_OS_HIERARCHY_WIDTH = 24
-_TAB_HIERARCHY_WIDTH = 20
-_PANE_HIERARCHY_WIDTH = 18
+_OS_HIERARCHY_WIDTH = 30
+_TAB_HIERARCHY_WIDTH = 26
+_PANE_HIERARCHY_WIDTH = 24
 _TREE_ID_WIDTH = 5
-_TREE_STATUS_WIDTH = 26
+_TREE_STATUS_WIDTH = 22
 
 _STYLE_ACTIVE_BRANCH = "bold"
 _STYLE_ACTIVE_GUIDE = "dim"
@@ -132,7 +132,7 @@ _STATUS_STYLES: tuple[tuple[str, str], ...] = (
 
 
 def _tab_band_background(*, dark: bool) -> str:
-    return "#2d3336" if dark else "#f4f4f4"
+    return "#363d40" if dark else "#f0f2f3"
 
 
 def _tree_row_background(*, dark: bool, banded: bool) -> str | None:
@@ -176,7 +176,7 @@ def _apply_active_branch(strip: Strip) -> Strip:
 
 
 def _selection_background(*, dark: bool) -> str:
-    return "#35566b" if dark else "#dbe9f2"
+    return "#41484c" if dark else "#e1e5e7"
 
 
 def _apply_selection(strip: Strip, background: str) -> Strip:
@@ -242,8 +242,24 @@ def _command_identity(value: str | None) -> str | None:
         if index + 1 < len(parts):
             return parts[index + 1]
     if len(parts) >= _UV_RUN_COMMAND_MIN_PARTS and parts[0] == "uv" and parts[1] == "run":
-        return pathlib.Path(parts[2]).name
-    return pathlib.Path(parts[0]).name
+        return _command_identity(" ".join(parts[2:]))
+    executable = pathlib.Path(parts[0]).name
+    if len(parts) > 1:
+        subcommand = parts[1]
+        if (
+            not subcommand.startswith("-")
+            and "/" not in subcommand
+            and "." not in subcommand
+            and subcommand.replace("-", "").replace("_", "").isalnum()
+        ):
+            return f"{executable} {subcommand}"
+    return executable
+
+
+def _semantic_title(value: str | None) -> str | None:
+    if not value or not any(character.isspace() for character in value):
+        return value
+    return _command_identity(value) or value
 
 
 def _pane_activity_hint(pane: Pane) -> str | None:
@@ -350,14 +366,14 @@ def _pane_row_title(pane: Pane, tab_title: str | None, display_title: str | None
     title = display_title if display_title is not None else pane.title
 
     if title and not _same_identity(title, tab_title):
-        if pane.current_command and _same_identity(title, pane.current_command) and len(title) > _PANE_HIERARCHY_WIDTH:
+        if pane.current_command and _same_identity(title, pane.current_command):
             identity = _command_identity(pane.current_command)
             if identity:
                 return identity
-        return title
+        return _semantic_title(title) or title
 
     if pane.current_command:
-        return _compact_hint(pane.current_command) or pane.current_command
+        return _command_identity(pane.current_command) or _compact_hint(pane.current_command) or pane.current_command
 
     if pane.foreground_cmd and not _is_shell_wrapper(pane.foreground_cmd):
         compact = _compact_process_hint(pane.foreground_cmd)
@@ -387,7 +403,8 @@ def _pane_detail_summary(pane: Pane, row_title: str) -> str | None:
     if pane.tab_index is not None and pane.tab_count is not None and pane.tab_count > 1:
         parts.append(f"{pane.tab_index}/{pane.tab_count}")
     hint = _pane_activity_hint(pane)
-    if hint and (not _same_identity(hint, row_title) or len(row_title) > _PANE_HIERARCHY_WIDTH):
+    hint_identity = _command_identity(hint)
+    if hint and not (_same_identity(hint, row_title) or _same_identity(hint_identity, row_title)):
         parts.append(hint)
     if not parts:
         return None
@@ -409,7 +426,7 @@ def _os_window_label(
         hierarchy=hierarchy,
         hierarchy_width=_OS_HIERARCHY_WIDTH,
         object_id=os_window.id,
-        status="● focused" if active_branch else None,
+        status=None,
         detail=(f"{_count_label(len(os_window.tabs), 'tab')} · {_count_label(pane_count, 'pane')}"),
         hierarchy_style=_STYLE_ACTIVE_BRANCH if active_branch else "bold",
     )
@@ -423,18 +440,19 @@ def _tab_label(
     active_branch: bool = False,
 ) -> Text:
     label = Text()
-    title = _display_name(display_title if display_title is not None else tab.title, "(untitled)")
+    raw_title = display_title if display_title is not None else tab.title
+    title = _display_name(raw_title if display_title is not None else _semantic_title(raw_title), "(untitled)")
     _append_outline_fields(
         label,
         hierarchy=title,
         hierarchy_width=_TAB_HIERARCHY_WIDTH,
         object_id=tab.id,
-        status="● focused" if active_branch else None,
+        status=None,
         detail=" · ".join(
             part
             for part in (
                 _count_label(len(tab.panes), "pane"),
-                tab.layout,
+                tab.layout if len(tab.panes) > 1 else None,
             )
             if part
         ),
@@ -687,7 +705,8 @@ def _tab_details(
         return Text("Tab no longer exists", style="dim")
     os_window, tab = found
     details = Text()
-    title = display_title if display_title is not None else tab.title
+    raw_title = display_title if display_title is not None else tab.title
+    title = raw_title if display_title is not None else _semantic_title(raw_title)
     breadcrumb = f"OS #{os_window.id or '?'}"
     _append_identity(details, "Tab", _display_name(title, "(untitled)"), tab.id, breadcrumb)
     _append_section(details, "Summary")
@@ -803,16 +822,16 @@ def _append_session(
     activity_loading: bool,
 ) -> None:
     if activity_loading:
-        _append_section(details, "Recent")
-        _append_property(details, "Last", "loading…")
+        _append_section(details, "History")
+        _append_property(details, "Last command", "loading…")
         return
     if activity is None or (activity.session_id is None and activity.last_command is None):
         return
 
-    _append_section(details, "Recent")
+    _append_section(details, "History")
     _append_property(
         details,
-        "Last",
+        "Last command",
         _compact_hint(activity.last_command, max_len=32) or "No completed command",
         value_style="bold" if activity.last_command else "",
     )
@@ -832,8 +851,9 @@ def _pane_details(
         return Text("Pane no longer exists", style="dim")
     pane = location.pane
     details = Text()
-    title = display_title if display_title is not None else pane.title
-    tab_title = _display_name(location.tab.title, "(untitled)")
+    raw_title = display_title if display_title is not None else pane.title
+    title = raw_title if display_title is not None else _semantic_title(raw_title)
+    tab_title = _display_name(_semantic_title(location.tab.title), "(untitled)")
     breadcrumb = f"OS #{location.os_window.id or '?'} › {tab_title} #{location.tab.id or '?'}"  # ruff: ignore[ambiguous-unicode-character-string]
     _append_identity(details, "Pane", _display_name(title, "(untitled)"), pane.id, breadcrumb)
 
@@ -1268,7 +1288,7 @@ class KittyManagerApp(App[None]):
     #kitty-tree > .tree--guides,
     #kitty-tree > .tree--guides-hover,
     #kitty-tree > .tree--guides-selected {
-        color: $text-muted;
+        color: $text-disabled;
     }
 
     #kitty-tree > .tree--cursor,
