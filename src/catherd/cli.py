@@ -42,7 +42,7 @@ def get_shell_info(force_shell: str | None = None) -> str:
 @click.group(invoke_without_command=True)
 @click.pass_context
 def cli(ctx: click.Context) -> None:
-    """catherd: herd your Kitty windows and Atuin history."""
+    """Inspect and organize Kitty, with optional Atuin history enrichment."""
     if ctx.invoked_subcommand is None:
         ctx.invoke(show)
 
@@ -215,8 +215,8 @@ def show(*, verbose: bool, as_json: bool) -> None:
     """Show each open Kitty window/tab and its last Atuin command."""
     if not (os.environ.get("KITTY_WINDOW_ID") and os.environ.get("ATUIN_SESSION")) and not as_json:
         click.secho(
-            "[WARN] Atuin/Kitty sync env vars are not set in this shell; results may be incomplete. "
-            "Run 'catherd doctor' to diagnose.",
+            "[INFO] Optional Atuin history association is not active in this shell; "
+            "Kitty-only results remain available. Run 'catherd doctor' for details.",
             fg="yellow",
             err=True,
         )
@@ -535,8 +535,8 @@ def print_kitty_session_diagnostics(state: KittyState, *, verbose: bool = False)
     synced = len(ok)
     if synced == 0:
         click.secho(
-            "[INFO] Atuin/Kitty sync is not active in any open windows.\n"
-            "To enable full functionality, add the sync snippet to your shell startup file, "
+            "[INFO] Optional Atuin history enrichment is not active in any open windows.\n"
+            "To add per-pane completed-command history, enable the Atuin association snippet, "
             "then restart Kitty tabs/windows.",
             fg="yellow",
         )
