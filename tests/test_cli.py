@@ -8,6 +8,7 @@ import catherd.__main__  # ruff: ignore[unused-import]
 from catherd import cli
 from catherd.cli import _collect_kitty_session_diagnostics, print_kitty_session_diagnostics
 from catherd.model import KittyState, OsWindow, Pane, Tab
+from catherd.shell import ATUIN_INTEGRATION_MARKER, managed_snippet_block
 
 
 def _state(
@@ -239,88 +240,205 @@ def test_preflight_only_on_show(tmp_path, monkeypatch):
     assert show_result.exit_code == 0
     assert "Run 'catherd doctor'" in show_result.stderr or "diagnose" in show_result.stderr
 
-    monkeypatch.setenv("HOME", str(tmp_path))
     rc = tmp_path / ".bashrc"
-    rc.write_text("")
-    dry_run = CliRunner().invoke(cli.main, ["install", "--shell", "bash", "--dry-run"])
+    rc.write_text("", encoding="utf-8")
+    monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: rc)
+    monkeypatch.setattr(cli, "validate_snippet_for_shell", lambda *_args, **_kwargs: None)
+    dry_run = CliRunner().invoke(cli.main, ["atuin", "enable", "--shell", "bash", "--dry-run"])
     assert dry_run.exit_code == 0
     assert "DRY-RUN" in dry_run.stderr
 
 
 @pytest.mark.medium
-def test_install_shell_snippet(monkeypatch, tmp_path):
-    monkeypatch.setattr(cli, "get_shell_info", lambda *_args, **_kwargs: "bash")
-    monkeypatch.setattr(cli, "load_snippet_for_shell", lambda *_args, **_kwargs: "# mock snippet")
-    fake_rc = tmp_path / "rc"
-    fake_rc.write_text("")
-    with patch("catherd.cli.get_shell_rc_path", return_value=fake_rc), patch("shutil.copyfile"):
-        result = CliRunner().invoke(cli.main, ["install", "--shell", "bash"])
-        assert "Snippet added" in result.output or "already installed" in result.output
-
-
-@pytest.mark.small
-def test_install_shell_snippet_unsupported(monkeypatch):
-    monkeypatch.setattr(cli, "get_shell_info", lambda *_args, **_kwargs: "badsh")
-    result = CliRunner().invoke(cli.main, ["install"])
-    assert result.exit_code == 1
-    assert "Unknown shell" in result.stderr
-
-
-@pytest.mark.medium
-def test_install_shell_snippet_already_installed(tmp_path, monkeypatch):
+def test_atuin_enable_writes_managed_block_and_backup(monkeypatch, tmp_path):
     rc = tmp_path / "rc"
-    rc.write_text("# catherd atuin/kitty sync snippet\n…")
-    monkeypatch.setattr(cli, "get_shell_info", lambda *_: "bash")
-    monkeypatch.setattr(cli, "load_snippet_for_shell", lambda *_: "# snippet")
-    monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_: rc)
-    result = CliRunner().invoke(cli.main, ["install", "--shell", "bash"])
-    assert "Snippet already installed" in result.output
+    rc.write_text("existing\n", encoding="utf-8")
+    monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: rc)
+    monkeypatch.setattr(cli, "validate_snippet_for_shell", lambda *_args, **_kwargs: None)
 
+    result = CliRunner().invoke(cli.main, ["atuin", "enable", "--shell", "bash"])
 
-@pytest.mark.medium
-def test_install_dry_run(tmp_path, monkeypatch):
-    rc = tmp_path / ".bashrc"
-    rc.write_text("orig")
-    monkeypatch.setenv("HOME", str(tmp_path))
-    result = CliRunner().invoke(cli.main, ["install", "--shell", "bash", "--dry-run"])
     assert result.exit_code == 0
-    assert "DRY-RUN" in result.stderr or "Would append" in result.stderr
-    assert rc.read_text() == "orig"
-
-
-@pytest.mark.medium
-def test_uninstall_dry_run_and_remove(tmp_path, monkeypatch):
-    content = "line1\n# catherd atuin/kitty sync snippet\nfoo\n# end catherd atuin/kitty sync\nline2"
-    rc = tmp_path / ".bashrc"
-    rc.write_text(content)
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("SHELL", "/bin/bash")
-
-    dry = CliRunner().invoke(cli.main, ["uninstall", "--dry-run"])
-    assert dry.exit_code == 0
-    assert "DRY-RUN" in dry.stderr
-
-    res = CliRunner().invoke(cli.main, ["uninstall"])
-    assert res.exit_code == 0
-    assert "Snippet removed" in res.output
-    assert "catherd atuin/kitty" not in rc.read_text()
-    assert (tmp_path / ".bashrc.catherd.uninstall.bak").exists()
+    assert "Atuin integration enabled" in result.output
+    contents = rc.read_text(encoding="utf-8")
+    assert contents.startswith("existing\n")
+    assert ATUIN_INTEGRATION_MARKER in contents
+    assert (tmp_path / "rc.catherd.bak").read_text(encoding="utf-8") == "existing\n"
 
 
 @pytest.mark.small
-def test_exit_code_on_unknown_shell_install():
-    result = CliRunner().invoke(cli.main, ["install", "--shell", "noshell"])
+def test_atuin_enable_rejects_unsupported_shell():
+    result = CliRunner().invoke(cli.main, ["atuin", "enable", "--shell", "noshell"])
     assert result.exit_code == 1
     assert "Unknown shell" in result.stderr
 
 
 @pytest.mark.medium
-def test_errors_and_diagnostics_to_stderr(tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("SHELL", "/bin/bash")
-    result = CliRunner().invoke(cli.main, ["uninstall"])
+def test_atuin_enable_is_idempotent(tmp_path, monkeypatch):
+    rc = tmp_path / "rc"
+    rc.write_text(managed_snippet_block("bash"), encoding="utf-8")
+    before = rc.read_text(encoding="utf-8")
+    monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: rc)
+    monkeypatch.setattr(cli, "validate_snippet_for_shell", lambda *_args, **_kwargs: None)
+
+    result = CliRunner().invoke(cli.main, ["atuin", "enable", "--shell", "bash"])
+
+    assert result.exit_code == 0
+    assert "already enabled" in result.output
+    assert rc.read_text(encoding="utf-8") == before
+    assert not (tmp_path / "rc.catherd.bak").exists()
+
+
+@pytest.mark.medium
+def test_atuin_enable_migrates_legacy_block(tmp_path, monkeypatch):
+    rc = tmp_path / "rc"
+    original = (
+        "before\n"
+        "# catherd atuin/kitty sync snippet\n"
+        "legacy body\n"
+        "# end catherd atuin/kitty sync\n"
+        "after\n"
+    )
+    rc.write_text(original, encoding="utf-8")
+    monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: rc)
+    monkeypatch.setattr(cli, "validate_snippet_for_shell", lambda *_args, **_kwargs: None)
+
+    result = CliRunner().invoke(cli.main, ["atuin", "enable", "--shell", "bash"])
+
+    assert result.exit_code == 0
+    assert "Migrated legacy" in result.output
+    migrated = rc.read_text(encoding="utf-8")
+    assert migrated.startswith("before\n")
+    assert migrated.endswith("after\n")
+    assert ATUIN_INTEGRATION_MARKER in migrated
+    assert "# catherd atuin/kitty sync snippet" not in migrated
+    assert (tmp_path / "rc.catherd.bak").read_text(encoding="utf-8") == original
+
+
+@pytest.mark.medium
+def test_atuin_enable_dry_run_performs_no_writes(tmp_path, monkeypatch):
+    rc = tmp_path / "rc"
+    rc.write_text("orig", encoding="utf-8")
+    monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: rc)
+    monkeypatch.setattr(cli, "validate_snippet_for_shell", lambda *_args, **_kwargs: None)
+
+    result = CliRunner().invoke(cli.main, ["atuin", "enable", "--shell", "bash", "--dry-run"])
+
+    assert result.exit_code == 0
+    assert "DRY-RUN" in result.stderr
+    assert rc.read_text(encoding="utf-8") == "orig"
+    assert not (tmp_path / "rc.catherd.bak").exists()
+
+
+@pytest.mark.medium
+def test_atuin_enable_validation_failure_preserves_rc(tmp_path, monkeypatch):
+    rc = tmp_path / "rc"
+    rc.write_text("orig", encoding="utf-8")
+    monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: rc)
+
+    def reject(_shell):
+        raise ValueError("invalid generated snippet")
+
+    monkeypatch.setattr(cli, "validate_snippet_for_shell", reject)
+    result = CliRunner().invoke(cli.main, ["atuin", "enable", "--shell", "bash"])
+
     assert result.exit_code == 1
-    assert "No rc file found" in result.stderr
+    assert "invalid generated snippet" in result.stderr
+    assert rc.read_text(encoding="utf-8") == "orig"
+    assert not (tmp_path / "rc.catherd.bak").exists()
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+@pytest.mark.medium
+def test_atuin_disable_removes_current_or_legacy_block(tmp_path, monkeypatch, legacy):
+    rc = tmp_path / "rc"
+    if legacy:
+        block = (
+            "# catherd atuin/kitty sync snippet\n"
+            "legacy body\n"
+            "# end catherd atuin/kitty sync\n"
+        )
+    else:
+        block = managed_snippet_block("bash")
+    original = f"line1\n{block}line2\n"
+    rc.write_text(original, encoding="utf-8")
+    monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: rc)
+
+    result = CliRunner().invoke(cli.main, ["atuin", "disable", "--shell", "bash"])
+
+    assert result.exit_code == 0
+    assert "Removed" in result.output
+    assert rc.read_text(encoding="utf-8") == "line1\nline2\n"
+    assert (tmp_path / "rc.catherd.disable.bak").read_text(encoding="utf-8") == original
+
+
+@pytest.mark.medium
+def test_atuin_disable_dry_run_performs_no_writes(tmp_path, monkeypatch):
+    rc = tmp_path / "rc"
+    original = f"before\n{managed_snippet_block('bash')}after\n"
+    rc.write_text(original, encoding="utf-8")
+    monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: rc)
+
+    result = CliRunner().invoke(cli.main, ["atuin", "disable", "--shell", "bash", "--dry-run"])
+
+    assert result.exit_code == 0
+    assert "DRY-RUN" in result.stderr
+    assert rc.read_text(encoding="utf-8") == original
+    assert not (tmp_path / "rc.catherd.disable.bak").exists()
+
+
+@pytest.mark.medium
+def test_atuin_disable_rejects_unterminated_managed_block_without_writing(tmp_path, monkeypatch):
+    rc = tmp_path / "rc"
+    original = "keep\n# catherd atuin/kitty sync snippet\nunterminated\n"
+    rc.write_text(original, encoding="utf-8")
+    monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: rc)
+
+    result = CliRunner().invoke(cli.main, ["atuin", "disable", "--shell", "bash"])
+
+    assert result.exit_code == 1
+    assert "Unterminated" in result.stderr
+    assert rc.read_text(encoding="utf-8") == original
+    assert not (tmp_path / "rc.catherd.disable.bak").exists()
+
+
+@pytest.mark.medium
+def test_atuin_disable_missing_rc_is_optional(tmp_path, monkeypatch):
+    rc = tmp_path / "missing"
+    monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: rc)
+
+    result = CliRunner().invoke(cli.main, ["atuin", "disable", "--shell", "bash"])
+
+    assert result.exit_code == 0
+    assert "not enabled" in result.output
+
+
+@pytest.mark.medium
+def test_legacy_install_uninstall_aliases_remain_invokable(tmp_path, monkeypatch):
+    rc = tmp_path / "rc"
+    rc.write_text("", encoding="utf-8")
+    monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: rc)
+    monkeypatch.setattr(cli, "validate_snippet_for_shell", lambda *_args, **_kwargs: None)
+
+    install_result = CliRunner().invoke(cli.main, ["install", "--shell", "bash"])
+    assert install_result.exit_code == 0
+    assert "[DEPRECATED]" in install_result.stderr
+    assert ATUIN_INTEGRATION_MARKER in rc.read_text(encoding="utf-8")
+
+    uninstall_result = CliRunner().invoke(cli.main, ["uninstall", "--shell", "bash"])
+    assert uninstall_result.exit_code == 0
+    assert "[DEPRECATED]" in uninstall_result.stderr
+    assert ATUIN_INTEGRATION_MARKER not in rc.read_text(encoding="utf-8")
+
+
+@pytest.mark.small
+def test_legacy_install_uninstall_are_hidden_from_help():
+    result = CliRunner().invoke(cli.main, ["--help"])
+
+    assert result.exit_code == 0
+    assert "\n  atuin " in result.output
+    assert "\n  install " not in result.output
+    assert "\n  uninstall " not in result.output
 
 
 @patch("catherd.cli.get_kitty_state", return_value=KittyState(os_windows=()))
@@ -343,7 +461,8 @@ def test_doctor_basic(mock_state):
         gsf.return_value.exists.return_value = False
         glc.return_value = None
         result = CliRunner().invoke(cli.main, ["doctor"])
-    assert "sync snippet" in result.output or "Add this to your shell rc file" in result.output
+    assert "Optional Atuin history" in result.output
+    assert "catherd atuin doctor" in result.output
 
 
 @pytest.mark.small
