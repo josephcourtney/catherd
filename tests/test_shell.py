@@ -6,6 +6,7 @@ from catherd.shell import (
     ATUIN_INTEGRATION_MARKER,
     LEGACY_ATUIN_INTEGRATION_END_MARKER,
     LEGACY_ATUIN_INTEGRATION_MARKER,
+    SUPPORTED_SHELLS,
     append_managed_snippet,
     get_shell_rc_path,
     load_snippet_for_shell,
@@ -13,6 +14,7 @@ from catherd.shell import (
     managed_snippet_state,
     replace_managed_snippet,
 )
+
 
 @pytest.mark.small
 def test_get_shell_rc_path_zsh(monkeypatch):
