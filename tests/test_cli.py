@@ -135,6 +135,21 @@ def test_json_output(tmp_path, monkeypatch):
     assert item["last_command"] == "ls"
 
 
+@pytest.mark.small
+def test_show_json_preserves_exact_multiline_command(monkeypatch):
+    command = "echo one\n  echo two"
+    state = _state(Pane(id="w", title="shell", current_command=command))
+    monkeypatch.setattr(cli, "get_kitty_state", lambda **_kwargs: state)
+    monkeypatch.setattr(cli, "get_atuin_session_for_window", lambda *_args, **_kwargs: None)
+
+    result = CliRunner().invoke(cli.main, ["show", "--json", "--verbose"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload[0]["last_command"] == command
+    assert payload[0]["current_command"] == command
+
+
 @pytest.mark.medium
 def test_inspect_outputs_full_metadata(tmp_path, monkeypatch):
     session_file = tmp_path / "atuin_kitty_win"
@@ -182,6 +197,24 @@ def test_inspect_outputs_full_metadata(tmp_path, monkeypatch):
     assert payload[0]["rows"] == 43
     assert payload[0]["atuin_session_id"] == "sessA"
     assert payload[0]["session_content"] == "sessA win"
+
+
+@pytest.mark.small
+def test_inspect_unavailable_state_fails():
+    with patch("catherd.cli.get_kitty_state", return_value=None):
+        result = CliRunner().invoke(cli.main, ["inspect"])
+
+    assert result.exit_code == 1
+    assert "Could not read Kitty state" in result.stderr
+
+
+@pytest.mark.small
+def test_inspect_empty_state_fails():
+    with patch("catherd.cli.get_kitty_state", return_value=KittyState(os_windows=())):
+        result = CliRunner().invoke(cli.main, ["inspect"])
+
+    assert result.exit_code == 1
+    assert "No Kitty panes found" in result.stderr
 
 
 @pytest.mark.small
@@ -584,23 +617,31 @@ def test_legacy_install_uninstall_are_hidden_from_help():
 def test_doctor_no_windows(mock_state):
     _ = mock_state
     result = CliRunner().invoke(cli.main, ["doctor"])
+
     assert result.exit_code == 1
-    assert "No Kitty windows found" in result.output
+    assert "Core" in result.output
+    assert "No Kitty panes found" in result.stderr
 
 
 @patch("catherd.cli.get_kitty_state")
 @pytest.mark.medium
-def test_doctor_basic(mock_state):
-    mock_state.return_value = _state(Pane(id="X", title="Y"), tab_id="T")
-    with (
-        patch("catherd.cli.get_session_file") as gsf,
-        patch("catherd.cli.get_last_command_for_atuin_session") as glc,
-    ):
+def test_doctor_separates_core_and_optional_integrations(mock_state):
+    mock_state.return_value = _state(
+        Pane(id="X", title="Y", cwd="/code", foreground_cmd="zsh"),
+        tab_id="T",
+    )
+    with patch("catherd.cli.get_session_file") as gsf:
         gsf.return_value.exists.return_value = False
-        glc.return_value = None
         result = CliRunner().invoke(cli.main, ["doctor"])
-    assert "Optional Atuin history" in result.output
-    assert "catherd atuin doctor" in result.output
+
+    assert result.exit_code == 0
+    assert "Core" in result.output
+    assert "Kitty remote control: 1 pane(s) discovered" in result.output
+    assert "Kitty metadata:" in result.output
+    assert "Kitty shell integration" in result.output
+    assert "Optional integrations" in result.output
+    assert "Atuin" in result.output
+    assert "core catherd behavior is unaffected" in result.output
 
 
 @pytest.mark.medium
@@ -740,11 +781,11 @@ def test_print_kitty_session_diagnostics_all_branches(monkeypatch, capsys):
     )
     print_kitty_session_diagnostics(state, verbose=True)
     out = capsys.readouterr().out
-    assert "[OK] Windows with valid Atuin session file:" in out
-    assert "without optional Atuin pane/session association" in out
+    assert "[OK] Panes with valid Atuin session association:" in out
+    assert "without optional Atuin session association" in out
     assert "unusable Atuin association state" in out
-    assert "no command in Atuin" in out
-    assert "Optional Atuin history enrichment active in" in out
+    assert "without completed-command history" in out
+    assert "Completed-command history available for" in out
 
 
 @pytest.mark.small
@@ -758,17 +799,18 @@ def test_print_kitty_session_diagnostics_none_synced(monkeypatch, capsys):
     )
     print_kitty_session_diagnostics(state, verbose=True)
     out = capsys.readouterr().out
-    assert "Optional Atuin history enrichment is not active in any open windows" in out
+    assert "Completed-command history is not available for any open pane" in out
 
 
 @pytest.mark.small
-def test_main_invocation(runner, monkeypatch):
-    monkeypatch.setattr(cli, "is_sync_active_in_this_shell", lambda: True)
-    monkeypatch.setattr(cli, "get_kitty_state", lambda **_kwargs: KittyState(os_windows=()))
+def test_main_invocation_defaults_to_show(runner, monkeypatch):
+    monkeypatch.setattr(cli, "get_kitty_state", lambda **_kwargs: _state(Pane(id="w", title="shell")))
+    monkeypatch.setattr(cli, "get_atuin_session_for_window", lambda *_args, **_kwargs: None)
 
     result = runner.invoke(cli.main, [])
 
     assert result.exit_code == 0
+    assert "OS Window" in result.output
 
 
 @pytest.mark.small
