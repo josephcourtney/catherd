@@ -1,6 +1,6 @@
 # catherd
 
-A command-line and terminal interface for inspecting and organizing a running Kitty instance, with optional Atuin history enrichment.
+A command-line and terminal interface for inspecting and organizing a running Kitty instance. Kitty provides all core hierarchy, activity, and organization behavior; Atuin can optionally enrich panes with their most recently completed command.
 
 ## Interactive organizer
 
@@ -33,7 +33,15 @@ The TUI follows macOS light/dark appearance at launch, falling back to terminal 
 
 ### Scope
 
-catherd organizes objects that already exist in Kitty. The current 0.18.x scope intentionally does **not** create shells/windows/tabs or close processes. It is an inspector and organizer rather than a replacement for Kitty's complete remote-control interface.
+catherd organizes objects that already exist in Kitty. The current scope intentionally does **not** create shells/windows/tabs or close processes. It is an inspector and organizer rather than a replacement for Kitty's complete remote-control interface.
+
+### Core and optional enrichment
+
+Kitty is the only external system required for core catherd behavior. The hierarchy, focus state, current command/process metadata, filtering, inspection, and all organization operations come from Kitty and remain available when Atuin is not installed or configured.
+
+Atuin is optional history enrichment. When a Kitty pane has been associated with an Atuin session, catherd can show the most recently completed command after the shell has returned to a prompt. Without that association, catherd continues to use Kitty's current-command and process information; only history-specific information is absent.
+
+Kitty's own shell integration is separate from catherd's optional Kitty-pane-to-Atuin-session association.
 
 ## CLI
 
@@ -43,12 +51,12 @@ Running `catherd` without a subcommand is equivalent to `catherd show`.
 | --- | --- |
 | `catherd tui` | interactive hierarchy browser and organizer |
 | `catherd show` | list open panes with current/recent command information |
-| `catherd inspect` | emit the richer Kitty + Atuin dataset as JSON |
-| `catherd doctor` | diagnose Kitty/Atuin integration |
-| `catherd install` | install the shell snippet that associates Kitty pane IDs with Atuin sessions |
-| `catherd uninstall` | remove that shell snippet |
+| `catherd inspect` | emit the richest available Kitty dataset as JSON, including optional Atuin fields |
+| `catherd doctor` | diagnose Kitty and optional enrichment state |
+| `catherd install` | currently install the optional Kitty-pane-to-Atuin-session association snippet |
+| `catherd uninstall` | currently remove that optional Atuin association snippet |
 
-Atuin enrichment is optional for basic Kitty inspection. To enable per-pane history association:
+No Atuin setup is required to use catherd. To additionally enable per-pane completed-command history from Atuin:
 
 ```sh
 catherd install
