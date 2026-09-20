@@ -111,6 +111,7 @@ _TAB_HIERARCHY_WIDTH = 26
 _PANE_HIERARCHY_WIDTH = 24
 _TREE_ID_WIDTH = 5
 _TREE_STATUS_WIDTH = 22
+_DETAIL_LABEL_WIDTH = 11
 
 _STYLE_ACTIVE_BRANCH = "bold"
 _STYLE_ACTIVE_GUIDE = "dim"
@@ -237,12 +238,17 @@ def _command_identity(value: str | None) -> str | None:
         return None
     if not parts:
         return None
+
+    identity: str | None = None
     if "-m" in parts:
         index = parts.index("-m")
         if index + 1 < len(parts):
-            return parts[index + 1]
-    if len(parts) >= _UV_RUN_COMMAND_MIN_PARTS and parts[0] == "uv" and parts[1] == "run":
-        return _command_identity(" ".join(parts[2:]))
+            identity = parts[index + 1]
+    if identity is None and len(parts) >= _UV_RUN_COMMAND_MIN_PARTS and parts[0] == "uv" and parts[1] == "run":
+        identity = _command_identity(" ".join(parts[2:]))
+    if identity is not None:
+        return identity
+
     executable = pathlib.Path(parts[0]).name
     if len(parts) > 1:
         subcommand = parts[1]
@@ -252,7 +258,7 @@ def _command_identity(value: str | None) -> str | None:
             and "." not in subcommand
             and subcommand.replace("-", "").replace("_", "").isalnum()
         ):
-            return f"{executable} {subcommand}"
+            executable = f"{executable} {subcommand}"
     return executable
 
 
@@ -645,8 +651,8 @@ def _append_property(
 ) -> None:
     if value is None or value == "":
         return
-    label_text = f"{label:<11}"
-    if len(label) >= 11:
+    label_text = f"{label:<{_DETAIL_LABEL_WIDTH}}"
+    if len(label) >= _DETAIL_LABEL_WIDTH:
         label_text += " "
     details.append(label_text, style=_STYLE_DETAIL_LABEL)
     details.append(str(value), style=value_style)
