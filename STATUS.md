@@ -8,7 +8,9 @@ catherd is at version 1.0.0 for the scope defined in DESIGN.md. The Kitty inspec
 
 The project is licensed under the GNU Lesser General Public License v3.0 only (`LGPL-3.0-only`), with LICENSE.md and package metadata aligned.
 
-The final local quality, release, and installation rehearsals were reported passing before this version/documentation bump. No code or runtime behavior changes are part of the bump itself.
+The final local quality, release, and installation rehearsals were reported passing before the version/documentation bump. Subsequent Phase 2 shell-integration fixes corrected fish variable scope, made managed-block enable/disable newline-preserving, and moved real-shell subprocess checks into a dedicated `just check` gate because pytest-test-categories misattributed those subprocesses to randomized small tests.
+
+The current tree therefore requires a fresh `just check` before it can again be considered release-rehearsed.
 
 ## Known limitations
 
@@ -22,4 +24,4 @@ These are intentional scope boundaries rather than incomplete 1.0 work:
 
 ## Next
 
-Ensure the eventual `v1.0.0` tag points at the exact release tree that passed the final rehearsal, then publish from that tagged state. After release, restrict 1.0.x work to compatible defect and maintenance fixes unless DESIGN.md explicitly changes the product boundary.
+Run `just check` on the current tree. The gate now includes `just test-shell-integration` separately from pytest. Once that passes, ensure the eventual `v1.0.0` tag points at that exact rehearsed tree, then publish from the tagged state.
