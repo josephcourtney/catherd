@@ -996,6 +996,29 @@ def test_focused_branch_uses_status_not_hierarchy_markers() -> None:
 
 
 @pytest.mark.medium
+async def test_tui_core_behavior_without_atuin(tmp_path, monkeypatch) -> None:
+    """The organizer starts and acts normally with no Atuin state present."""
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+
+        details = app.query_one("#details", Static)
+        assert isinstance(details.content, Text)
+        assert "uv run pytest" in details.content.plain
+        assert "HISTORY" not in details.content.plain
+
+        await pilot.press("f")
+        await app.workers.wait_for_complete()
+
+    assert ("focus_pane", "1") in backend.calls
+
+
+@pytest.mark.medium
 async def test_focused_window_tab_and_pane_are_explicitly_marked() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
