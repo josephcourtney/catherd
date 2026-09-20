@@ -379,7 +379,7 @@ def test_atuin_enable_rejects_dangling_rc_symlink(tmp_path, monkeypatch):
     result = CliRunner().invoke(cli.main, ["atuin", "enable", "--shell", "zsh"])
 
     assert result.exit_code == 1
-    assert "dangling or unreadable" in result.stderr
+    assert "dangling, cyclic, or unreadable" in result.stderr
     assert rc.is_symlink()
 
 
