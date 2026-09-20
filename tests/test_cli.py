@@ -331,6 +331,38 @@ def test_atuin_enable_dry_run_performs_no_writes(tmp_path, monkeypatch):
 
 
 @pytest.mark.medium
+def test_atuin_enable_handles_new_rc_path_with_spaces(tmp_path, monkeypatch):
+    rc = tmp_path / "config dir" / "shell rc"
+    monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: rc)
+    monkeypatch.setattr(cli, "validate_snippet_for_shell", lambda *_args, **_kwargs: None)
+
+    result = CliRunner().invoke(cli.main, ["atuin", "enable", "--shell", "bash"])
+
+    assert result.exit_code == 0
+    assert ATUIN_INTEGRATION_MARKER in rc.read_text(encoding="utf-8")
+    assert not (tmp_path / "config dir" / "shell rc.catherd.bak").exists()
+
+
+@pytest.mark.medium
+def test_atuin_enable_write_failure_leaves_original_and_backup(tmp_path, monkeypatch):
+    rc = tmp_path / "rc"
+    rc.write_text("original\n", encoding="utf-8")
+    monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: rc)
+    monkeypatch.setattr(cli, "validate_snippet_for_shell", lambda *_args, **_kwargs: None)
+
+    def fail_write(_path, _contents):
+        raise OSError("simulated write failure")
+
+    monkeypatch.setattr(cli, "_atomic_write_text", fail_write)
+    result = CliRunner().invoke(cli.main, ["atuin", "enable", "--shell", "bash"])
+
+    assert result.exit_code == 1
+    assert "simulated write failure" in result.stderr
+    assert rc.read_text(encoding="utf-8") == "original\n"
+    assert (tmp_path / "rc.catherd.bak").read_text(encoding="utf-8") == "original\n"
+
+
+@pytest.mark.medium
 def test_atuin_enable_validation_failure_preserves_rc(tmp_path, monkeypatch):
     rc = tmp_path / "rc"
     rc.write_text("orig", encoding="utf-8")
