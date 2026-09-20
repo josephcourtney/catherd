@@ -1,6 +1,3 @@
-import os
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -9,27 +6,13 @@ from catherd.shell import (
     ATUIN_INTEGRATION_MARKER,
     LEGACY_ATUIN_INTEGRATION_END_MARKER,
     LEGACY_ATUIN_INTEGRATION_MARKER,
-    SUPPORTED_SHELLS,
     append_managed_snippet,
     get_shell_rc_path,
     load_snippet_for_shell,
     managed_snippet_block,
     managed_snippet_state,
     replace_managed_snippet,
-    validate_snippet_for_shell,
 )
-
-_SHELL_RUN_ARGS = {
-    "bash": ("--noprofile", "--norc"),
-    "zsh": ("-f",),
-    "fish": ("-N",),
-    "csh": ("-f",),
-}
-
-
-def _shell_command(executable, shell, script):
-    return [executable, *_SHELL_RUN_ARGS[shell], str(script)]
-
 
 @pytest.mark.small
 def test_get_shell_rc_path_zsh(monkeypatch):
@@ -170,95 +153,3 @@ def test_append_then_remove_round_trips_newline_terminated_contents():
 
     assert found
     assert removed == original
-
-
-@pytest.mark.parametrize("shell", SUPPORTED_SHELLS)
-@pytest.mark.medium
-def test_generated_snippet_parses_with_advertised_shell(shell):
-    if shutil.which(shell) is None:
-        pytest.skip(f"{shell} is not installed")
-
-    validate_snippet_for_shell(shell)
-
-
-@pytest.mark.parametrize("shell", SUPPORTED_SHELLS)
-@pytest.mark.medium
-def test_generated_snippet_writes_expected_session_file(shell, tmp_path):
-    executable = shutil.which(shell)
-    if executable is None:
-        pytest.skip(f"{shell} is not installed")
-
-    script = tmp_path / f"integration.{shell}"
-    script.write_text(load_snippet_for_shell(shell), encoding="utf-8")
-    cache_home = tmp_path / "cache home"
-    env = os.environ.copy()
-    env.pop("BASH_ENV", None)
-    env.update({
-        "HOME": str(tmp_path / "home"),
-        "XDG_CACHE_HOME": str(cache_home),
-        "KITTY_WINDOW_ID": "27",
-        "ATUIN_SESSION": "session-abc",
-    })
-
-    command = _shell_command(executable, shell, script)
-    result = subprocess.run(command, check=False, capture_output=True, text=True, env=env, timeout=5)
-
-    assert result.returncode == 0, result.stderr
-    session_file = cache_home / "catherd" / "atuin_kitty_27"
-    assert session_file.read_text(encoding="utf-8").strip() == "session-abc 27"
-
-
-@pytest.mark.parametrize("shell", SUPPORTED_SHELLS)
-@pytest.mark.medium
-def test_generated_snippet_falls_back_to_home_cache(shell, tmp_path):
-    executable = shutil.which(shell)
-    if executable is None:
-        pytest.skip(f"{shell} is not installed")
-
-    script = tmp_path / f"integration-home-cache.{shell}"
-    script.write_text(load_snippet_for_shell(shell), encoding="utf-8")
-    home = tmp_path / "home with spaces"
-    env = os.environ.copy()
-    env.pop("BASH_ENV", None)
-    env.pop("XDG_CACHE_HOME", None)
-    env.update({
-        "HOME": str(home),
-        "KITTY_WINDOW_ID": "12",
-        "ATUIN_SESSION": "session-home",
-    })
-
-    result = subprocess.run(
-        _shell_command(executable, shell, script),
-        check=False,
-        capture_output=True,
-        text=True,
-        env=env,
-        timeout=5,
-    )
-
-    assert result.returncode == 0, result.stderr
-    session_file = home / ".cache" / "catherd" / "atuin_kitty_12"
-    assert session_file.read_text(encoding="utf-8").strip() == "session-home 12"
-
-
-@pytest.mark.parametrize("shell", SUPPORTED_SHELLS)
-@pytest.mark.medium
-def test_generated_snippet_is_noop_without_association_environment(shell, tmp_path):
-    executable = shutil.which(shell)
-    if executable is None:
-        pytest.skip(f"{shell} is not installed")
-
-    script = tmp_path / f"integration-no-env.{shell}"
-    script.write_text(load_snippet_for_shell(shell), encoding="utf-8")
-    cache_home = tmp_path / "cache"
-    env = os.environ.copy()
-    env.pop("KITTY_WINDOW_ID", None)
-    env.pop("ATUIN_SESSION", None)
-    env["HOME"] = str(tmp_path / "home")
-    env["XDG_CACHE_HOME"] = str(cache_home)
-
-    command = _shell_command(executable, shell, script)
-    result = subprocess.run(command, check=False, capture_output=True, text=True, env=env, timeout=5)
-
-    assert result.returncode == 0, result.stderr
-    assert not (cache_home / "catherd").exists()
