@@ -610,6 +610,15 @@ test strict="true" fast="false" dev="false" quiet="" logs="" debug="" failing="f
   exit 0
 
 
+# Run real advertised-shell parser and behavior checks outside pytest.
+#
+# pytest-test-categories enforces subprocess isolation inside pytest; this
+# boundary check intentionally launches the shell executables themselves.
+[group('testing')]
+test-shell-integration:
+  {{PYTHON}} {{ROOT_DIR}}/scripts/check_shell_integration.py
+
+
 # Run the headless Textual acceptance suite for the Kitty organizer.
 [group('testing')]
 test-tui:
@@ -774,6 +783,7 @@ fix:
   @just _run_soft lint "just lint"
   @just _run_soft typecheck "just typecheck"
   @just _run_soft lint-imports "just lint-imports"
+  @just _run shell-integration "just test-shell-integration"
   @just _run "test --fast" "just test --fast"
   @just _run_soft cov "just cov"
   @just _log_end fix
@@ -791,6 +801,7 @@ check:
   @just _run lint "just lint --no-fix"
   @just _run typecheck "MODE=ci just typecheck"
   @just _run lint-imports "just lint-imports"
+  @just _run shell-integration "just test-shell-integration"
   @just _run test "just test"
   @just _run cov "just cov"
   @just _log_end check
