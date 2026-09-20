@@ -516,8 +516,8 @@ def test_selected_details_for_pane_with_activity() -> None:
     assert "Shell      zsh" in details.plain
     assert "Executable /bin/zsh" in details.plain
 
-    assert "RECENT" in details.plain
-    assert "Last       pytest -q" in details.plain
+    assert "HISTORY" in details.plain
+    assert "Last commandpytest -q" in details.plain
     assert "Session ID session-1" in details.plain
 
 
@@ -529,8 +529,8 @@ def test_selected_details_for_pane_loading() -> None:
         activity_loading=True,
     )
 
-    assert "RECENT" in details.plain
-    assert "Last       loading…" in details.plain
+    assert "HISTORY" in details.plain
+    assert "Last commandloading…" in details.plain
 
 
 @pytest.mark.small
@@ -541,7 +541,7 @@ def test_selected_details_explains_empty_recent_command() -> None:
         activity=PaneActivity(session_id="session-1", last_command=None),
     )
 
-    assert "Last       No completed command" in details.plain
+    assert "Last commandNo completed command" in details.plain
     assert "Session ID session-1" in details.plain
 
 
@@ -565,7 +565,7 @@ async def test_details_panel_loads_activity_for_highlighted_pane() -> None:
         await app.workers.wait_for_complete()
         details = app.query_one("#details", Static)
         assert isinstance(details.content, Text)
-        assert "RECENT" in details.content.plain
+        assert "HISTORY" in details.content.plain
         assert "session-live" in details.content.plain
         assert "uv run pytest" in details.content.plain
 
@@ -575,7 +575,7 @@ async def test_details_panel_loads_activity_for_highlighted_pane() -> None:
 @pytest.mark.small
 @pytest.mark.parametrize(
     ("dark", "expected"),
-    [(True, "#2d3336"), (False, "#f4f4f4")],
+    [(True, "#363d40"), (False, "#f0f2f3")],
 )
 def test_tab_band_background_tracks_theme(dark, expected) -> None:
     assert _tab_band_background(dark=dark) == expected
@@ -583,8 +583,8 @@ def test_tab_band_background_tracks_theme(dark, expected) -> None:
 
 @pytest.mark.small
 def test_tree_row_background_depends_only_on_grouping() -> None:
-    assert _tree_row_background(dark=False, banded=True) == "#f4f4f4"
-    assert _tree_row_background(dark=True, banded=True) == "#2d3336"
+    assert _tree_row_background(dark=False, banded=True) == "#f0f2f3"
+    assert _tree_row_background(dark=True, banded=True) == "#363d40"
     assert _tree_row_background(dark=False, banded=False) is None
     assert _tree_row_background(dark=True, banded=False) is None
 
@@ -596,18 +596,18 @@ def test_row_background_spans_whole_strip() -> None:
         Segment("      ", Style(bgcolor="red")),
     ])
 
-    styled = _apply_row_background(strip, "#f4f4f4")
+    styled = _apply_row_background(strip, "#f0f2f3")
 
     for segment in styled:
         assert segment.style is not None
         assert segment.style.bgcolor is not None
-        assert segment.style.bgcolor.name == "#f4f4f4"
+        assert segment.style.bgcolor.name == "#f0f2f3"
 
 
 @pytest.mark.small
 @pytest.mark.parametrize(
     ("dark", "expected"),
-    [(True, "#35566b"), (False, "#dbe9f2")],
+    [(True, "#41484c"), (False, "#e1e5e7")],
 )
 def test_selection_background_tracks_theme(dark, expected) -> None:
     assert _selection_background(dark=dark) == expected
@@ -616,23 +616,23 @@ def test_selection_background_tracks_theme(dark, expected) -> None:
 @pytest.mark.small
 def test_zebra_background_preserves_compact_selection_background() -> None:
     strip = Strip([
-        Segment("selected", Style(bgcolor="#dbe9f2")),
+        Segment("selected", Style(bgcolor="#e1e5e7")),
         Segment(" rest", Style()),
     ])
 
     styled = _apply_row_background(
         strip,
-        "#f4f4f4",
-        preserve_background="#dbe9f2",
+        "#f0f2f3",
+        preserve_background="#e1e5e7",
     )
     segments = list(styled)
 
     assert segments[0].style is not None
     assert segments[0].style.bgcolor is not None
-    assert segments[0].style.bgcolor.name == "#dbe9f2"
+    assert segments[0].style.bgcolor.name == "#e1e5e7"
     assert segments[1].style is not None
     assert segments[1].style.bgcolor is not None
-    assert segments[1].style.bgcolor.name == "#f4f4f4"
+    assert segments[1].style.bgcolor.name == "#f0f2f3"
 
 
 @pytest.mark.small
@@ -660,13 +660,21 @@ def test_tree_render_label_does_not_override_semantic_colors() -> None:
 
 @pytest.mark.small
 def test_selection_spans_row_and_adds_left_cursor_marker() -> None:
-    strip = Strip([Segment("  row contents", Style())])
+    strip = Strip([
+        Segment("  ", Style(color="bright_black")),
+        Segment("name", Style(color="white")),
+        Segment(" #1", Style(color="bright_black", dim=True)),
+        Segment(" ● focused", Style(color="cyan", bold=True)),
+    ])
 
-    selected = _apply_selection(strip, "#dbe9f2")
+    selected = _apply_selection(strip, "#e1e5e7")
 
     assert selected.text.startswith("▎")
     assert selected.text[1:] == strip.text[1:]
-    assert _background_names(selected) == {"#dbe9f2"}
+    assert _background_names(selected) == {"#e1e5e7"}
+    original_colors = [_color_name(segment.style or Style()) for segment in strip]
+    selected_colors = [_color_name(segment.style or Style()) for segment in selected]
+    assert selected_colors[1:] == original_colors[1:]
 
 
 @pytest.mark.small
@@ -693,12 +701,12 @@ def test_tree_labels_use_semantic_outline_columns() -> None:
     pane_label = _pane_label(pane, tab.title, active=True)
 
     assert os_label.plain.index("work") < os_label.plain.index("#100")
-    assert os_label.plain.index("#100") < os_label.plain.index("● focused")
-    assert os_label.plain.index("● focused") < os_label.plain.index("2 tabs · 3 panes")
+    assert "● focused" not in os_label.plain
+    assert os_label.plain.index("#100") < os_label.plain.index("2 tabs · 3 panes")
 
     assert tab_label.plain.index("editor") < tab_label.plain.index("#10")
-    assert tab_label.plain.index("#10") < tab_label.plain.index("● focused")
-    assert tab_label.plain.index("● focused") < tab_label.plain.index("2 panes · splits")
+    assert "● focused" not in tab_label.plain
+    assert tab_label.plain.index("#10") < tab_label.plain.index("2 panes · splits")
 
     assert pane_label.plain.index("nvim") < pane_label.plain.index("#1")
     assert pane_label.plain.index("#1") < pane_label.plain.index("● focused")
@@ -738,10 +746,10 @@ def test_outline_columns_align_across_tree_depths() -> None:
     pane_id_cell = 12 + pane_label.plain.index("#1")
     assert os_id_cell == tab_id_cell == pane_id_cell
 
-    os_status_cell = 4 + 2 + os_label.plain.index("● focused")
-    tab_status_cell = 8 + 2 + tab_label.plain.index("● focused")
-    pane_status_cell = 12 + pane_label.plain.index("● focused")
-    assert os_status_cell == tab_status_cell == pane_status_cell
+    os_detail_cell = 4 + 2 + os_label.plain.index("2 tabs · 3 panes")
+    tab_detail_cell = 8 + 2 + tab_label.plain.index("2 panes · splits")
+    pane_detail_cell = 12 + pane_label.plain.index("1/2")
+    assert os_detail_cell == tab_detail_cell == pane_detail_cell
 
 
 @pytest.mark.small
@@ -915,10 +923,45 @@ def test_long_command_title_is_preserved_in_current_column() -> None:
     assert "http.server" in label.plain
     assert label.plain.index("http.server") < label.plain.index("#6")
     assert "running" in label.plain
-    compact_command = _compact_hint(command)
-    assert compact_command is not None
-    assert compact_command in label.plain
-    assert label.plain.count("uv run python") == 1
+    assert "uv run python" not in label.plain
+    assert "http.server" in label.plain
+
+
+@pytest.mark.small
+def test_command_like_titles_are_normalized_without_losing_subcommand() -> None:
+    pane = Pane(
+        id="22",
+        title="./.venv/bin/catherd tui",
+        current_command="./.venv/bin/catherd tui",
+        at_prompt=False,
+        tab_index=1,
+        tab_count=2,
+    )
+    tab = Tab(
+        id="2",
+        title="./.venv/bin/catherd tui",
+        layout="splits",
+        panes=(pane, Pane(id="23", title="zsh")),
+    )
+
+    tab_label = _tab_label(tab, active_branch=True)
+    pane_label = _pane_label(pane, tab.title, active=True)
+
+    assert "catherd tui" in tab_label.plain
+    assert "./.venv/bin/catherd" not in tab_label.plain
+    assert "catherd tui" in pane_label.plain
+    assert "./.venv/bin/catherd" not in pane_label.plain
+    assert "1/2" in pane_label.plain
+
+
+@pytest.mark.small
+def test_single_pane_tab_omits_uninformative_layout_detail() -> None:
+    tab = Tab(id="5", title="~/code/AirBattery", layout="splits", panes=(Pane(id="12", title="zsh"),))
+
+    label = _tab_label(tab)
+
+    assert "1 pane" in label.plain
+    assert "splits" not in label.plain
 
 
 @pytest.mark.small
@@ -944,13 +987,12 @@ def test_focused_branch_uses_status_not_hierarchy_markers() -> None:
 
     assert not os_label.plain.startswith("● ")
     assert not tab_label.plain.startswith("● ")
-    assert "● focused" in os_label.plain
-    assert "● focused" in tab_label.plain
+    assert "● focused" not in os_label.plain
+    assert "● focused" not in tab_label.plain
     assert _style_for(os_label, "work").bold
     assert _color_name(_style_for(os_label, "work")) is None
     assert _style_for(os_label, "#100").dim
     assert _style_for(tab_label, "editor").bold
-    assert _color_name(_style_for(tab_label, "● focused")) == "cyan"
 
 
 @pytest.mark.medium
@@ -968,8 +1010,8 @@ async def test_focused_window_tab_and_pane_are_explicitly_marked() -> None:
         assert isinstance(os_label, Text)
         assert isinstance(tab_label, Text)
         assert isinstance(pane_label, Text)
-        assert "● focused" in os_label.plain
-        assert "● focused" in tab_label.plain
+        assert "● focused" not in os_label.plain
+        assert "● focused" not in tab_label.plain
         assert "● focused" in pane_label.plain
         assert "▶ running" in pane_label.plain
         assert tree._active_branch_refs == {
@@ -1734,7 +1776,7 @@ async def test_stale_activity_result_does_not_overwrite_new_selection() -> None:
 
         details = app.query_one("#details", Static)
         assert isinstance(details.content, Text)
-        assert "RECENT" in details.content.plain
+        assert "HISTORY" in details.content.plain
         assert "Session ID session-2" in details.content.plain
-        assert "Last       current-two" in details.content.plain
+        assert "Last commandcurrent-two" in details.content.plain
         assert "stale-one" not in details.content.plain
