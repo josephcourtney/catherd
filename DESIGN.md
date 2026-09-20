@@ -29,7 +29,7 @@ Kitty calls the leaf object a window; catherd uses **pane** in user-facing termi
 
 ## Non-goals
 
-The current 0.18.x design does not attempt to:
+The current design does not attempt to:
 
 - create shells, panes, tabs, or OS windows;
 - close processes or terminal objects;
@@ -80,7 +80,7 @@ Atuin lookup is enrichment only. Missing Atuin, missing catherd session files, m
 
 ### Optional Atuin shell integration
 
-`catherd.shell` provides the optional shell startup snippet used to associate `KITTY_WINDOW_ID` with `ATUIN_SESSION`. This snippet is not required to run catherd and is not Kitty shell integration. The current CLI install/uninstall operations manage only this optional Atuin association; Phase 2 of the public-release plan will move those operations under explicitly Atuin-scoped terminology.
+`catherd.shell` provides the optional shell startup snippet used to associate `KITTY_WINDOW_ID` with `ATUIN_SESSION`. This snippet is not required to run catherd and is not Kitty shell integration. The current CLI install/uninstall operations manage only this optional Atuin association.
 
 ## Interfaces
 
@@ -91,7 +91,7 @@ Atuin lookup is enrichment only. Missing Atuin, missing catherd session files, m
 - `show`: human-readable current hierarchy/activity summary;
 - `inspect`: richer JSON data;
 - `doctor`: integration diagnostics;
-- `install` / `uninstall`: shell integration management;
+- `install` / `uninstall`: optional Atuin-association shell integration management;
 - `tui`: the interactive organizer.
 
 The default invocation remains `show`.
