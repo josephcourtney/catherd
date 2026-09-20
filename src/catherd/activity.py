@@ -17,11 +17,16 @@ class PaneActivity:
 def get_atuin_session_for_window(window_id: str, *, verbose: bool = False) -> str | None:
     """Return the Atuin session recorded for a Kitty pane."""
     path = get_session_file(window_id)
-    if not path.exists():
+    try:
+        if not path.exists():
+            if verbose:
+                print(f"[verbose] No session file: {path}")
+            return None
+        line = path.read_text(encoding="utf-8").strip()
+    except OSError as err:
         if verbose:
-            print(f"[verbose] No session file: {path}")
+            print(f"[verbose] Could not read optional Atuin session file {path}: {err}")
         return None
-    line = path.read_text(encoding="utf-8").strip()
     if verbose:
         print(f"[verbose] Read session info from {path}: '{line}'")
     if not line:
