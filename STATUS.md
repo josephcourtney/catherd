@@ -15,7 +15,7 @@ The optional shell integration now uses shell-native bash, zsh, fish, and csh sn
 Phase 1 passed `just check`. Phase 2 adds regression coverage for:
 
 - enable/disable idempotence, dry-run, backups, legacy-marker migration, malformed-block rejection, and write-failure recovery;
-- startup-file paths containing spaces and creation of a previously absent rc file;
+- startup-file paths containing spaces, creation of a previously absent rc file, and preservation of symlinked rc files;
 - real parser and execution checks for bash, zsh, fish, and csh when those executables are installed;
 - missing/unreadable Atuin state degrading to optional enrichment absence rather than a core failure;
 - hidden compatibility aliases and the explicit Atuin CLI namespace.
