@@ -8,7 +8,7 @@ This document is the operational testing guide for catherd. The canonical full v
 
 catherd uses three complementary test layers:
 
-1. **Pure and component tests** exercise parsing, models, CLI behavior, Atuin integration, and Kitty command construction.
+1. **Pure and component tests** exercise parsing, models, CLI behavior, Atuin integration, shell managed-block migration/safety, and Kitty command construction.
 2. **Headless TUI acceptance tests** run the Textual application with a stateful fake Kitty backend. These verify rendered hierarchy changes and interaction semantics without requiring a running Kitty instance.
 3. **Real-Kitty acceptance** is a deliberately small manual boundary check for behavior that cannot be proven by the headless harness, such as native macOS window titles and Kitty remote-control effects.
 
@@ -18,6 +18,7 @@ Tests use pytest and are classified with the repository's size markers. Size is 
 - `medium`: may use local filesystem/SQLite/subprocesses or framework event loops that sleep/yield internally.
 - Textual `App.run_test()` cases are therefore `medium`; pure TUI helper/rendering functions remain `small`.
 - Tests using `tmp_path` for real file behavior are `medium`; use pyfakefs or mocks only when the test is genuinely intended to remain a hermetic unit test.
+- Advertised Atuin shell snippets are syntax-checked and executed with bash, zsh, fish, and csh when the corresponding executable is available; unavailable shells are skipped locally and must be supplied by the later CI matrix.
 
 ## Standard commands
 
@@ -35,7 +36,7 @@ Run the complete repository validation gate before merging:
 just check
 ```
 
-`just check` runs syntax validation, formatting checks, Ruff linting, type checking, import-boundary validation, the full pytest suite, and coverage reporting.
+`just check` runs syntax validation, formatting checks, Ruff linting, type checking, import-boundary validation, the full pytest suite, and coverage reporting. The full suite includes optional-Atuin lifecycle, legacy-marker migration, rc-file preservation/failure recovery, and available-shell parser/execution checks.
 
 For rapid iteration, the general test runner remains available:
 
