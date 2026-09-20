@@ -50,17 +50,23 @@ Kitty's own shell integration is separate from catherd's optional Kitty-pane-to-
 
 ## CLI
 
-Running `catherd` without a subcommand is equivalent to `catherd show`.
+Running `catherd` without a subcommand is equivalent to `catherd show`. Use `catherd --version` to report the installed package version.
 
 | Command | Purpose |
 | --- | --- |
 | `catherd tui` | interactive hierarchy browser and organizer |
-| `catherd show` | list open panes with current/recent command information |
+| `catherd show` | show a responsive OS-window → tab → pane hierarchy with current/recent commands |
+| `catherd show --verbose` | add pane IDs and process/layout diagnostics to the human view |
+| `catherd show --json` | emit the stable machine-readable pane representation |
 | `catherd inspect` | emit the richest available Kitty dataset as JSON, including optional Atuin fields |
-| `catherd doctor` | diagnose Kitty and report optional enrichment state |
+| `catherd doctor` | diagnose the core Kitty boundary separately from optional integrations |
 | `catherd atuin doctor` | diagnose only the optional Atuin integration |
 | `catherd atuin enable` | safely enable Kitty-pane-to-Atuin-session association |
 | `catherd atuin disable` | remove that association while preserving an rc-file backup |
+
+The default human `show` view adapts to terminal width. It normalizes multiline commands for display, places the working directory beside the command when space permits and on a subordinate line when it does not, and omits low-value process metadata unless `--verbose` is requested. JSON and `inspect` retain exact underlying values rather than display-normalized text.
+
+Core Kitty failures are command failures: `show`, `inspect`, and `doctor` return a nonzero exit status when a usable Kitty hierarchy cannot be obtained. Missing Atuin state remains optional and does not make those core commands unhealthy.
 
 No Atuin setup is required to use catherd. To additionally enable per-pane completed-command history from Atuin:
 
