@@ -1,6 +1,7 @@
 ## [Unreleased]
 
 ### Changed
+- define Kitty as the complete core runtime boundary and Atuin as optional completed-command history enrichment; document that core CLI/TUI organization remains functional without Atuin state.
 - distinguish catherd cursor selection from Kitty focus with a full-row selection marker and explicit focused/running/at-prompt status grammar; make inspector labels, paths, identifiers, footer actions, and filtered counts easier to scan.
 - simplify TUI tree rows to identity plus a concise activity/layout hint and distinguish Kitty-active objects from catherd selection.
 - reorganize the details pane into a fixed-width grouped inspector with breadcrumbs and exceptional-state emphasis.
