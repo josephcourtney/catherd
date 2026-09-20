@@ -18,7 +18,7 @@ Tests use pytest and are classified with the repository's size markers. Size is 
 - `medium`: may use local filesystem/SQLite/subprocesses or framework event loops that sleep/yield internally.
 - Textual `App.run_test()` cases are therefore `medium`; pure TUI helper/rendering functions remain `small`.
 - Tests using `tmp_path` for real file behavior are `medium`; use pyfakefs or mocks only when the test is genuinely intended to remain a hermetic unit test.
-- Advertised Atuin shell snippets are syntax-checked and executed with bash, zsh, fish, and csh when the corresponding executable is available; unavailable shells are skipped locally and must be supplied by the later CI matrix.
+- Real advertised-shell validation is intentionally outside pytest because it launches external shell processes. `just test-shell-integration` syntax-checks and executes the generated bash, zsh, fish, and csh snippets when those executables are available.
 
 ## Standard commands
 
@@ -45,7 +45,7 @@ just release-check
 The final 1.0.0 rehearsal also included the repository's installation validation path in the user's release-ready working tree. The tagged release tree should contain the same validation path used for that rehearsal.
 
 
-`just check` runs syntax validation, formatting checks, Ruff linting, type checking, import-boundary validation, the full pytest suite, and coverage reporting. The full suite includes optional-Atuin lifecycle, legacy-marker migration, rc-file preservation/failure recovery, and available-shell parser/execution checks.
+`just check` runs syntax validation, formatting checks, Ruff linting, type checking, import-boundary validation, the standalone real-shell integration gate, the full pytest suite, and coverage reporting. Pytest covers optional-Atuin lifecycle, legacy-marker migration, and rc-file preservation/failure recovery; the separate shell gate covers parser and execution behavior against installed shell executables.
 
 For rapid iteration, the general test runner remains available:
 
