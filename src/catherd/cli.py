@@ -306,6 +306,8 @@ def show(*, verbose: bool, as_json: bool) -> None:
 @click.option("--pretty", is_flag=True, help="Pretty-print the JSON output")
 def inspect(*, verbose: bool, pretty: bool) -> None:
     """Show the richest per-window Kitty + Atuin dataset as JSON."""
+    if verbose:
+        click.echo("[INFO] inspect already emits full fields; verbose diagnostics stay on stderr.", err=True)
     state = _require_kitty_state()
     locations = list(state.iter_panes())
 
@@ -604,7 +606,7 @@ def _print_kitty_window_metadata(pane: Pane) -> None:
 def _print_ok_windows(ok: list[tuple[PaneLocation, str, str]]) -> None:
     if not ok:
         return
-    click.secho("[OK] Windows with valid Atuin session file:", fg="green")
+    click.secho("[OK] Panes with valid Atuin session association:", fg="green")
     for location, content, last_cmd in ok:
         pane = location.pane
         click.echo(f"  - WinID: {pane.id}, TabID: {location.tab.id}, Title: {pane.title[:30]}")
@@ -616,7 +618,7 @@ def _print_ok_windows(ok: list[tuple[PaneLocation, str, str]]) -> None:
 def _print_missing_files(missing_file: list[PaneLocation]) -> None:
     if not missing_file:
         return
-    click.secho("[INFO] Windows without optional Atuin pane/session association:", fg="yellow")
+    click.secho("[INFO] Panes without optional Atuin session association:", fg="yellow")
     for location in missing_file:
         pane = location.pane
         click.echo(f"  - WinID: {pane.id}, TabID: {location.tab.id}, Title: {pane.title[:30]}")
@@ -628,7 +630,7 @@ def _print_missing_files(missing_file: list[PaneLocation]) -> None:
 def _print_corrupt_windows(corrupt_file: list[tuple[PaneLocation, str]]) -> None:
     if not corrupt_file:
         return
-    click.secho("[WARN] Windows with unusable Atuin association state:", fg="yellow")
+    click.secho("[WARN] Panes with unusable Atuin association state:", fg="yellow")
     for location, content in corrupt_file:
         pane = location.pane
         click.echo(f"  - WinID: {pane.id}, TabID: {location.tab.id}, Title: {pane.title[:30]}")
@@ -640,7 +642,7 @@ def _print_corrupt_windows(corrupt_file: list[tuple[PaneLocation, str]]) -> None
 def _print_missing_command_windows(missing_command: list[tuple[PaneLocation, str, str]]) -> None:
     if not missing_command:
         return
-    click.secho("[WARN] Windows with session file but no command in Atuin:", fg="yellow")
+    click.secho("[WARN] Panes associated with Atuin but without completed-command history:", fg="yellow")
     for location, content, last_cmd in missing_command:
         pane = location.pane
         click.echo(f"  - WinID: {pane.id}, TabID: {location.tab.id}, Title: {pane.title[:30]}")
@@ -661,7 +663,7 @@ def _print_sync_notes(notes: list[str]) -> None:
 def print_kitty_session_diagnostics(state: KittyState, *, verbose: bool = False) -> None:
     ok, missing_file, corrupt_file, missing_command, notes = _collect_kitty_session_diagnostics(state, verbose=verbose)
     total = state.pane_count
-    click.secho(f"[OK] Found {total} Kitty window(s).\n", fg="green")
+    click.secho(f"[OK] Found {total} Kitty pane(s).\n", fg="green")
 
     _print_ok_windows(ok)
     _print_missing_files(missing_file)
@@ -683,6 +685,64 @@ def print_kitty_session_diagnostics(state: KittyState, *, verbose: bool = False)
             f"[INFO] Optional Atuin history enrichment active in {synced}/{total} windows.",
             fg=color,
         )
+
+
+def _print_core_doctor_summary(state: KittyState) -> None:
+    panes = [location.pane for location in state.iter_panes()]
+    total = len(panes)
+    click.secho(f"  [OK] Kitty remote control: {total} pane(s) discovered", fg="green")
+    shell = get_shell_info()
+    if shell:
+        click.echo(f"  [INFO] Current shell: {shell}")
+
+    cwd_count = sum(pane.cwd is not None for pane in panes)
+    command_count = sum(bool(pane.current_command or pane.foreground_cmd) for pane in panes)
+    tty_count = sum(pane.tty is not None for pane in panes)
+    click.echo(
+        "  [INFO] Kitty metadata: "
+        f"CWD {cwd_count}/{total}, command {command_count}/{total}, TTY {tty_count}/{total}"
+    )
+    if tty_count < total:
+        click.echo(
+            "  [INFO] Kitty shell integration can provide richer terminal metadata; "
+            "it is separate from catherd's optional Atuin association."
+        )
+
+
+def _print_atuin_doctor_summary(state: KittyState, *, verbose: bool) -> None:
+    ok, missing_file, corrupt_file, missing_command, notes = _collect_kitty_session_diagnostics(
+        state,
+        verbose=verbose,
+    )
+    total = state.pane_count
+    associated = len(ok) + len(missing_command)
+    history = len(ok)
+
+    if associated == total and not corrupt_file:
+        click.secho(f"    [OK] Pane association: {associated}/{total}", fg="green")
+    elif associated == 0:
+        click.secho(
+            "    [INFO] Pane association is not active; core catherd behavior is unaffected.",
+            fg="yellow",
+        )
+    else:
+        click.secho(f"    [INFO] Pane association: {associated}/{total}", fg="yellow")
+
+    if associated:
+        click.echo(f"    [INFO] Completed-command history available for {history}/{total} pane(s).")
+    if corrupt_file:
+        click.secho(f"    [WARN] Unusable association state for {len(corrupt_file)} pane(s).", fg="yellow")
+    if notes:
+        click.secho(f"    [WARN] {len(notes)} association consistency observation(s).", fg="yellow")
+
+    if verbose:
+        click.echo()
+        click.echo("    Detailed Atuin state")
+        _print_ok_windows(ok)
+        _print_missing_files(missing_file)
+        _print_corrupt_windows(corrupt_file)
+        _print_missing_command_windows(missing_command)
+        _print_sync_notes(notes)
 
 
 def _print_atuin_installation_status() -> None:
@@ -736,28 +796,24 @@ def tui() -> None:
 
 
 @main.command()
-@click.option("-v", "--verbose", is_flag=True, help="Show verbose/debug output")
+@click.option("-v", "--verbose", is_flag=True, help="Show detailed optional-integration diagnostics")
 def doctor(*, verbose: bool = False) -> None:
-    """Diagnose catherd's Kitty boundary and report optional enrichment state."""
+    """Diagnose the core Kitty boundary and optional integrations."""
     click.echo("=== catherd doctor ===")
+    click.echo()
+    click.echo("Core")
+    state = _require_kitty_state()
+    _print_core_doctor_summary(state)
 
-    print_env_diagnostics()
-    shell = get_shell_info()
-    click.echo(f"[INFO] Detected shell: {shell}")
-
-    state = get_kitty_state(verbose=verbose)
-    if state is None or state.pane_count == 0:
-        click.secho("[FAIL] No Kitty windows found. Is Kitty running and are there open windows/tabs?", fg="red")
-        raise SystemExit(1)
-
-    print_kitty_session_diagnostics(state, verbose=verbose)
+    click.echo()
+    click.echo("Optional integrations")
+    click.echo("  Atuin")
+    _print_atuin_doctor_summary(state, verbose=verbose)
 
     if not is_sync_active_in_this_shell():
-        click.secho(
-            "TIP: Optional Atuin history can be diagnosed or enabled with 'catherd atuin doctor' "
-            "and 'catherd atuin enable'.",
-            fg="blue",
-        )
+        click.echo("    [INFO] Enable completed-command enrichment with 'catherd atuin enable' if desired.")
+
+    click.echo()
     click.secho("=== Doctor check complete ===", fg="blue")
 
 
