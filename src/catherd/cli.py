@@ -53,6 +53,7 @@ def get_shell_info(force_shell: str | None = None) -> str:
 
 
 @click.group(invoke_without_command=True)
+@click.version_option(package_name="catherd", prog_name="catherd")
 @click.pass_context
 def cli(ctx: click.Context) -> None:
     """Inspect and organize Kitty, with optional Atuin history enrichment."""
@@ -145,38 +146,68 @@ def _serialize_pane(location: PaneLocation, last_command: str) -> dict[str, str 
     }
 
 
-_TITLE_WIDTH: Final[int] = 25
-_CMD_WIDTH: Final[int] = 25
-_CWD_WIDTH: Final[int] = 20
-_FG_WIDTH: Final[int] = 20
-_SIZE_WIDTH: Final[int] = 7
-_ACTIVE_WIDTH: Final[int] = 10
-_TAB_TITLE_HINT_WIDTH: Final[int] = 30
+_SHOW_FALLBACK_WIDTH: Final[int] = 120
+_SHOW_MIN_WIDTH: Final[int] = 40
+_SHOW_INLINE_CWD_WIDTH: Final[int] = 92
+_SHOW_CWD_TARGET_WIDTH: Final[int] = 38
+
+
+def _normalize_human_text(value: str | None) -> str:
+    """Collapse display-only whitespace without changing machine-readable values."""
+    return " ".join(value.split()) if value else ""
+
+
+def _display_cwd(cwd: str | None) -> str:
+    """Return a compact human-readable working directory."""
+    normalized = _normalize_human_text(cwd)
+    if not normalized:
+        return ""
+    home = str(Path.home())
+    if normalized == home:
+        return "~"
+    prefix = home + os.sep
+    if normalized.startswith(prefix):
+        return "~" + os.sep + normalized[len(prefix) :]
+    return normalized
+
+
+def _show_width() -> int:
+    """Return the usable terminal width for human show output."""
+    return max(_SHOW_MIN_WIDTH, shutil.get_terminal_size(fallback=(_SHOW_FALLBACK_WIDTH, 24)).columns)
+
+
+def _fit_human(value: str | None, width: int) -> str:
+    """Normalize and truncate text to a display width."""
+    return _truncate(_normalize_human_text(value), max(1, width))
 
 
 def _tab_title_hint(tab_rows: list[tuple[PaneLocation, str]]) -> str:
-    title = tab_rows[0][0].tab.title
-    return f" - {_truncate(title, _TAB_TITLE_HINT_WIDTH)}" if title else ""
+    title = _normalize_human_text(tab_rows[0][0].tab.title)
+    return f" — {title}" if title else ""
 
 
-def _print_show_row(location: PaneLocation, display_cmd: str) -> None:
-    pane = location.pane
-    truncated_title = _truncate(pane.title, _TITLE_WIDTH)
-    truncated_cmd = _truncate(display_cmd, _CMD_WIDTH)
-    truncated_cwd = _truncate(pane.cwd, _CWD_WIDTH)
-    truncated_fg = _truncate(pane.foreground_cmd, _FG_WIDTH)
-    size = ""
-    if pane.cols is not None or pane.rows is not None:
-        size = f"{pane.cols or ''}x{pane.rows or ''}"
-        if size == "x":
-            size = ""
-    click.echo(
-        f"{pane.id:>10} | {location.tab.id or '':>5} | {truncated_title:<{_TITLE_WIDTH}} | "
-        f"{truncated_cmd:<{_CMD_WIDTH}} | {truncated_cwd:<{_CWD_WIDTH}} | "
-        f"{pane.pid or '':>5} | {truncated_fg:<{_FG_WIDTH}} | "
-        f"{size:<{_SIZE_WIDTH}} | "
-        f"{_active_summary(location):<{_ACTIVE_WIDTH}}"
-    )
+def _pane_size(pane: Pane) -> str | None:
+    if pane.cols is None and pane.rows is None:
+        return None
+    return f"{pane.cols or '?'}×{pane.rows or '?'}"
+
+
+def _pane_verbose_summary(pane: Pane) -> str:
+    parts = [f"id {pane.id}"]
+    if pane.pid is not None:
+        parts.append(f"pid {pane.pid}")
+    if size := _pane_size(pane):
+        parts.append(size)
+    if pane.at_prompt is True:
+        parts.append("at prompt")
+    elif pane.at_prompt is False:
+        parts.append("running")
+    if pane.tty:
+        parts.append(f"tty {pane.tty}")
+    foreground = _normalize_human_text(pane.foreground_cmd)
+    if foreground:
+        parts.append(f"fg {foreground}")
+    return " · ".join(parts)
 
 
 def _prepare_show_rows(state: KittyState, *, verbose: bool) -> list[tuple[PaneLocation, str]]:
@@ -188,16 +219,36 @@ def _prepare_show_rows(state: KittyState, *, verbose: bool) -> list[tuple[PaneLo
     return rows
 
 
-def _render_show_table(rows: list[tuple[PaneLocation, str]]) -> None:
-    header = (
-        f"{'Kitty WinID':>10} | {'Tab':>5} | {'Title':<{_TITLE_WIDTH}} | "
-        f"{'Command':<{_CMD_WIDTH}} | {'CWD':<{_CWD_WIDTH}} | {'PID':>5} | "
-        f"{'FG':<{_FG_WIDTH}} | {'SIZE':<{_SIZE_WIDTH}} | "
-        f"{'Active':<{_ACTIVE_WIDTH}}"
-    )
-    click.secho(header, fg="cyan", bold=True)
-    click.secho("-" * len(header), fg="cyan")
+def _print_show_pane(location: PaneLocation, display_cmd: str, *, width: int, verbose: bool) -> None:
+    pane = location.pane
+    marker = "●" if pane.is_active else " "
+    prefix = f"    {marker} "
+    command = _normalize_human_text(display_cmd) or _DISPLAY_COMMAND_FALLBACK
+    cwd = _display_cwd(pane.cwd)
 
+    if width >= _SHOW_INLINE_CWD_WIDTH and cwd:
+        available = max(1, width - len(prefix))
+        cwd_width = min(_SHOW_CWD_TARGET_WIDTH, max(18, available // 3))
+        command_width = max(1, available - cwd_width - 2)
+        click.echo(f"{prefix}{_fit_human(command, command_width):<{command_width}}  {_fit_human(cwd, cwd_width)}")
+    else:
+        click.echo(prefix + _fit_human(command, width - len(prefix)))
+        if cwd:
+            cwd_prefix = "      "
+            click.echo(cwd_prefix + _fit_human(cwd, width - len(cwd_prefix)))
+
+    if verbose:
+        detail_prefix = "      "
+        click.echo(detail_prefix + _fit_human(_pane_verbose_summary(pane), width - len(detail_prefix)))
+
+
+def _render_show_hierarchy(
+    rows: list[tuple[PaneLocation, str]],
+    *,
+    verbose: bool,
+    width: int | None = None,
+) -> None:
+    resolved_width = width or _show_width()
     first_os = True
     for os_id, os_group in groupby(rows, key=lambda entry: entry[0].os_window.id or ""):
         os_rows = list(os_group)
@@ -206,19 +257,33 @@ def _render_show_table(rows: list[tuple[PaneLocation, str]]) -> None:
         if not first_os:
             click.echo()
         first_os = False
-        os_label = os_id or "(unknown os window)"
-        os_active_suffix = " (active)" if any(row[0].os_window.is_active for row in os_rows) else ""
-        click.secho(f"OS Window {os_label}{os_active_suffix}", fg="cyan")
+
+        os_window = os_rows[0][0].os_window
+        os_label = os_id or "(unknown)"
+        os_title = _normalize_human_text(os_window.title)
+        title_suffix = f" — {os_title}" if os_title else ""
+        focus_suffix = " • focused" if os_window.is_active else ""
+        click.secho(_fit_human(f"OS Window {os_label}{title_suffix}{focus_suffix}", resolved_width), bold=True)
+
         for tab_id, tab_group in groupby(os_rows, key=lambda entry: entry[0].tab.id or ""):
             tab_rows = list(tab_group)
             if not tab_rows:
                 continue
-            tab_label = tab_id or "(no tab id)"
-            tab_active_suffix = " (active)" if any(row[0].tab.is_active for row in tab_rows) else ""
-            tab_hint = _tab_title_hint(tab_rows)
-            click.echo(f"  Tab {tab_label}{tab_active_suffix}{tab_hint}")
+            tab_label = tab_id or "(unknown)"
+            focus_suffix = " • focused" if any(row[0].tab.is_active for row in tab_rows) else ""
+            tab_line = f"  Tab {tab_label}{_tab_title_hint(tab_rows)}{focus_suffix}"
+            click.echo(_fit_human(tab_line, resolved_width))
             for location, display_cmd in tab_rows:
-                _print_show_row(location, display_cmd)
+                _print_show_pane(location, display_cmd, width=resolved_width, verbose=verbose)
+
+
+def _require_kitty_state() -> KittyState:
+    state = get_kitty_state(verbose=False)
+    if state is None:
+        raise click.ClickException("Could not read Kitty state.")
+    if state.pane_count == 0:
+        raise click.ClickException("No Kitty panes found. Is Kitty running with remote control enabled?")
+    return state
 
 
 @main.command()
