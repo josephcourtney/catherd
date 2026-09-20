@@ -18,7 +18,7 @@ _EMBEDDED_SNIPPETS: Final[dict[str, str]] = {
         'if [[ -n "${KITTY_WINDOW_ID:-}" && -n "${ATUIN_SESSION:-}" ]]; then\n'
         '  _catherd_dir="${XDG_CACHE_HOME:-$HOME/.cache}/catherd"\n'
         '  mkdir -p "$_catherd_dir"\n'
-        "  printf '%s %s\\n' \"$ATUIN_SESSION\" \"$KITTY_WINDOW_ID\" > "
+        '  printf \'%s %s\\n\' "$ATUIN_SESSION" "$KITTY_WINDOW_ID" > '
         '"$_catherd_dir/atuin_kitty_${KITTY_WINDOW_ID}"\n'
         "  unset _catherd_dir\n"
         "fi\n"
@@ -39,7 +39,7 @@ _EMBEDDED_SNIPPETS: Final[dict[str, str]] = {
         '        set -l _catherd_dir "$HOME/.cache/catherd"\n'
         "    end\n"
         '    mkdir -p "$_catherd_dir"\n'
-        "    printf '%s %s\\n' \"$ATUIN_SESSION\" \"$KITTY_WINDOW_ID\" > "
+        '    printf \'%s %s\\n\' "$ATUIN_SESSION" "$KITTY_WINDOW_ID" > '
         '"$_catherd_dir/atuin_kitty_$KITTY_WINDOW_ID"\n'
         "end\n"
     ),
@@ -122,7 +122,7 @@ def validate_snippet_for_shell(shell: str) -> None:
     environment = os.environ.copy()
     environment.pop("BASH_ENV", None)
     try:
-        result = subprocess.run(  # noqa: S603
+        result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
             [executable, *_VALIDATION_ARGS[shell]],
             input=snippet,
             check=False,

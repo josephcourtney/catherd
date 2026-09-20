@@ -28,7 +28,8 @@ def test_get_atuin_session_for_window_unreadable_is_optional(monkeypatch):
 
         @staticmethod
         def read_text(*_args, **_kwargs):
-            raise OSError("permission denied")
+            msg = "permission denied"
+            raise OSError(msg)
 
         def __str__(self):
             return "/unreadable/session"

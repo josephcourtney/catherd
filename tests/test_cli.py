@@ -292,13 +292,7 @@ def test_atuin_enable_is_idempotent(tmp_path, monkeypatch):
 @pytest.mark.medium
 def test_atuin_enable_migrates_legacy_block(tmp_path, monkeypatch):
     rc = tmp_path / "rc"
-    original = (
-        "before\n"
-        "# catherd atuin/kitty sync snippet\n"
-        "legacy body\n"
-        "# end catherd atuin/kitty sync\n"
-        "after\n"
-    )
+    original = "before\n# catherd atuin/kitty sync snippet\nlegacy body\n# end catherd atuin/kitty sync\nafter\n"
     rc.write_text(original, encoding="utf-8")
     monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: rc)
     monkeypatch.setattr(cli, "validate_snippet_for_shell", lambda *_args, **_kwargs: None)
@@ -391,7 +385,8 @@ def test_atuin_enable_write_failure_leaves_original_and_backup(tmp_path, monkeyp
     monkeypatch.setattr(cli, "validate_snippet_for_shell", lambda *_args, **_kwargs: None)
 
     def fail_write(_path, _contents):
-        raise OSError("simulated write failure")
+        msg = "simulated write failure"
+        raise OSError(msg)
 
     monkeypatch.setattr(cli, "_atomic_write_text", fail_write)
     result = CliRunner().invoke(cli.main, ["atuin", "enable", "--shell", "bash"])
@@ -409,7 +404,8 @@ def test_atuin_enable_validation_failure_preserves_rc(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: rc)
 
     def reject(_shell):
-        raise ValueError("invalid generated snippet")
+        msg = "invalid generated snippet"
+        raise ValueError(msg)
 
     monkeypatch.setattr(cli, "validate_snippet_for_shell", reject)
     result = CliRunner().invoke(cli.main, ["atuin", "enable", "--shell", "bash"])
@@ -425,11 +421,7 @@ def test_atuin_enable_validation_failure_preserves_rc(tmp_path, monkeypatch):
 def test_atuin_disable_removes_current_or_legacy_block(tmp_path, monkeypatch, legacy):
     rc = tmp_path / "rc"
     if legacy:
-        block = (
-            "# catherd atuin/kitty sync snippet\n"
-            "legacy body\n"
-            "# end catherd atuin/kitty sync\n"
-        )
+        block = "# catherd atuin/kitty sync snippet\nlegacy body\n# end catherd atuin/kitty sync\n"
     else:
         block = managed_snippet_block("bash")
     original = f"line1\n{block}line2\n"
@@ -583,7 +575,8 @@ def test_is_sync_unreadable_session_file_is_inactive(monkeypatch):
 
         @staticmethod
         def read_text(*_args, **_kwargs):
-            raise OSError("permission denied")
+            msg = "permission denied"
+            raise OSError(msg)
 
     monkeypatch.setattr(cli, "get_session_file", lambda *_args, **_kwargs: UnreadableSessionFile())
 

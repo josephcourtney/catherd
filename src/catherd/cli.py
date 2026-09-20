@@ -298,7 +298,7 @@ def _atomic_write_text(path: Path, contents: str) -> None:
             handle.write(contents)
         if path.exists():
             shutil.copymode(path, temporary_path)
-        os.replace(temporary_path, path)
+        Path(temporary_path).replace(path)
     finally:
         temporary_path.unlink(missing_ok=True)
 
