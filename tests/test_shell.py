@@ -31,8 +31,6 @@ def _shell_command(executable, shell, script):
     return [executable, *_SHELL_RUN_ARGS[shell], str(script)]
 
 
-
-
 @pytest.mark.small
 def test_get_shell_rc_path_zsh(monkeypatch):
     monkeypatch.setenv("ZDOTDIR", "/tmp/zdot")  # ruff: ignore[hardcoded-temp-file]
@@ -188,12 +186,14 @@ def test_generated_snippet_writes_expected_session_file(shell, tmp_path):
     cache_home = tmp_path / "cache home"
     env = os.environ.copy()
     env.pop("BASH_ENV", None)
-    env.update({
-        "HOME": str(tmp_path / "home"),
-        "XDG_CACHE_HOME": str(cache_home),
-        "KITTY_WINDOW_ID": "27",
-        "ATUIN_SESSION": "session-abc",
-    })
+    env.update(
+        {
+            "HOME": str(tmp_path / "home"),
+            "XDG_CACHE_HOME": str(cache_home),
+            "KITTY_WINDOW_ID": "27",
+            "ATUIN_SESSION": "session-abc",
+        }
+    )
 
     command = _shell_command(executable, shell, script)
     result = subprocess.run(command, check=False, capture_output=True, text=True, env=env, timeout=5)
@@ -216,11 +216,13 @@ def test_generated_snippet_falls_back_to_home_cache(shell, tmp_path):
     env = os.environ.copy()
     env.pop("BASH_ENV", None)
     env.pop("XDG_CACHE_HOME", None)
-    env.update({
-        "HOME": str(home),
-        "KITTY_WINDOW_ID": "12",
-        "ATUIN_SESSION": "session-home",
-    })
+    env.update(
+        {
+            "HOME": str(home),
+            "KITTY_WINDOW_ID": "12",
+            "ATUIN_SESSION": "session-home",
+        }
+    )
 
     result = subprocess.run(
         _shell_command(executable, shell, script),
