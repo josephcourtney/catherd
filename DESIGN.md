@@ -90,15 +90,21 @@ Managed shell integration obeys a narrow-write policy: catherd edits only its ma
 
 `catherd.cli` provides:
 
-- `show`: human-readable current hierarchy/activity summary;
-- `inspect`: richer JSON data;
-- `doctor`: core Kitty diagnostics plus optional-enrichment status;
+- `show`: responsive human-readable OS-window/tab/pane hierarchy with display-normalized command/CWD information;
+- `show --verbose`: the same human hierarchy plus pane/process/layout diagnostics;
+- `show --json`: stable machine-readable pane data with exact underlying values;
+- `inspect`: the richest JSON diagnostic data, including optional integration fields;
+- `doctor`: core Kitty diagnostics presented separately from optional-integration status;
 - `atuin doctor`: diagnostics scoped to optional Atuin enrichment;
 - `atuin enable` / `atuin disable`: optional Atuin-association shell integration management;
 - hidden legacy `install` / `uninstall` aliases for pre-0.19 migration compatibility;
 - `tui`: the interactive organizer.
 
-The default invocation remains `show`.
+The default invocation remains `show`. `--version` reports installed package metadata.
+
+Human display normalization must not mutate machine-readable values. Multiline/irregular whitespace may be collapsed and long secondary values truncated in the human `show` view, while `show --json` and `inspect` retain exact values.
+
+Core Kitty availability determines command health: failure to obtain a usable Kitty hierarchy is a nonzero CLI failure for `show`, `inspect`, and `doctor`. Missing or degraded Atuin enrichment is informational and must not change those core success semantics.
 
 ### TUI
 
