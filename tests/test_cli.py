@@ -344,6 +344,39 @@ def test_atuin_enable_handles_new_rc_path_with_spaces(tmp_path, monkeypatch):
 
 
 @pytest.mark.medium
+def test_atuin_enable_preserves_rc_symlink(tmp_path, monkeypatch):
+    dotfiles = tmp_path / "dotfiles"
+    dotfiles.mkdir()
+    target = dotfiles / "zshrc"
+    target.write_text("setopt promptsubst\n", encoding="utf-8")
+    rc = tmp_path / ".zshrc"
+    rc.symlink_to(target)
+    monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: rc)
+    monkeypatch.setattr(cli, "validate_snippet_for_shell", lambda *_args, **_kwargs: None)
+
+    result = CliRunner().invoke(cli.main, ["atuin", "enable", "--shell", "zsh"])
+
+    assert result.exit_code == 0
+    assert rc.is_symlink()
+    assert ATUIN_INTEGRATION_MARKER in target.read_text(encoding="utf-8")
+    assert (tmp_path / ".zshrc.catherd.bak").read_text(encoding="utf-8") == "setopt promptsubst\n"
+
+
+@pytest.mark.medium
+def test_atuin_enable_rejects_dangling_rc_symlink(tmp_path, monkeypatch):
+    rc = tmp_path / ".zshrc"
+    rc.symlink_to(tmp_path / "missing-target")
+    monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: rc)
+    monkeypatch.setattr(cli, "validate_snippet_for_shell", lambda *_args, **_kwargs: None)
+
+    result = CliRunner().invoke(cli.main, ["atuin", "enable", "--shell", "zsh"])
+
+    assert result.exit_code == 1
+    assert "dangling or unreadable" in result.stderr
+    assert rc.is_symlink()
+
+
+@pytest.mark.medium
 def test_atuin_enable_write_failure_leaves_original_and_backup(tmp_path, monkeypatch):
     rc = tmp_path / "rc"
     rc.write_text("original\n", encoding="utf-8")
