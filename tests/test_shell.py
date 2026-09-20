@@ -153,12 +153,23 @@ def test_multiple_managed_blocks_are_rejected():
 
 
 @pytest.mark.small
-def test_append_managed_snippet_uses_stable_separator():
+def test_append_managed_snippet_uses_minimal_separator():
     block = managed_snippet_block("bash")
 
     assert append_managed_snippet("", block) == block
-    assert append_managed_snippet("existing\n", block) == "existing\n\n" + block
-    assert append_managed_snippet("existing", block) == "existing\n\n" + block
+    assert append_managed_snippet("existing\n", block) == "existing\n" + block
+    assert append_managed_snippet("existing", block) == "existing\n" + block
+
+
+@pytest.mark.small
+def test_append_then_remove_round_trips_newline_terminated_contents():
+    original = "existing\n"
+    installed = append_managed_snippet(original, managed_snippet_block("bash"))
+
+    removed, found = replace_managed_snippet(installed, None)
+
+    assert found
+    assert removed == original
 
 
 @pytest.mark.parametrize("shell", SUPPORTED_SHELLS)
