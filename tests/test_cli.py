@@ -60,6 +60,14 @@ def test_main_entrypoint_exits_zero():
 
 
 @pytest.mark.small
+def test_version_option_reports_package_version():
+    result = CliRunner().invoke(cli.main, ["--version"])
+
+    assert result.exit_code == 0
+    assert "catherd, version 1.0.0" in result.output
+
+
+@pytest.mark.small
 def test_tui_command(monkeypatch):
     calls = []
     monkeypatch.setattr(cli, "run_tui", lambda: calls.append("run"))
@@ -74,28 +82,38 @@ def test_tui_command(monkeypatch):
 @patch("catherd.cli.get_atuin_session_for_window")
 @patch("catherd.cli.get_last_command_for_atuin_session")
 @pytest.mark.small
-def test_show_prints_commands(mock_last, mock_sess, mock_state):
+def test_show_prints_hierarchy_and_commands(mock_last, mock_sess, mock_state):
     mock_state.return_value = _two_tab_state()
     mock_sess.side_effect = ["sessA", "sessB"]
     mock_last.side_effect = ["cmdA", "cmdB"]
+
     result = CliRunner().invoke(cli.main, ["show"])
-    assert "Kitty WinID" in result.output
+
+    assert result.exit_code == 0
+    assert "OS Window os" in result.output
+    assert "Tab t1" in result.output
+    assert "Tab t2" in result.output
     assert "cmdA" in result.output
     assert "cmdB" in result.output
+    assert "Kitty WinID" not in result.output
 
 
 @pytest.mark.small
-def test_show_empty_warns():
+def test_show_empty_state_fails():
     with patch("catherd.cli.get_kitty_state", return_value=KittyState(os_windows=())):
         result = CliRunner().invoke(cli.main, ["show"])
-    assert "No Kitty windows/tabs found" in result.stderr
+
+    assert result.exit_code == 1
+    assert "No Kitty panes found" in result.stderr
 
 
 @pytest.mark.small
-def test_show_none_warns():
+def test_show_unavailable_state_fails():
     with patch("catherd.cli.get_kitty_state", return_value=None):
         result = CliRunner().invoke(cli.main, ["show"])
-    assert "Could not get Kitty windows" in result.stderr
+
+    assert result.exit_code == 1
+    assert "Could not read Kitty state" in result.stderr
 
 
 @pytest.mark.medium
@@ -230,23 +248,79 @@ def test_show_core_behavior_without_atuin(tmp_path, monkeypatch):
     assert "/code/project" in result.output
 
 
-@pytest.mark.medium
-def test_preflight_only_on_show(tmp_path, monkeypatch):
+@pytest.mark.small
+def test_show_without_atuin_does_not_warn(monkeypatch):
     monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
     monkeypatch.delenv("ATUIN_SESSION", raising=False)
+    monkeypatch.setattr(cli, "get_kitty_state", lambda **_kwargs: _state(Pane(id="w", title="shell")))
+    monkeypatch.setattr(cli, "get_atuin_session_for_window", lambda *_args, **_kwargs: None)
 
-    with patch("catherd.cli.get_kitty_state", return_value=KittyState(os_windows=())):
-        show_result = CliRunner().invoke(cli.main, ["show"])
-    assert show_result.exit_code == 0
-    assert "Run 'catherd doctor'" in show_result.stderr or "diagnose" in show_result.stderr
+    result = CliRunner().invoke(cli.main, ["show"])
 
-    rc = tmp_path / ".bashrc"
-    rc.write_text("", encoding="utf-8")
-    monkeypatch.setattr(cli, "get_shell_rc_path", lambda *_args, **_kwargs: rc)
-    monkeypatch.setattr(cli, "validate_snippet_for_shell", lambda *_args, **_kwargs: None)
-    dry_run = CliRunner().invoke(cli.main, ["atuin", "enable", "--shell", "bash", "--dry-run"])
-    assert dry_run.exit_code == 0
-    assert "DRY-RUN" in dry_run.stderr
+    assert result.exit_code == 0
+    assert "Atuin" not in result.stderr
+
+
+@pytest.mark.small
+def test_show_normalizes_multiline_command_for_human_output(monkeypatch):
+    state = _state(
+        Pane(
+            id="w",
+            title="shell",
+            current_command="(\n  set -euo pipefail\n  echo hello\n)",
+            cwd="/code/project/with/a/very/long/path",
+        ),
+        os_active=True,
+        tab_active=True,
+    )
+    monkeypatch.setattr(cli, "get_kitty_state", lambda **_kwargs: state)
+    monkeypatch.setattr(cli, "get_atuin_session_for_window", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(cli, "_show_width", lambda: 60)
+
+    result = CliRunner().invoke(cli.main, ["show"])
+
+    assert result.exit_code == 0
+    assert "( set -euo pipefail echo hello )" in result.output
+    assert all(len(line) <= 60 for line in result.output.splitlines())
+
+
+@pytest.mark.small
+def test_show_wide_output_puts_cwd_on_command_line(monkeypatch):
+    state = _state(Pane(id="w", title="shell", current_command="git status", cwd="/code/project"))
+    monkeypatch.setattr(cli, "get_kitty_state", lambda **_kwargs: state)
+    monkeypatch.setattr(cli, "get_atuin_session_for_window", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(cli, "_show_width", lambda: 120)
+
+    result = CliRunner().invoke(cli.main, ["show"])
+
+    pane_line = next(line for line in result.output.splitlines() if "git status" in line)
+    assert "/code/project" in pane_line
+
+
+@pytest.mark.small
+def test_show_verbose_adds_diagnostic_metadata(monkeypatch):
+    state = _state(
+        Pane(
+            id="w",
+            title="shell",
+            current_command="uv run pytest",
+            foreground_cmd="python -m pytest",
+            pid=123,
+            cols=131,
+            rows=69,
+            tty="/dev/ttys001",
+        )
+    )
+    monkeypatch.setattr(cli, "get_kitty_state", lambda **_kwargs: state)
+    monkeypatch.setattr(cli, "get_atuin_session_for_window", lambda *_args, **_kwargs: None)
+
+    result = CliRunner().invoke(cli.main, ["show", "--verbose"])
+
+    assert result.exit_code == 0
+    assert "id w" in result.output
+    assert "pid 123" in result.output
+    assert "131×69" in result.output
+    assert "fg python -m pytest" in result.output
 
 
 @pytest.mark.medium
