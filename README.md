@@ -52,18 +52,21 @@ Running `catherd` without a subcommand is equivalent to `catherd show`.
 | `catherd tui` | interactive hierarchy browser and organizer |
 | `catherd show` | list open panes with current/recent command information |
 | `catherd inspect` | emit the richest available Kitty dataset as JSON, including optional Atuin fields |
-| `catherd doctor` | diagnose Kitty and optional enrichment state |
-| `catherd install` | currently install the optional Kitty-pane-to-Atuin-session association snippet |
-| `catherd uninstall` | currently remove that optional Atuin association snippet |
+| `catherd doctor` | diagnose Kitty and report optional enrichment state |
+| `catherd atuin doctor` | diagnose only the optional Atuin integration |
+| `catherd atuin enable` | safely enable Kitty-pane-to-Atuin-session association |
+| `catherd atuin disable` | remove that association while preserving an rc-file backup |
 
 No Atuin setup is required to use catherd. To additionally enable per-pane completed-command history from Atuin:
 
 ```sh
-catherd install
-catherd doctor
+catherd atuin doctor
+catherd atuin enable
 ```
 
-Restart/re-source the affected shells after installation.
+The integration supports bash, zsh, fish, and csh with shell-native snippets. Before writing a startup file, catherd asks the corresponding shell to syntax-check the generated snippet. Existing startup files are backed up, writes are atomic, repeated enable/disable operations are safe, and the old pre-0.19 Atuin/Kitty marker is migrated automatically. The former top-level `install` and `uninstall` commands remain hidden compatibility aliases for existing users.
+
+Restart or re-source the affected shell after enabling the integration.
 
 ## Design and project state
 
