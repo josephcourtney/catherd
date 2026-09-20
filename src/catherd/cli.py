@@ -315,8 +315,8 @@ def _rc_write_target(rc_path: Path) -> Path:
         return rc_path
     try:
         return rc_path.resolve(strict=True)
-    except OSError as err:
-        msg = f"Refusing to replace dangling or unreadable rc-file symlink {rc_path}: {err}"
+    except (OSError, RuntimeError) as err:
+        msg = f"Refusing to replace dangling, cyclic, or unreadable rc-file symlink {rc_path}: {err}"
         raise ValueError(msg) from err
 
 
