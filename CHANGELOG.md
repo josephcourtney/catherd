@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Added
+- add `catherd --version` using installed package metadata.
+
+### Changed
+- replace the fixed-width `show` table with a terminal-responsive OS-window/tab/pane hierarchy that preserves pane identity, normalizes multiline commands for human display, and moves process/layout metadata behind `--verbose`.
+- keep `show --json` and `inspect` machine-readable with exact underlying values while making unusable Kitty state a nonzero CLI failure.
+- reorganize `doctor` so core Kitty health and Kitty-reported metadata are reported separately from optional Atuin enrichment.
+
 ### Fixed
 - fix fish Atuin integration variable scope so XDG/HOME cache paths are preserved through the nested branch.
 - make Atuin managed-block enable/disable preserve newline-terminated rc contents exactly.
