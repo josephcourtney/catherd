@@ -644,7 +644,7 @@ def _print_missing_command_windows(missing_command: list[tuple[PaneLocation, str
 def _print_sync_notes(notes: list[str]) -> None:
     if not notes:
         return
-    click.secho("[INFO] Additional sync observations:", fg="yellow")
+    click.secho("[INFO] Additional Atuin association observations:", fg="yellow")
     for note in notes:
         click.echo(f"  - {note}")
 
@@ -663,15 +663,14 @@ def print_kitty_session_diagnostics(state: KittyState, *, verbose: bool = False)
     synced = len(ok)
     if synced == 0:
         click.secho(
-            "[INFO] Optional Atuin history enrichment is not active in any open windows.\n"
-            "To add per-pane completed-command history, enable the Atuin association snippet, "
-            "then restart Kitty tabs/windows.",
+            "[INFO] Completed-command history is not available for any open pane.\n"
+            "To add it, enable the optional Atuin association and restart the affected shells.",
             fg="yellow",
         )
     else:
         color = "green" if synced == total else "yellow"
         click.secho(
-            f"[INFO] Optional Atuin history enrichment active in {synced}/{total} windows.",
+            f"[INFO] Completed-command history available for {synced}/{total} pane(s).",
             fg=color,
         )
 
