@@ -1,6 +1,6 @@
 # catherd
 
-A command-line and terminal interface for inspecting and organizing a running Kitty instance, with Atuin history enrichment.
+A command-line and terminal interface for inspecting and organizing a running Kitty instance, with optional Atuin history enrichment.
 
 ## Interactive organizer
 
@@ -10,32 +10,75 @@ Run:
 catherd tui
 ```
 
-The TUI displays Kitty's hierarchy as OS windows → tabs → panes. Pane order follows Kitty's visual layout order. A details panel shows metadata for the highlighted object. For panes it distinguishes Kitty's currently running command from the most recently completed Atuin command. Mouse clicks only change the selection inside catherd; focusing the corresponding Kitty object is an explicit action.
+The TUI presents Kitty as a collapsible OS-window → tab → pane hierarchy. Native tree guides remain continuous, alternating tab subtrees provide non-structural grouping, and command-like titles are normalized for scanning. The selected row belongs to catherd and is shown with a neutral background plus a left-edge cursor marker; it does not change Kitty focus. The actually focused pane is marked `● focused`, while pane activity is reported independently as `▶ running` or `○ at prompt`.
+
+The inspector shows richer information for the selected object, including location, process metadata, layout position and neighbors, and Atuin-backed command history when available. Mouse clicks change only the catherd selection; focusing the corresponding Kitty object is always explicit.
 
 | Key | Action |
 | --- | --- |
 | `j` / `k` | move through the tree |
-| `h` / `l` | collapse / expand |
+| `h` / `l`, `←` / `→` | collapse / expand |
 | `Enter` / `f` | focus selected OS window, tab, or pane in Kitty |
+| `/` | filter by title, ID, path, or command; submit empty or press `Esc` to clear |
+| `a` | clear filtering and jump to the focused Kitty pane |
 | `r` | rename selected object |
 | `m` | move a pane or tab |
 | `J` / `K` | reorder a pane or tab among siblings |
 | `M` | merge an OS window into another OS window, or a tab into another tab |
 | `Ctrl-R` | refresh |
+| `?` | help |
 | `q` | quit |
 
-The 0.18.0 TUI intentionally does not close processes or create new shells.
+The TUI follows macOS light/dark appearance at launch, falling back to terminal color hints on other platforms. Set `CATHERD_THEME=ansi-light` or `CATHERD_THEME=ansi-dark` to override detection. The older `textual-light` and `textual-dark` names remain accepted aliases.
 
-### TUI testing
+### Scope
 
-The interaction layer is exercised headlessly with Textual's testing harness and a stateful fake Kitty backend:
+catherd organizes objects that already exist in Kitty. The current 0.18.x scope intentionally does **not** create shells/windows/tabs or close processes. It is an inspector and organizer rather than a replacement for Kitty's complete remote-control interface.
+
+## CLI
+
+Running `catherd` without a subcommand is equivalent to `catherd show`.
+
+| Command | Purpose |
+| --- | --- |
+| `catherd tui` | interactive hierarchy browser and organizer |
+| `catherd show` | list open panes with current/recent command information |
+| `catherd inspect` | emit the richer Kitty + Atuin dataset as JSON |
+| `catherd doctor` | diagnose Kitty/Atuin integration |
+| `catherd install` | install the shell snippet that associates Kitty pane IDs with Atuin sessions |
+| `catherd uninstall` | remove that shell snippet |
+
+Atuin enrichment is optional for basic Kitty inspection. To enable per-pane history association:
+
+```sh
+catherd install
+catherd doctor
+```
+
+Restart/re-source the affected shells after installation.
+
+## Design and project state
+
+- [DESIGN.md](DESIGN.md) defines the durable scope, architecture, and invariants.
+- [PLAN.md](PLAN.md) describes the implementation and maintenance strategy.
+- [STATUS.md](STATUS.md) records the current project state.
+- [TODO.md](TODO.md) contains immediate work only.
+- [POLICY.md](POLICY.md) defines the documentation and history policy.
+
+## Development
+
+The interaction layer is exercised headlessly with Textual's testing harness and a stateful fake Kitty backend. Tests cover keyboard and mouse selection, explicit focus, collapse/expand, filtering, rename, move/detach, pane/tab reordering, tab and OS-window merging, details updates, selection/expansion preservation, polling races, and stale asynchronous activity results.
+
+Run the TUI tests with:
 
 ```sh
 just test-tui
 ```
 
-These tests cover keyboard and mouse selection, explicit focus, rename, move/detach, pane/tab reordering, tab and OS-window merging, details updates, selection preservation, polling races, and stale asynchronous activity results. The headless suite is complemented by a small real-Kitty/macOS acceptance rehearsal for remote-control and native-window behavior.
+Run the repository quality gates with:
 
-## Existing commands
+```sh
+just check
+```
 
-`catherd show` lists open Kitty panes and their most recent Atuin command when available. `catherd inspect` emits the richer combined dataset as JSON, and `catherd doctor` diagnoses Kitty/Atuin integration.
+The headless suite is complemented by real-Kitty/macOS acceptance rehearsal for remote-control and native-window behavior.

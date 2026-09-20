@@ -6,15 +6,36 @@ from threading import Event
 from typing import TYPE_CHECKING
 
 import pytest
+from rich.segment import Segment
+from rich.style import Style
 from rich.text import Text
+from textual.strip import Strip
 from textual.widgets import Input, Static, Tree
 
+import catherd.tui as tui_module
 from catherd.activity import PaneActivity
 from catherd.model import KittyState, OsWindow, Pane, Tab
 from catherd.tui import (
     Destination,
     KittyManagerApp,
+    KittyTree,
     NodeRef,
+    _abbreviate_identifier,
+    _apply_row_background,
+    _apply_selection,
+    _compact_hint,
+    _compact_process_hint,
+    _count_label,
+    _home_relative_path,
+    _os_window_label,
+    _pane_activity_hint,
+    _pane_label,
+    _preferred_textual_theme,
+    _selection_background,
+    _tab_band_background,
+    _tab_label,
+    _tree_header,
+    _tree_row_background,
     containing_os_window_id,
     merge_os_window_destinations,
     merge_tab_destinations,
@@ -25,8 +46,6 @@ from catherd.tui import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-
-
 
 
 def _state() -> KittyState:
@@ -341,6 +360,10 @@ def _child_refs(tree: Tree[NodeRef], ref: NodeRef) -> list[NodeRef]:
     return [data for child in _find_node(tree, ref).children if (data := child.data) is not None]
 
 
+def _root_refs(tree: Tree[NodeRef]) -> list[NodeRef]:
+    return [data for child in tree.root.children if (data := child.data) is not None]
+
+
 def _line_for_ref(tree: Tree[NodeRef], ref: NodeRef) -> int:
     for line in range(tree.last_line + 1):
         node = tree.get_node_at_line(line)
@@ -348,6 +371,31 @@ def _line_for_ref(tree: Tree[NodeRef], ref: NodeRef) -> int:
             return line
     msg = f"missing rendered line: {ref}"
     raise AssertionError(msg)
+
+
+def _style_for(text: Text, needle: str) -> Style:
+    offset = text.plain.index(needle)
+    for span in text.spans:
+        if span.start <= offset < span.end:
+            return Style.parse(span.style) if isinstance(span.style, str) else span.style
+    return Style()
+
+
+def _color_name(style: Style) -> str | None:
+    color = style.color
+    return color.name if color is not None else None
+
+
+def _background_name(style: Style | None) -> str | None:
+    if style is None:
+        return None
+    background = style.bgcolor
+    return background.name if background is not None else None
+
+
+def _background_names(strip: Strip) -> set[str]:
+    names = (_background_name(segment.style) for segment in strip)
+    return {name for name in names if name is not None}
 
 
 @pytest.mark.small
@@ -397,6 +445,14 @@ def test_containing_os_window_id_resolves_all_node_kinds() -> None:
 
 
 @pytest.mark.small
+def test_count_label_uses_singular_and_plural_grammar() -> None:
+    assert _count_label(1, "OS window") == "1 OS window"
+    assert _count_label(2, "OS window") == "2 OS windows"
+    assert _count_label(1, "pane") == "1 pane"
+    assert _count_label(2, "pane") == "2 panes"
+
+
+@pytest.mark.small
 def test_selected_title_uses_hierarchy() -> None:
     state = _state()
 
@@ -410,18 +466,25 @@ def test_selected_title_uses_hierarchy() -> None:
 def test_selected_details_for_os_window() -> None:
     details = selected_details(_state(), NodeRef("os_window", "100"))
 
-    assert "OS window" in details.plain
-    assert "Tabs: 2" in details.plain
-    assert "Panes: 3" in details.plain
+    assert "OS WINDOW #100" in details.plain
+    assert "work" in details.plain
+    assert "SUMMARY" in details.plain
+    assert "Focus      focused" in details.plain
+    assert "Tabs       2" in details.plain
+    assert "Panes      3" in details.plain
 
 
 @pytest.mark.small
 def test_selected_details_for_tab() -> None:
     details = selected_details(_state(), NodeRef("tab", "10"))
 
-    assert "Tab" in details.plain
-    assert "Layout: splits" in details.plain
-    assert "Panes: 2" in details.plain
+    assert "TAB #10" in details.plain
+    assert "editor" in details.plain
+    assert "OS #100" in details.plain
+    assert "SUMMARY" in details.plain
+    assert "Focus      focused" in details.plain
+    assert "Layout     splits" in details.plain
+    assert "Panes      2" in details.plain
 
 
 @pytest.mark.small
@@ -432,17 +495,30 @@ def test_selected_details_for_pane_with_activity() -> None:
         activity=_activity("1"),
     )
 
-    assert "Pane" in details.plain
-    assert "CWD: /code/project" in details.plain
-    assert "Current command: uv run pytest" in details.plain
-    assert "Foreground process: nvim" in details.plain
-    assert "Root process: /bin/zsh -l" in details.plain
-    assert "Position in tab: 1 of 2" in details.plain
-    assert "Neighbors: R:2" in details.plain
-    assert "Size: 120×40" in details.plain  # ruff: ignore[ambiguous-unicode-character-string]
-    assert "Needs attention: yes" in details.plain
-    assert "Atuin session: session-1" in details.plain
-    assert "Last completed command: pytest -q" in details.plain
+    assert "PANE #1" in details.plain
+    assert "nvim" in details.plain
+    assert "OS #100 › editor #10" in details.plain  # ruff: ignore[ambiguous-unicode-character-string]
+
+    assert "STATUS" in details.plain
+    assert "Focus      focused" in details.plain
+    assert "Activity   running" in details.plain
+    assert "Flags      needs attention, activity since focus" in details.plain
+
+    assert "LOCATION" in details.plain
+    assert "Path       /code/project" in details.plain
+    assert "Pane       1 of 2" in details.plain
+    assert "Size       120 × 40" in details.plain  # ruff: ignore[ambiguous-unicode-character-string]
+    assert "Neighbors  R:2" in details.plain
+
+    assert "PROCESS" in details.plain
+    assert "Command    uv run pytest" in details.plain
+    assert "Foreground nvim" in details.plain
+    assert "Shell      zsh" in details.plain
+    assert "Executable /bin/zsh" in details.plain
+
+    assert "HISTORY" in details.plain
+    assert "Last command pytest -q" in details.plain
+    assert "Session ID session-1" in details.plain
 
 
 @pytest.mark.small
@@ -453,8 +529,20 @@ def test_selected_details_for_pane_loading() -> None:
         activity_loading=True,
     )
 
-    assert "Atuin session: loading…" in details.plain
-    assert "Last completed command: loading…" in details.plain
+    assert "HISTORY" in details.plain
+    assert "Last command loading…" in details.plain
+
+
+@pytest.mark.small
+def test_selected_details_explains_empty_recent_command() -> None:
+    details = selected_details(
+        _state(),
+        NodeRef("pane", "1"),
+        activity=PaneActivity(session_id="session-1", last_command=None),
+    )
+
+    assert "Last command No completed command" in details.plain
+    assert "Session ID session-1" in details.plain
 
 
 @pytest.mark.medium
@@ -477,10 +565,658 @@ async def test_details_panel_loads_activity_for_highlighted_pane() -> None:
         await app.workers.wait_for_complete()
         details = app.query_one("#details", Static)
         assert isinstance(details.content, Text)
-        assert "Atuin session: session-live" in details.content.plain
-        assert "Last completed command: uv run pytest" in details.content.plain
+        assert "HISTORY" in details.content.plain
+        assert "session-live" in details.content.plain
+        assert "uv run pytest" in details.content.plain
 
     assert "1" in calls
+
+
+@pytest.mark.small
+@pytest.mark.parametrize(
+    ("dark", "expected"),
+    [(True, "#363d40"), (False, "#f0f2f3")],
+)
+def test_tab_band_background_tracks_theme(dark, expected) -> None:
+    assert _tab_band_background(dark=dark) == expected
+
+
+@pytest.mark.small
+def test_tree_row_background_depends_only_on_grouping() -> None:
+    assert _tree_row_background(dark=False, banded=True) == "#f0f2f3"
+    assert _tree_row_background(dark=True, banded=True) == "#363d40"
+    assert _tree_row_background(dark=False, banded=False) is None
+    assert _tree_row_background(dark=True, banded=False) is None
+
+
+@pytest.mark.small
+def test_row_background_spans_whole_strip() -> None:
+    strip = Strip([
+        Segment("row", Style(bgcolor="red")),
+        Segment("      ", Style(bgcolor="red")),
+    ])
+
+    styled = _apply_row_background(strip, "#f0f2f3")
+
+    for segment in styled:
+        assert segment.style is not None
+        assert segment.style.bgcolor is not None
+        assert segment.style.bgcolor.name == "#f0f2f3"
+
+
+@pytest.mark.small
+@pytest.mark.parametrize(
+    ("dark", "expected"),
+    [(True, "#41484c"), (False, "#e1e5e7")],
+)
+def test_selection_background_tracks_theme(dark, expected) -> None:
+    assert _selection_background(dark=dark) == expected
+
+
+@pytest.mark.small
+def test_zebra_background_preserves_compact_selection_background() -> None:
+    strip = Strip([
+        Segment("selected", Style(bgcolor="#e1e5e7")),
+        Segment(" rest", Style()),
+    ])
+
+    styled = _apply_row_background(
+        strip,
+        "#f0f2f3",
+        preserve_background="#e1e5e7",
+    )
+    segments = list(styled)
+
+    assert segments[0].style is not None
+    assert segments[0].style.bgcolor is not None
+    assert segments[0].style.bgcolor.name == "#e1e5e7"
+    assert segments[1].style is not None
+    assert segments[1].style.bgcolor is not None
+    assert segments[1].style.bgcolor.name == "#f0f2f3"
+
+
+@pytest.mark.small
+def test_tree_render_label_does_not_override_semantic_colors() -> None:
+    pane = Pane(id="1", title="nvim", is_active=True, at_prompt=False)
+    tree = KittyTree("Kitty")
+    label = _pane_label(pane, "editor", active=True)
+    node = tree.root.add_leaf(label, NodeRef("pane", "1"))
+
+    rendered = tree.render_label(
+        node,
+        Style(),
+        Style(color="red", bgcolor="blue", bold=True),
+    )
+
+    focus_offset = rendered.plain.index("● focused")
+    styles = [
+        Style.parse(span.style) if isinstance(span.style, str) else span.style
+        for span in rendered.spans
+        if span.start <= focus_offset < span.end
+    ]
+    assert any(_color_name(style) == "cyan" for style in styles)
+    assert all(_color_name(style) != "red" for style in styles)
+
+
+@pytest.mark.small
+def test_selection_spans_row_and_adds_left_cursor_marker() -> None:
+    strip = Strip([
+        Segment("  ", Style(color="bright_black")),
+        Segment("name", Style(color="white")),
+        Segment(" #1", Style(color="bright_black", dim=True)),
+        Segment(" ● focused", Style(color="cyan", bold=True)),
+    ])
+
+    selected = _apply_selection(strip, "#e1e5e7")
+
+    assert selected.text.startswith("▎")
+    assert selected.text[1:] == strip.text[1:]
+    assert _background_names(selected) == {"#e1e5e7"}
+    original_colors = [_color_name(segment.style or Style()) for segment in strip]
+    selected_colors = [_color_name(segment.style or Style()) for segment in selected]
+    assert selected_colors[1:] == original_colors
+
+
+@pytest.mark.small
+def test_outline_header_explains_tree_columns() -> None:
+    header = _tree_header()
+
+    assert "HIERARCHY" in header.plain
+    assert "ID" in header.plain
+    assert "STATUS" in header.plain
+    assert "DETAIL" in header.plain
+    for heading in ("HIERARCHY", "ID", "STATUS", "DETAIL"):
+        assert _style_for(header, heading).bold
+
+
+@pytest.mark.small
+def test_tree_labels_use_semantic_outline_columns() -> None:
+    state = _state()
+    os_window = state.os_windows[0]
+    tab = os_window.tabs[0]
+    pane = tab.panes[0]
+
+    os_label = _os_window_label(os_window, active_branch=True)
+    tab_label = _tab_label(tab, active_branch=True)
+    pane_label = _pane_label(pane, tab.title, active=True)
+
+    assert os_label.plain.index("work") < os_label.plain.index("#100")
+    assert "● focused" not in os_label.plain
+    assert os_label.plain.index("#100") < os_label.plain.index("2 tabs · 3 panes")
+
+    assert tab_label.plain.index("editor") < tab_label.plain.index("#10")
+    assert "● focused" not in tab_label.plain
+    assert tab_label.plain.index("#10") < tab_label.plain.index("2 panes · splits")
+
+    assert pane_label.plain.index("nvim") < pane_label.plain.index("#1")
+    assert pane_label.plain.index("#1") < pane_label.plain.index("● focused")
+    assert pane_label.plain.index("● focused") < pane_label.plain.index("▶ running")
+    assert pane_label.plain.index("▶ running") < pane_label.plain.index("1/2 · uv run pytest")
+
+    assert _style_for(tab_label, "editor").bold
+    assert _color_name(_style_for(tab_label, "editor")) is None
+    pane_id_style = _style_for(pane_label, "#1")
+    assert pane_id_style.dim
+    assert pane_id_style.color is None
+    assert _color_name(_style_for(pane_label, "● focused")) == "cyan"
+    assert _color_name(_style_for(pane_label, "▶ running")) == "cyan"
+    detail_style = _style_for(pane_label, "uv run pytest")
+    assert not detail_style.italic
+    assert detail_style.color is None
+    layout_style = _style_for(tab_label, "splits")
+    assert not layout_style.italic
+    assert layout_style.color is None
+
+
+@pytest.mark.small
+def test_outline_columns_align_across_tree_depths() -> None:
+    state = _state()
+    os_window = state.os_windows[0]
+    tab = os_window.tabs[0]
+    pane = tab.panes[0]
+
+    os_label = _os_window_label(os_window, active_branch=True)
+    tab_label = _tab_label(tab, active_branch=True)
+    pane_label = _pane_label(pane, tab.title, active=True)
+
+    # Textual uses four cells per hierarchy level. Expandable OS/tab rows
+    # also receive a two-cell disclosure prefix; pane leaves do not.
+    os_id_cell = 4 + 2 + os_label.plain.index("#100")
+    tab_id_cell = 8 + 2 + tab_label.plain.index("#10")
+    pane_id_cell = 12 + pane_label.plain.index("#1")
+    assert os_id_cell == tab_id_cell == pane_id_cell
+
+    os_detail_cell = 4 + 2 + os_label.plain.index("2 tabs · 3 panes")
+    tab_detail_cell = 8 + 2 + tab_label.plain.index("2 panes · splits")
+    pane_detail_cell = 12 + pane_label.plain.index("1/2")
+    assert os_detail_cell == tab_detail_cell == pane_detail_cell
+
+
+@pytest.mark.small
+def test_inspector_uses_labels_to_explain_values() -> None:
+    details = selected_details(_state(), NodeRef("pane", "1"), activity=_activity("1"))
+
+    kind_style = _style_for(details, "PANE")
+    assert kind_style.bold
+    assert not kind_style.italic
+    assert _color_name(kind_style) == "cyan"
+    id_style = _style_for(details, "#1")
+    assert id_style.dim
+    assert id_style.color is None
+
+    breadcrumb_style = _style_for(details, "OS #100 › editor #10")  # ruff: ignore[ambiguous-unicode-character-string]
+    assert breadcrumb_style.dim
+    assert not breadcrumb_style.italic
+    assert breadcrumb_style.color is None
+
+    status_style = _style_for(details, "STATUS")
+    assert status_style.bold
+    assert _color_name(status_style) == "cyan"
+    path_label_style = _style_for(details, "Path")
+    assert path_label_style.dim
+    assert not path_label_style.italic
+    assert path_label_style.color is None
+    assert _style_for(details, "/code/project").bold
+    assert _color_name(_style_for(details, "─")) == "cyan"
+
+
+@pytest.mark.small
+def test_home_relative_paths_and_opaque_ids_are_compact(monkeypatch) -> None:
+    monkeypatch.setattr(tui_module.pathlib.Path, "home", classmethod(lambda cls: cls("/Users/example")))
+
+    assert _home_relative_path("/Users/example/code/catherd") == "~/code/catherd"
+    assert _home_relative_path("/var/work") == "/var/work"
+    assert _abbreviate_identifier("01a0b73179e7711183ac42d84ca228c5") == "01a0b731…a228c5"
+
+
+@pytest.mark.small
+def test_preferred_theme_honors_override(monkeypatch) -> None:
+    monkeypatch.setenv("CATHERD_THEME", "ansi-light")
+
+    assert _preferred_textual_theme() == "ansi-light"
+
+
+@pytest.mark.small
+@pytest.mark.parametrize(
+    ("appearance", "expected"),
+    [("Dark\n", "ansi-dark"), ("", "ansi-light")],
+)
+def test_preferred_theme_uses_macos_appearance(monkeypatch, appearance, expected) -> None:
+    monkeypatch.delenv("CATHERD_THEME", raising=False)
+    monkeypatch.setattr(tui_module.sys, "platform", "darwin")
+    monkeypatch.setattr(
+        tui_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: type("Result", (), {"stdout": appearance})(),
+    )
+
+    assert _preferred_textual_theme() == expected
+
+
+@pytest.mark.medium
+async def test_explicit_theme_name_is_applied() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(
+        backend,
+        poll_interval=None,
+        activity_provider=_activity,
+        theme_name="ansi-light",
+    )
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert app.theme == "ansi-light"
+
+
+@pytest.mark.small
+def test_compact_hint_normalizes_and_truncates() -> None:
+    assert _compact_hint("  uv   run   pytest  ") == "uv run pytest"
+    hint = _compact_hint("x" * 80)
+    assert hint is not None
+    assert len(hint) == 36
+    assert hint.endswith("...")
+
+
+@pytest.mark.small
+def test_shell_wrapper_is_omitted_from_pane_activity_hint() -> None:
+    location = _state().find_pane("2")
+    assert location is not None
+    pane = replace(
+        location.pane,
+        current_command=None,
+        foreground_cmd="/Users/me/.local/bin/atuin-patched pty-proxy --shell /bin/zsh",
+    )
+
+    assert _pane_activity_hint(pane) is None
+
+
+@pytest.mark.small
+def test_compact_process_hint_strips_absolute_paths() -> None:
+    hint = _compact_process_hint("/Users/me/.local/bin/atuin-patched-18.22.0 pty-proxy --shell /opt/homebrew/bin/zsh")
+
+    assert hint == "atuin-patched-18.22.0 pty-proxy ..."
+    assert "/Users/me" not in hint
+
+
+@pytest.mark.medium
+async def test_tree_rows_are_compact_and_mark_kitty_active() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        pane = _find_node(tree, NodeRef("pane", "1"))
+        assert isinstance(pane.label, Text)
+        assert "● " in pane.label.plain
+        assert "nvim" in pane.label.plain
+        assert "#1" in pane.label.plain
+        assert "uv run pytest" in pane.label.plain
+        assert "/code/project" not in pane.label.plain
+
+        inactive = _find_node(tree, NodeRef("pane", "2"))
+        assert isinstance(inactive.label, Text)
+        assert "● " not in inactive.label.plain
+
+
+@pytest.mark.small
+def test_locally_active_pane_is_not_marked_as_globally_active() -> None:
+    pane = Pane(id="12", title="shell", is_active=True)
+
+    label = _pane_label(pane, "other", active=False)
+
+    assert "● " not in label.plain
+
+
+@pytest.mark.small
+def test_redundant_pane_title_falls_back_to_process_identity() -> None:
+    pane = Pane(
+        id="12",
+        title="~/code/AirBattery",
+        root_cmdline="/opt/homebrew/bin/zsh",
+        at_prompt=True,
+        tab_index=1,
+        tab_count=2,
+    )
+
+    label = _pane_label(pane, "~/code/AirBattery")
+
+    assert "~/code/AirBattery" not in label.plain
+    assert "zsh" in label.plain
+    assert "#12" in label.plain
+    assert "1/2" in label.plain
+    assert "prompt" in label.plain
+
+
+@pytest.mark.small
+def test_long_command_title_is_preserved_in_current_column() -> None:
+    command = "uv run python -m http.server --bind 127.0.0.1"
+    pane = Pane(
+        id="6",
+        title=command,
+        current_command=command,
+        at_prompt=False,
+    )
+
+    label = _pane_label(pane, "~/code/lecgan")
+
+    assert "http.server" in label.plain
+    assert label.plain.index("http.server") < label.plain.index("#6")
+    assert "running" in label.plain
+    assert "uv run python" not in label.plain
+    assert "http.server" in label.plain
+
+
+@pytest.mark.small
+def test_command_like_titles_are_normalized_without_losing_subcommand() -> None:
+    pane = Pane(
+        id="22",
+        title="./.venv/bin/catherd tui",
+        current_command="./.venv/bin/catherd tui",
+        at_prompt=False,
+        tab_index=1,
+        tab_count=2,
+    )
+    tab = Tab(
+        id="2",
+        title="./.venv/bin/catherd tui",
+        layout="splits",
+        panes=(pane, Pane(id="23", title="zsh")),
+    )
+
+    tab_label = _tab_label(tab, active_branch=True)
+    pane_label = _pane_label(pane, tab.title, active=True)
+
+    assert "catherd tui" in tab_label.plain
+    assert "./.venv/bin/catherd" not in tab_label.plain
+    assert "catherd tui" in pane_label.plain
+    assert "./.venv/bin/catherd" not in pane_label.plain
+    assert "1/2" in pane_label.plain
+
+
+@pytest.mark.small
+def test_single_pane_tab_omits_uninformative_layout_detail() -> None:
+    tab = Tab(id="5", title="~/code/AirBattery", layout="splits", panes=(Pane(id="12", title="zsh"),))
+
+    label = _tab_label(tab)
+
+    assert "1 pane" in label.plain
+    assert "splits" not in label.plain
+
+
+@pytest.mark.small
+def test_repeated_pane_title_prefers_current_command_over_shell() -> None:
+    pane = Pane(
+        id="17",
+        title="catherd tui",
+        current_command="catherd tui",
+        root_cmdline="/opt/homebrew/bin/zsh",
+    )
+
+    label = _pane_label(pane, "catherd tui")
+
+    assert "catherd tui" in label.plain
+    assert "zsh" not in label.plain
+
+
+@pytest.mark.small
+def test_focused_branch_uses_status_not_hierarchy_markers() -> None:
+    state = _state()
+    os_label = _os_window_label(state.os_windows[0], active_branch=True)
+    tab_label = _tab_label(state.os_windows[0].tabs[0], active_branch=True)
+
+    assert not os_label.plain.startswith("● ")
+    assert not tab_label.plain.startswith("● ")
+    assert "● focused" not in os_label.plain
+    assert "● focused" not in tab_label.plain
+    assert _style_for(os_label, "work").bold
+    assert _color_name(_style_for(os_label, "work")) is None
+    assert _style_for(os_label, "#100").dim
+    assert _style_for(tab_label, "editor").bold
+
+
+@pytest.mark.medium
+async def test_focused_window_tab_and_pane_are_explicitly_marked() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: KittyTree = app.query_one("#kitty-tree", KittyTree)
+
+        os_label = _find_node(tree, NodeRef("os_window", "100")).label
+        tab_label = _find_node(tree, NodeRef("tab", "10")).label
+        pane_label = _find_node(tree, NodeRef("pane", "1")).label
+        assert isinstance(os_label, Text)
+        assert isinstance(tab_label, Text)
+        assert isinstance(pane_label, Text)
+        assert "● focused" not in os_label.plain
+        assert "● focused" not in tab_label.plain
+        assert "● focused" in pane_label.plain
+        assert "▶ running" in pane_label.plain
+        assert tree._active_branch_refs == {
+            NodeRef("os_window", "100"),
+            NodeRef("tab", "10"),
+            NodeRef("pane", "1"),
+        }
+
+
+@pytest.mark.medium
+async def test_help_moves_infrequent_actions_out_of_persistent_footer() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("?")
+        await pilot.pause()
+
+        help_dialog = app.screen.query_one("#help-dialog", Static)
+        assert "M         merge tab / OS window" in str(help_dialog.content)
+        assert "J/K       reorder pane / tab" in str(help_dialog.content)
+
+
+@pytest.mark.medium
+async def test_action_strip_is_quiet_static_help() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        actions = app.query_one("#actions", Static)
+        assert isinstance(actions.content, Text)
+        assert "/ Filter" in actions.content.plain
+        assert "a Focused pane" in actions.content.plain
+        assert "? Help" in actions.content.plain
+        assert "r rename" not in actions.content.plain
+        assert "m move" not in actions.content.plain
+        assert "J/K" not in actions.content.plain
+        assert "Merge" not in actions.content.plain
+        assert _style_for(actions.content, "Enter").bold
+        assert not _style_for(actions.content, "Focus").bold
+
+        footer = app.query_one("#footer")
+        status = app.query_one("#status", Static)
+        assert footer is status.parent
+
+
+@pytest.mark.medium
+async def test_filter_tree_keeps_matching_ancestors_and_prunes_siblings() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("/")
+        filter_input = app.screen.query_one("#filter-input", Input)
+        filter_input.value = "tests"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        assert _child_refs(tree, NodeRef("os_window", "100")) == [NodeRef("tab", "10")]
+        assert _child_refs(tree, NodeRef("tab", "10")) == [NodeRef("pane", "2")]
+        assert all(node.data != NodeRef("os_window", "200") for node in tree.root.children)
+        status = app.query_one("#status", Static)
+        assert "Showing 1 of 4 panes" in str(status.content)
+        assert "1 of 3 tabs" in str(status.content)
+        assert "filter: tests" in str(status.content)
+
+
+@pytest.mark.medium
+async def test_escape_clears_tree_filter() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("/")
+        filter_input = app.screen.query_one("#filter-input", Input)
+        filter_input.value = "pytest"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        await pilot.press("escape")
+        await pilot.pause()
+
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        assert app._filter_query == ""
+        assert _root_refs(tree) == [NodeRef("os_window", "100"), NodeRef("os_window", "200")]
+
+
+@pytest.mark.medium
+async def test_jump_active_clears_filter_and_selects_active_pane() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("/")
+        filter_input = app.screen.query_one("#filter-input", Input)
+        filter_input.value = "notes"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        await pilot.press("a")
+        await pilot.pause()
+
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        assert tree.cursor_node is not None
+        assert tree.cursor_node.data == NodeRef("pane", "1")
+        assert app._filter_query == ""
+        assert _find_node(tree, NodeRef("os_window", "200"))
+
+
+@pytest.mark.medium
+async def test_tree_uses_only_semantic_nodes_for_native_guide_topology() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+
+        assert [child.data for child in tree.root.children] == [
+            NodeRef("os_window", "100"),
+            NodeRef("os_window", "200"),
+        ]
+        os_node = _find_node(tree, NodeRef("os_window", "100"))
+        assert [child.data for child in os_node.children] == [
+            NodeRef("tab", "10"),
+            NodeRef("tab", "11"),
+        ]
+        assert all(
+            (node := tree.get_node_at_line(line)) is not None and node.data is not None
+            for line in range(tree.last_line + 1)
+        )
+
+
+@pytest.mark.medium
+async def test_tree_navigation_moves_directly_between_semantic_nodes() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        tree.move_cursor(_find_node(tree, NodeRef("pane", "2")))
+
+        await pilot.press("j")
+        await pilot.pause()
+
+        assert tree.cursor_node is not None
+        assert tree.cursor_node.data == NodeRef("tab", "11")
+
+
+@pytest.mark.medium
+async def test_alternate_tab_subtree_is_banded() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: KittyTree = app.query_one("#kitty-tree", KittyTree)
+
+        assert NodeRef("tab", "10") not in tree._banded_refs
+        assert NodeRef("pane", "1") not in tree._banded_refs
+        assert NodeRef("tab", "11") in tree._banded_refs
+        assert NodeRef("pane", "3") in tree._banded_refs
+
+
+@pytest.mark.medium
+async def test_banded_row_keeps_group_identity_when_selected_or_hovered() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: KittyTree = app.query_one("#kitty-tree", KittyTree)
+        banded_ref = NodeRef("pane", "3")
+        banded_node = _find_node(tree, banded_ref)
+        banded_line = _line_for_ref(tree, banded_ref)
+
+        tree.move_cursor(banded_node)
+        await pilot.pause()
+        selected_strip = tree.render_line(banded_line)
+        assert selected_strip.cell_length == tree.size.width
+        selected_backgrounds = _background_names(selected_strip)
+
+        tree.move_cursor(_find_node(tree, NodeRef("pane", "1")))
+        tree.hover_line = banded_line
+        hovered_strip = tree.render_line(banded_line)
+        assert hovered_strip.cell_length == tree.size.width
+        hovered_backgrounds = _background_names(hovered_strip)
+
+        expected_band = _tree_row_background(dark=app.current_theme.dark, banded=True)
+        expected_selection = _selection_background(dark=app.current_theme.dark)
+        assert expected_band not in selected_backgrounds
+        assert expected_band in hovered_backgrounds
+
+        # Selection intentionally replaces only the leftmost cell with a cursor bar.
+        assert selected_strip.text.startswith("▎")
+        assert selected_strip.text[1:] == hovered_strip.text[1:]
+        assert expected_selection in selected_backgrounds
+        assert expected_selection not in hovered_backgrounds
 
 
 @pytest.mark.medium
@@ -491,10 +1227,48 @@ async def test_tui_renders_hierarchy_and_selects_active_pane() -> None:
     async with app.run_test() as pilot:
         await pilot.pause()
         tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
-        assert len(tree.root.children) == 2
+        assert not tree.show_root
+        header = app.query_one("#tree-header", Static)
+        assert isinstance(header.content, Text)
+        assert "HIERARCHY" in header.content.plain
+        assert "ID" in header.content.plain
+        assert "STATUS" in header.content.plain
+        browser_title = app.query_one("#browser-title", Static)
+        assert "inspect and focus" in str(browser_title.content)
+        assert "DETAIL" in header.content.plain
+        assert _root_refs(tree) == [NodeRef("os_window", "100"), NodeRef("os_window", "200")]
         assert tree.cursor_node is not None
         assert tree.cursor_node.data == NodeRef("pane", "1")
         assert _find_node(tree, NodeRef("tab", "10")).is_expanded
+
+
+@pytest.mark.medium
+async def test_collapsing_selected_ancestor_moves_selection_and_survives_refresh() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        tab_ref = NodeRef("tab", "10")
+        tab_node = _find_node(tree, tab_ref)
+
+        assert tree.cursor_node is not None
+        assert tree.cursor_node.data == NodeRef("pane", "1")
+
+        tab_node.collapse()
+        await pilot.pause()
+
+        assert tab_node.is_collapsed
+        assert tree.cursor_node is not None
+        assert tree.cursor_node.data == tab_ref
+
+        await app.refresh_state()
+        await pilot.pause()
+
+        assert _find_node(tree, tab_ref).is_collapsed
+        assert tree.cursor_node is not None
+        assert tree.cursor_node.data == tab_ref
 
 
 @pytest.mark.medium
@@ -520,6 +1294,37 @@ async def test_refresh_preserves_selection_and_reveals_it() -> None:
         assert tree.cursor_node is not None
         assert tree.cursor_node.data == tab_ref
         assert _find_node(tree, other_os_ref).is_collapsed
+
+
+@pytest.mark.medium
+async def test_disclosure_triangle_collapses_without_focusing_kitty() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: KittyTree = app.query_one("#kitty-tree", KittyTree)
+        tab_ref = NodeRef("tab", "10")
+        tab_line = _line_for_ref(tree, tab_ref)
+        strip = tree.render_line(tab_line)
+
+        toggle_x = 0
+        for segment in strip:
+            meta = segment.style.meta if segment.style is not None else {}
+            if meta.get("toggle"):
+                break
+            toggle_x += segment.cell_length
+        else:
+            msg = "missing disclosure toggle"
+            raise AssertionError(msg)
+
+        assert await pilot.click(tree, offset=(toggle_x, tab_line))
+        await pilot.pause()
+
+        assert _find_node(tree, tab_ref).is_collapsed
+        assert tree.cursor_node is not None
+        assert tree.cursor_node.data == tab_ref
+        assert ("focus_tab", "10") not in backend.calls
 
 
 @pytest.mark.medium
@@ -971,6 +1776,7 @@ async def test_stale_activity_result_does_not_overwrite_new_selection() -> None:
 
         details = app.query_one("#details", Static)
         assert isinstance(details.content, Text)
-        assert "Atuin session: session-2" in details.content.plain
-        assert "Last completed command: current-two" in details.content.plain
+        assert "HISTORY" in details.content.plain
+        assert "Session ID session-2" in details.content.plain
+        assert "Last command current-two" in details.content.plain
         assert "stale-one" not in details.content.plain

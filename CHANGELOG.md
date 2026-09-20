@@ -1,3 +1,14 @@
+## [Unreleased]
+
+### Changed
+- distinguish catherd cursor selection from Kitty focus with a full-row selection marker and explicit focused/running/at-prompt status grammar; make inspector labels, paths, identifiers, footer actions, and filtered counts easier to scan.
+- simplify TUI tree rows to identity plus a concise activity/layout hint and distinguish Kitty-active objects from catherd selection.
+- reorganize the details pane into a fixed-width grouped inspector with breadcrumbs and exceptional-state emphasis.
+- replace the colorful binding footer with a restrained command strip and add tree filtering plus jump-to-active navigation.
+- replace the triangle-like active indicator with a circular marker, follow macOS light/dark appearance with Textual's terminal-native ANSI themes, and use theme-aware borders.
+- strengthen visual grouping with section rules and hierarchy weight while suppressing repetitive shell-wrapper hints.
+- preserve Textual's native guide/collapse topology while separating tab groups with stronger non-structural zebra bands; normalize command-like identities, reduce repeated focus labels, and rebalance hierarchy/status column widths.
+
 ## [0.18.0] - 2026-09-18
 
 ### Added
