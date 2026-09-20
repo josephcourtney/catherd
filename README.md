@@ -64,7 +64,7 @@ catherd atuin doctor
 catherd atuin enable
 ```
 
-The integration supports bash, zsh, fish, and csh with shell-native snippets. Before writing a startup file, catherd asks the corresponding shell to syntax-check the generated snippet. Existing startup files are backed up, writes are atomic, repeated enable/disable operations are safe, and the old pre-0.19 Atuin/Kitty marker is migrated automatically. The former top-level `install` and `uninstall` commands remain hidden compatibility aliases for existing users.
+The integration supports bash, zsh, fish, and csh with shell-native snippets. Before writing a startup file, catherd asks the corresponding shell to syntax-check the generated snippet. Existing startup files are backed up, symlinked rc files keep their symlink identity, writes are atomic, repeated enable/disable operations are safe, and the old pre-0.19 Atuin/Kitty marker is migrated automatically. The former top-level `install` and `uninstall` commands remain hidden compatibility aliases for existing users.
 
 Restart or re-source the affected shell after enabling the integration.
 
