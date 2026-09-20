@@ -455,7 +455,7 @@ def test_print_kitty_session_diagnostics_none_synced(monkeypatch, capsys):
     )
     print_kitty_session_diagnostics(state, verbose=True)
     out = capsys.readouterr().out
-    assert "sync is not active in any open windows" in out
+    assert "Optional Atuin history enrichment is not active in any open windows" in out
 
 
 @pytest.mark.small
