@@ -517,7 +517,7 @@ def test_selected_details_for_pane_with_activity() -> None:
     assert "Executable /bin/zsh" in details.plain
 
     assert "HISTORY" in details.plain
-    assert "Last commandpytest -q" in details.plain
+    assert "Last command pytest -q" in details.plain
     assert "Session ID session-1" in details.plain
 
 
@@ -530,7 +530,7 @@ def test_selected_details_for_pane_loading() -> None:
     )
 
     assert "HISTORY" in details.plain
-    assert "Last commandloading…" in details.plain
+    assert "Last command loading…" in details.plain
 
 
 @pytest.mark.small
@@ -541,7 +541,7 @@ def test_selected_details_explains_empty_recent_command() -> None:
         activity=PaneActivity(session_id="session-1", last_command=None),
     )
 
-    assert "Last commandNo completed command" in details.plain
+    assert "Last command No completed command" in details.plain
     assert "Session ID session-1" in details.plain
 
 
@@ -674,7 +674,7 @@ def test_selection_spans_row_and_adds_left_cursor_marker() -> None:
     assert _background_names(selected) == {"#e1e5e7"}
     original_colors = [_color_name(segment.style or Style()) for segment in strip]
     selected_colors = [_color_name(segment.style or Style()) for segment in selected]
-    assert selected_colors[1:] == original_colors[1:]
+    assert selected_colors[1:] == original_colors
 
 
 @pytest.mark.small
@@ -1778,5 +1778,5 @@ async def test_stale_activity_result_does_not_overwrite_new_selection() -> None:
         assert isinstance(details.content, Text)
         assert "HISTORY" in details.content.plain
         assert "Session ID session-2" in details.content.plain
-        assert "Last commandcurrent-two" in details.content.plain
+        assert "Last command current-two" in details.content.plain
         assert "stale-one" not in details.content.plain
