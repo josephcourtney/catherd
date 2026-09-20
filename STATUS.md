@@ -12,6 +12,8 @@ The TUI makeover remains complete: selection is distinct from Kitty focus, nativ
 
 ## Verification
 
+`just check` passes on the current Phase 1 state.
+
 The existing suite covers interaction, structural mutations, and refresh races. Phase 1 adds explicit regression coverage that:
 
 - `catherd show` uses Kitty current-command/process state with no Atuin session files or history database;
