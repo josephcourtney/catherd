@@ -1086,7 +1086,7 @@ async def test_jump_active_clears_filter_and_selects_active_pane() -> None:
 
 
 @pytest.mark.medium
-async def test_tree_inserts_blank_spacing_between_tabs_and_windows() -> None:
+async def test_tree_uses_only_semantic_nodes_for_native_guide_topology() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
 
@@ -1096,35 +1096,21 @@ async def test_tree_inserts_blank_spacing_between_tabs_and_windows() -> None:
 
         assert [child.data for child in tree.root.children] == [
             NodeRef("os_window", "100"),
-            None,
             NodeRef("os_window", "200"),
         ]
         os_node = _find_node(tree, NodeRef("os_window", "100"))
         assert [child.data for child in os_node.children] == [
             NodeRef("tab", "10"),
-            None,
             NodeRef("tab", "11"),
         ]
-
-        window_spacer = tree.root.children[1]
-        window_spacer_line = next(
-            line for line in range(tree.last_line + 1) if tree.get_node_at_line(line) is window_spacer
+        assert all(
+            (node := tree.get_node_at_line(line)) is not None and node.data is not None
+            for line in range(tree.last_line + 1)
         )
-        window_gap = tree.render_line(window_spacer_line).text
-        assert "│" in window_gap
-        assert "├" not in window_gap
-        assert "└" not in window_gap
-
-        tab_spacer = os_node.children[1]
-        tab_spacer_line = next(line for line in range(tree.last_line + 1) if tree.get_node_at_line(line) is tab_spacer)
-        tab_gap = tree.render_line(tab_spacer_line).text
-        assert "│" in tab_gap
-        assert "├" not in tab_gap
-        assert "└" not in tab_gap
 
 
 @pytest.mark.medium
-async def test_tree_navigation_skips_blank_spacers() -> None:
+async def test_tree_navigation_moves_directly_between_semantic_nodes() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
 
@@ -1215,6 +1201,35 @@ async def test_tui_renders_hierarchy_and_selects_active_pane() -> None:
 
 
 @pytest.mark.medium
+async def test_collapsing_selected_ancestor_moves_selection_and_survives_refresh() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: Tree[NodeRef] = app.query_one("#kitty-tree", Tree)
+        tab_ref = NodeRef("tab", "10")
+        tab_node = _find_node(tree, tab_ref)
+
+        assert tree.cursor_node is not None
+        assert tree.cursor_node.data == NodeRef("pane", "1")
+
+        tab_node.collapse()
+        await pilot.pause()
+
+        assert tab_node.is_collapsed
+        assert tree.cursor_node is not None
+        assert tree.cursor_node.data == tab_ref
+
+        await app.refresh_state()
+        await pilot.pause()
+
+        assert _find_node(tree, tab_ref).is_collapsed
+        assert tree.cursor_node is not None
+        assert tree.cursor_node.data == tab_ref
+
+
+@pytest.mark.medium
 async def test_refresh_preserves_selection_and_reveals_it() -> None:
     backend = FakeBackend(_state())
     app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
@@ -1237,6 +1252,36 @@ async def test_refresh_preserves_selection_and_reveals_it() -> None:
         assert tree.cursor_node is not None
         assert tree.cursor_node.data == tab_ref
         assert _find_node(tree, other_os_ref).is_collapsed
+
+
+@pytest.mark.medium
+async def test_disclosure_triangle_collapses_without_focusing_kitty() -> None:
+    backend = FakeBackend(_state())
+    app = KittyManagerApp(backend, poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree: KittyTree = app.query_one("#kitty-tree", KittyTree)
+        tab_ref = NodeRef("tab", "10")
+        tab_line = _line_for_ref(tree, tab_ref)
+        strip = tree.render_line(tab_line)
+
+        toggle_x = 0
+        for segment in strip:
+            meta = segment.style.meta if segment.style is not None else {}
+            if meta.get("toggle"):
+                break
+            toggle_x += segment.cell_length
+        else:
+            raise AssertionError("missing disclosure toggle")
+
+        assert await pilot.click(tree, offset=(toggle_x, tab_line))
+        await pilot.pause()
+
+        assert _find_node(tree, tab_ref).is_collapsed
+        assert tree.cursor_node is not None
+        assert tree.cursor_node.data == tab_ref
+        assert ("focus_tab", "10") not in backend.calls
 
 
 @pytest.mark.medium
