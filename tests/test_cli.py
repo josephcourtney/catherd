@@ -222,8 +222,12 @@ def test_show_env_verbose(monkeypatch):
     state = _state(Pane(id="w", title="tit"))
     monkeypatch.setattr(cli, "get_kitty_state", lambda *_args, **_kwargs: state)
     monkeypatch.setattr(cli, "get_atuin_session_for_window", lambda *_args, **_kwargs: None)
+
     result = CliRunner().invoke(cli.main, ["show", "-v"])
-    assert "(no command)" in result.output
+
+    assert result.exit_code == 0
+    assert "tit" in result.output
+    assert "id w" in result.output
 
 
 @pytest.mark.small
