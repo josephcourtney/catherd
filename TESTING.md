@@ -8,7 +8,7 @@ This document is the operational testing guide for catherd. The canonical full v
 
 catherd uses three complementary test layers:
 
-1. **Pure and component tests** exercise parsing, models, CLI behavior, Atuin integration, shell managed-block migration/safety, and Kitty command construction.
+1. **Pure and component tests** exercise parsing, models, responsive CLI behavior, CLI exit semantics, exact JSON preservation, Atuin integration, shell managed-block migration/safety, and Kitty command construction.
 2. **Headless TUI acceptance tests** run the Textual application with a stateful fake Kitty backend. These verify rendered hierarchy changes and interaction semantics without requiring a running Kitty instance.
 3. **Real-Kitty acceptance** is a deliberately small manual boundary check for behavior that cannot be proven by the headless harness, such as native macOS window titles and Kitty remote-control effects.
 
