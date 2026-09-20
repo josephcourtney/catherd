@@ -1273,7 +1273,8 @@ async def test_disclosure_triangle_collapses_without_focusing_kitty() -> None:
                 break
             toggle_x += segment.cell_length
         else:
-            raise AssertionError("missing disclosure toggle")
+            msg = "missing disclosure toggle"
+            raise AssertionError(msg)
 
         assert await pilot.click(tree, offset=(toggle_x, tab_line))
         await pilot.pause()
