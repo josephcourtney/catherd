@@ -428,7 +428,7 @@ def atuin_disable(*, force_shell: str | None = None, dry_run: bool) -> None:
 @click.option("--shell", "force_shell")
 @click.option("--dry-run", is_flag=True)
 def install_shell_snippet(*, force_shell: str | None = None, dry_run: bool) -> None:
-    """Deprecated compatibility alias for catherd atuin enable."""
+    """Use the deprecated compatibility alias for catherd atuin enable."""
     click.echo("[DEPRECATED] Use 'catherd atuin enable' instead.", err=True)
     try:
         _enable_atuin_integration(force_shell=force_shell, dry_run=dry_run)
@@ -440,7 +440,7 @@ def install_shell_snippet(*, force_shell: str | None = None, dry_run: bool) -> N
 @click.option("--shell", "force_shell")
 @click.option("--dry-run", is_flag=True)
 def uninstall(*, force_shell: str | None = None, dry_run: bool) -> None:
-    """Deprecated compatibility alias for catherd atuin disable."""
+    """Use the deprecated compatibility alias for catherd atuin disable."""
     click.echo("[DEPRECATED] Use 'catherd atuin disable' instead.", err=True)
     try:
         _disable_atuin_integration(force_shell=force_shell, dry_run=dry_run)
