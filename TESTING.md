@@ -36,6 +36,15 @@ Run the complete repository validation gate before merging:
 just check
 ```
 
+Before a release, also validate the distributable artifacts and installed entry points:
+
+```sh
+just release-check
+```
+
+The final 1.0.0 rehearsal also included the repository's installation validation path in the user's release-ready working tree. The tagged release tree should contain the same validation path used for that rehearsal.
+
+
 `just check` runs syntax validation, formatting checks, Ruff linting, type checking, import-boundary validation, the full pytest suite, and coverage reporting. The full suite includes optional-Atuin lifecycle, legacy-marker migration, rc-file preservation/failure recovery, and available-shell parser/execution checks.
 
 For rapid iteration, the general test runner remains available:
@@ -56,7 +65,7 @@ After the headless suite passes, real Kitty testing should be limited to the ext
 - OS-window merge moves every source tab and removes the emptied source OS window;
 - OS-window rename changes the native Kitty/macOS window title.
 
-These checks passed for the 0.18.0 release on 2026-09-18.
+These real-Kitty boundary checks were last explicitly recorded for the 0.18.0 release on 2026-09-18; they remain the manual boundary checklist for 1.0.x maintenance.
 
 ## Test artifacts
 

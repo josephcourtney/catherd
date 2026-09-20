@@ -2,6 +2,11 @@
 
 A command-line and terminal interface for inspecting and organizing a running Kitty instance. Kitty provides all core hierarchy, activity, and organization behavior; Atuin can optionally enrich panes with their most recently completed command.
 
+## Release status
+
+catherd 1.0.0 is the stable public-release boundary for the current Kitty inspector/organizer scope. Package metadata and repository licensing use the GNU Lesser General Public License v3.0 only (`LGPL-3.0-only`).
+
+
 ## Interactive organizer
 
 Run:
@@ -92,4 +97,15 @@ Run the repository quality gates with:
 just check
 ```
 
+Validate release packaging and installed-artifact behavior with:
+
+```sh
+just release-check
+```
+
+
 The headless suite is complemented by real-Kitty/macOS acceptance rehearsal for remote-control and native-window behavior.
+
+## License
+
+catherd is licensed under the GNU Lesser General Public License v3.0 only (`LGPL-3.0-only`). See [LICENSE.md](LICENSE.md).

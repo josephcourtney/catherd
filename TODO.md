@@ -1,7 +1,5 @@
 # Immediate work
 
-Public-release Phase 2 implementation is complete.
+No implementation blocker remains for the 1.0.0 version boundary.
 
-- run `just check` locally and fix any formatting, lint, type, import, or test failures;
-- confirm which of bash, zsh, fish, and csh real-shell tests execute versus skip on the local machine;
-- after the gate passes, replace this list with PLAN.md Phase 3 work.
+Before tagging and publishing, ensure the tag points at the exact tree used for the final release rehearsal and that any local release-validation tooling used in that rehearsal has been committed.
