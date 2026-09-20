@@ -225,7 +225,7 @@ def _render_show_table(rows: list[tuple[PaneLocation, str]]) -> None:
 @click.option("-v", "--verbose", is_flag=True, help="Show verbose/debug output")
 @click.option("--json", "as_json", is_flag=True, help="Output in JSON format")
 def show(*, verbose: bool, as_json: bool) -> None:
-    """Show each open Kitty window/tab and its last Atuin command."""
+    """Show open Kitty panes with the best available current/recent command."""
     if not (os.environ.get("KITTY_WINDOW_ID") and os.environ.get("ATUIN_SESSION")) and not as_json:
         click.secho(
             "[INFO] Optional Atuin history association is not active in this shell; "
@@ -313,15 +313,15 @@ def _enable_atuin_integration(*, force_shell: str | None, dry_run: bool) -> None
     shell = get_shell_info(force_shell)
     rc_path = get_shell_rc_path(shell)
 
-    # Generated code must parse before catherd creates backups or modifies startup files.
-    validate_snippet_for_shell(shell)
-    block = managed_snippet_block(shell)
-
     contents = rc_path.read_text(encoding="utf-8") if rc_path.exists() else ""
     state = managed_snippet_state(contents)
     if state == "current":
         click.secho(f"[OK] Atuin integration already enabled in {rc_path}", fg="green")
         return
+
+    # Generated code must parse before catherd creates backups or modifies startup files.
+    validate_snippet_for_shell(shell)
+    block = managed_snippet_block(shell)
 
     if state == "legacy":
         new_contents, replaced = replace_managed_snippet(contents, block)
