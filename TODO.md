@@ -1,8 +1,7 @@
 # Immediate work
 
-Public-release Phase 1 is complete. Next work is PLAN.md Phase 2:
+Public-release Phase 2 implementation is complete.
 
-- move optional Atuin setup/removal under explicit integration-scoped CLI terminology while preserving a migration path for existing installs;
-- correct and validate each advertised shell snippet;
-- make missing Atuin/session/history state consistently optional in integration-facing behavior;
-- add isolated enable/disable, idempotence, backup, dry-run, and failure-recovery coverage.
+- run `just check` locally and fix any formatting, lint, type, import, or test failures;
+- confirm which of bash, zsh, fish, and csh real-shell tests execute versus skip on the local machine;
+- after the gate passes, replace this list with PLAN.md Phase 3 work.
