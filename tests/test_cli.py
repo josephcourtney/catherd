@@ -198,6 +198,39 @@ def test_show_prefers_running_command(monkeypatch):
 
 
 @pytest.mark.medium
+def test_show_core_behavior_without_atuin(tmp_path, monkeypatch):
+    """Kitty state remains sufficient when no Atuin association or DB exists."""
+    monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
+    monkeypatch.delenv("ATUIN_SESSION", raising=False)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    state = _state(
+        Pane(
+            id="w",
+            title="server",
+            current_command="python -m http.server",
+            foreground_cmd="python -m http.server",
+            cwd="/code/project",
+        ),
+        os_active=True,
+        tab_active=True,
+    )
+    monkeypatch.setattr(cli, "get_kitty_state", lambda *_args, **_kwargs: state)
+
+    def fail_history_lookup(*_args, **_kwargs):
+        msg = "Atuin history must not be queried without a pane/session association"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(cli, "get_last_command_for_atuin_session", fail_history_lookup)
+
+    result = CliRunner().invoke(cli.main, ["show"])
+
+    assert result.exit_code == 0
+    assert "python -m http.server" in result.output
+    assert "/code/project" in result.output
+
+
+@pytest.mark.medium
 def test_preflight_only_on_show(tmp_path, monkeypatch):
     monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
     monkeypatch.delenv("ATUIN_SESSION", raising=False)
