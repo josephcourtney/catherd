@@ -80,7 +80,9 @@ Atuin lookup is enrichment only. Missing Atuin, missing catherd session files, m
 
 ### Optional Atuin shell integration
 
-`catherd.shell` provides the optional shell startup snippet used to associate `KITTY_WINDOW_ID` with `ATUIN_SESSION`. This snippet is not required to run catherd and is not Kitty shell integration. The current CLI install/uninstall operations manage only this optional Atuin association.
+`catherd.shell` provides the optional shell startup snippet used to associate `KITTY_WINDOW_ID` with `ATUIN_SESSION`. This snippet is not required to run catherd and is not Kitty shell integration. The supported integration shells are bash, zsh, fish, and csh, each with shell-native syntax.
+
+Managed shell integration obeys a narrow-write policy: catherd edits only its marker-delimited block, recognizes the legacy pre-0.19 marker for migration/removal, rejects malformed or duplicate managed blocks rather than guessing, syntax-validates generated code with the target shell before writing, backs up an existing startup file, and replaces the file atomically. Repeated enable/disable operations are idempotent.
 
 ## Interfaces
 
@@ -90,8 +92,10 @@ Atuin lookup is enrichment only. Missing Atuin, missing catherd session files, m
 
 - `show`: human-readable current hierarchy/activity summary;
 - `inspect`: richer JSON data;
-- `doctor`: integration diagnostics;
-- `install` / `uninstall`: optional Atuin-association shell integration management;
+- `doctor`: core Kitty diagnostics plus optional-enrichment status;
+- `atuin doctor`: diagnostics scoped to optional Atuin enrichment;
+- `atuin enable` / `atuin disable`: optional Atuin-association shell integration management;
+- hidden legacy `install` / `uninstall` aliases for pre-0.19 migration compatibility;
 - `tui`: the interactive organizer.
 
 The default invocation remains `show`.
@@ -156,6 +160,6 @@ External failures are surfaced at the boundary that can explain them:
 
 The canonical logic is covered by unit/component tests. The Textual interface is exercised headlessly against a stateful fake Kitty backend so interaction semantics can be tested without controlling the developer's real terminal.
 
-Acceptance coverage includes selection versus focus, mouse/keyboard navigation, collapse/expand, filtering, rename/move/reorder/merge operations, refresh preservation, mutation races, stale asynchronous activity results, and core CLI/TUI operation with no Atuin session files or history database present.
+Acceptance coverage includes selection versus focus, mouse/keyboard navigation, collapse/expand, filtering, rename/move/reorder/merge operations, refresh preservation, mutation races, stale asynchronous activity results, core CLI/TUI operation with no Atuin state, managed-block migration/safety behavior, and real syntax/execution checks for advertised shells when those shell executables are available.
 
 Real-Kitty/macOS rehearsal complements the headless suite for behavior that depends on Kitty remote control or native-window effects.
