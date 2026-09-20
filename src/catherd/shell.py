@@ -113,14 +113,19 @@ def validate_snippet_for_shell(shell: str) -> None:
         msg = f"Cannot validate {shell!r} integration: {shell} executable was not found on PATH"
         raise ValueError(msg)
 
-    result = subprocess.run(  # noqa: S603
-        [executable, "-n"],
-        input=snippet,
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=5,
-    )
+    try:
+        result = subprocess.run(  # noqa: S603
+            [executable, "-n"],
+            input=snippet,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired) as err:
+        msg = f"Could not validate generated {shell} integration: {err}"
+        raise ValueError(msg) from err
+
     if result.returncode == 0:
         return
     detail = result.stderr.strip() or result.stdout.strip() or f"exit status {result.returncode}"
