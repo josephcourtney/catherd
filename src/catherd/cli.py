@@ -492,7 +492,9 @@ def _collect_kitty_session_diagnostics(
         if len(tokens) >= MIN_SESSION_TOKENS:
             declared_window = tokens[1]
             if declared_window != pane.id:
-                notes.append(f"session file {session_path} references window {declared_window} but we expected {pane.id}")
+                notes.append(
+                    f"session file {session_path} references window {declared_window} but we expected {pane.id}"
+                )
         last_cmd = get_last_command_for_atuin_session(session_id, verbose=verbose)
         if _is_missing_or_error_command(last_cmd):
             missing_command.append((location, content, last_cmd))
@@ -629,7 +631,10 @@ def _print_atuin_installation_status() -> None:
     executable = shutil.which("atuin")
     history_db = get_atuin_history_db_path()
     if executable is None:
-        click.secho("[INFO] Atuin executable not found on PATH; this does not affect core catherd behavior.", fg="yellow")
+        click.secho(
+            "[INFO] Atuin executable not found on PATH; this does not affect core catherd behavior.",
+            fg="yellow",
+        )
     else:
         click.secho(f"[OK] Atuin executable: {executable}", fg="green")
 
