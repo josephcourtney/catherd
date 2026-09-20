@@ -309,9 +309,21 @@ def _backup_rc_file(rc_path: Path, suffix: str) -> Path:
     return backup
 
 
+def _rc_write_target(rc_path: Path) -> Path:
+    """Return the file to replace without destroying an rc-file symlink."""
+    if not rc_path.is_symlink():
+        return rc_path
+    try:
+        return rc_path.resolve(strict=True)
+    except OSError as err:
+        msg = f"Refusing to replace dangling or unreadable rc-file symlink {rc_path}: {err}"
+        raise ValueError(msg) from err
+
+
 def _enable_atuin_integration(*, force_shell: str | None, dry_run: bool) -> None:
     shell = get_shell_info(force_shell)
     rc_path = get_shell_rc_path(shell)
+    write_target = _rc_write_target(rc_path)
 
     contents = rc_path.read_text(encoding="utf-8") if rc_path.exists() else ""
     state = managed_snippet_state(contents)
@@ -341,7 +353,7 @@ def _enable_atuin_integration(*, force_shell: str | None, dry_run: bool) -> None
     backup: Path | None = None
     if rc_path.exists():
         backup = _backup_rc_file(rc_path, ".catherd.bak")
-    _atomic_write_text(rc_path, new_contents)
+    _atomic_write_text(write_target, new_contents)
 
     if state == "legacy":
         click.secho(f"[OK] Migrated legacy Atuin integration in {rc_path}", fg="green")
@@ -358,6 +370,7 @@ def _enable_atuin_integration(*, force_shell: str | None, dry_run: bool) -> None
 def _disable_atuin_integration(*, force_shell: str | None, dry_run: bool) -> None:
     shell = get_shell_info(force_shell)
     rc_path = get_shell_rc_path(shell)
+    write_target = _rc_write_target(rc_path)
     if not rc_path.exists():
         click.secho(f"[INFO] No rc file found at {rc_path}; Atuin integration is not enabled there.", fg="yellow")
         return
@@ -378,7 +391,7 @@ def _disable_atuin_integration(*, force_shell: str | None, dry_run: bool) -> Non
         return
 
     backup = _backup_rc_file(rc_path, ".catherd.disable.bak")
-    _atomic_write_text(rc_path, new_contents)
+    _atomic_write_text(write_target, new_contents)
     migrated = " legacy" if state == "legacy" else ""
     click.secho(f"[OK] Removed{migrated} Atuin integration from {rc_path}", fg="green")
     click.echo(f"Backup: {backup}")
