@@ -175,6 +175,19 @@ def _tab_title_hint(tab_rows: list[tuple[PaneLocation, str]]) -> str:
     return f" — {title}" if title else ""
 
 
+def _pane_primary_text(location: PaneLocation, display_cmd: str) -> str:
+    """Combine distinct pane identity and command information for human display."""
+    command = _normalize_human_text(display_cmd) or _DISPLAY_COMMAND_FALLBACK
+    title = _normalize_human_text(location.pane.title)
+    tab_title = _normalize_human_text(location.tab.title)
+
+    if command == _DISPLAY_COMMAND_FALLBACK:
+        return title or command
+    if title and title != command and title != tab_title:
+        return f"{title} — {command}"
+    return command
+
+
 def _pane_size(pane: Pane) -> str | None:
     if pane.cols is None and pane.rows is None:
         return None
@@ -212,7 +225,7 @@ def _print_show_pane(location: PaneLocation, display_cmd: str, *, width: int, ve
     pane = location.pane
     marker = "●" if pane.is_active else " "
     prefix = f"    {marker} "
-    command = _normalize_human_text(display_cmd) or _DISPLAY_COMMAND_FALLBACK
+    command = _pane_primary_text(location, display_cmd)
     cwd = _display_cwd(pane.cwd)
 
     if width >= _SHOW_INLINE_CWD_WIDTH and cwd:
