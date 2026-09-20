@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
+import subprocess  # ruff: ignore[suspicious-subprocess-import] -- intentional real-shell validation
 import tempfile
 from pathlib import Path
 
