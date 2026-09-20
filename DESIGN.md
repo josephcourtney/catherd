@@ -82,7 +82,7 @@ Atuin lookup is enrichment only. Missing Atuin, missing catherd session files, m
 
 `catherd.shell` provides the optional shell startup snippet used to associate `KITTY_WINDOW_ID` with `ATUIN_SESSION`. This snippet is not required to run catherd and is not Kitty shell integration. The supported integration shells are bash, zsh, fish, and csh, each with shell-native syntax.
 
-Managed shell integration obeys a narrow-write policy: catherd edits only its marker-delimited block, recognizes the legacy pre-0.19 marker for migration/removal, rejects malformed or duplicate managed blocks rather than guessing, syntax-validates generated code with the target shell before writing, backs up an existing startup file, and replaces the file atomically. Repeated enable/disable operations are idempotent.
+Managed shell integration obeys a narrow-write policy: catherd edits only its marker-delimited block, recognizes the legacy pre-0.19 marker for migration/removal, rejects malformed or duplicate managed blocks rather than guessing, syntax-validates generated code with the target shell before writing, backs up an existing startup file, preserves rc-file symlinks by replacing their targets, and writes atomically. Repeated enable/disable operations are idempotent.
 
 ## Interfaces
 
