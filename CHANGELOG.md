@@ -5,7 +5,7 @@
 
 ### Changed
 - keep the former top-level `install` and `uninstall` commands as hidden deprecation aliases while migrating legacy shell-integration markers automatically.
-- harden Atuin shell integration with shell-native bash/zsh/fish/csh snippets, syntax validation before writes, atomic rc-file replacement, backups, idempotent lifecycle operations, and safe rejection of malformed managed blocks.
+- harden Atuin shell integration with shell-native bash/zsh/fish/csh snippets, syntax validation before writes, atomic rc-file replacement, backups, symlink preservation, idempotent lifecycle operations, and safe rejection of malformed managed blocks.
 - define Kitty as the complete core runtime boundary and Atuin as optional completed-command history enrichment; update CLI/documentation wording and add regressions proving core CLI/TUI behavior without Atuin state.
 - distinguish catherd cursor selection from Kitty focus with a full-row selection marker and explicit focused/running/at-prompt status grammar; make inspector labels, paths, identifiers, footer actions, and filtered counts easier to scan.
 - simplify TUI tree rows to identity plus a concise activity/layout hint and distinguish Kitty-active objects from catherd selection.
