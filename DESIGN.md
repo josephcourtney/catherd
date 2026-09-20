@@ -2,7 +2,9 @@
 
 ## Purpose
 
-catherd is a local command-line and terminal interface for inspecting and organizing an already-running Kitty instance. It combines Kitty's runtime hierarchy and process metadata with optional Atuin session history so a user can understand what terminal work exists, where it lives, and explicitly reorganize it.
+catherd is a local command-line and terminal interface for inspecting and organizing an already-running Kitty instance. Kitty is the authoritative runtime dependency for core behavior: its hierarchy, process metadata, focus state, and remote-control operations define what catherd can inspect and organize. Optional integrations may enrich that state but must not be required for core functionality.
+
+Atuin is one such optional integration. When available and associated with a pane, its session history can supply the most recently completed command; when absent, catherd continues to operate from Kitty state alone.
 
 The primary interactive model is:
 
@@ -19,7 +21,8 @@ Kitty calls the leaf object a window; catherd uses **pane** in user-facing termi
 - Present one canonical snapshot of Kitty's OS-window/tab/pane hierarchy.
 - Make object identity, Kitty focus, process activity, and catherd selection distinct concepts.
 - Support deliberate organization of existing Kitty objects: focus, rename, move, reorder, and merge.
-- Enrich panes with Atuin session/history information when available without making Atuin a requirement for basic Kitty inspection.
+- Keep all inspection and organization behavior functional from Kitty state alone.
+- Enrich panes with Atuin session/history information when available, without making Atuin a runtime requirement or changing the meaning of core Kitty state.
 - Remain useful during live polling: preserve the user's selection and expansion state and reject stale asynchronous detail results.
 - Keep the interface compact enough for terminal use while exposing richer metadata in an inspector.
 - Keep Kitty interaction behind a narrow backend boundary that can be replaced by a stateful fake in tests.
@@ -32,7 +35,7 @@ The current 0.18.x design does not attempt to:
 - close processes or terminal objects;
 - replace Kitty's complete remote-control interface;
 - persist a second authoritative model of Kitty state;
-- make Atuin mandatory for hierarchy inspection or organization.
+- make Atuin, catherd's Atuin session files, or any history provider mandatory for hierarchy inspection, organization, or current Kitty activity display.
 
 These are scope changes, not missing features. Adding them requires an explicit design revision.
 
@@ -48,6 +51,12 @@ These are scope changes, not missing features. Adding them requires an explicit 
 A snapshot is authoritative only for the instant at which Kitty produced it. Mutations are directed to Kitty and followed by a new snapshot rather than editing the model in place.
 
 The parser normalizes Kitty's current `ls` schema, filters transient Kitty UI overlays, and records available focus, process, prompt, size, layout-order, group, and neighbor metadata.
+
+## Dependency model
+
+Core catherd depends on Kitty, not Atuin. A valid Kitty snapshot is sufficient for hierarchy inspection, filtering, focus, rename, move, reorder, merge, and the TUI's process/current-command presentation. Optional enrichment must be additive: its absence may remove history-only fields, but it must not invalidate a Kitty snapshot, disable a core operation, or change the success/failure semantics of a Kitty mutation.
+
+Kitty's own shell integration and catherd's Atuin association snippet are separate mechanisms. Kitty shell integration can enrich Kitty's own reported process/prompt metadata. The catherd snippet exists only to associate a Kitty pane ID with an Atuin session ID.
 
 ## External boundaries
 
@@ -67,11 +76,11 @@ UI code must not construct raw Kitty remote-control commands directly.
 
 `catherd.atuin` reads Atuin's local history database. `catherd.activity` associates a Kitty pane ID with an Atuin session ID via catherd's session files, then retrieves the most recent command for that session.
 
-Atuin lookup is enrichment. Missing session files, missing history, or lookup failure must not invalidate the Kitty hierarchy.
+Atuin lookup is enrichment only. Missing Atuin, missing catherd session files, missing history, or lookup failure must not invalidate the Kitty hierarchy or block any core inspection or organization operation. When no Atuin history is available, catherd continues to use Kitty-provided current-command and process metadata; a history-only "last completed command" may simply be absent.
 
-### Shell integration
+### Optional Atuin shell integration
 
-`catherd.shell` provides the shell startup snippet used to associate `KITTY_WINDOW_ID` with `ATUIN_SESSION`. CLI install/uninstall operations manage that integration.
+`catherd.shell` provides the optional shell startup snippet used to associate `KITTY_WINDOW_ID` with `ATUIN_SESSION`. This snippet is not required to run catherd and is not Kitty shell integration. The current CLI install/uninstall operations manage only this optional Atuin association; Phase 2 of the public-release plan will move those operations under explicitly Atuin-scoped terminology.
 
 ## Interfaces
 
@@ -141,12 +150,12 @@ External failures are surfaced at the boundary that can explain them:
 - Kitty invocation, output, object-resolution, and state errors use dedicated exceptions;
 - CLI commands convert user-facing failures into Click errors/messages;
 - TUI operations report failures in the status area and refresh from Kitty rather than maintaining speculative state;
-- Atuin enrichment degrades to missing/error history rather than invalidating Kitty data.
+- Atuin enrichment degrades to absent/error history rather than invalidating Kitty data or changing core-operation availability.
 
 ## Testing strategy
 
 The canonical logic is covered by unit/component tests. The Textual interface is exercised headlessly against a stateful fake Kitty backend so interaction semantics can be tested without controlling the developer's real terminal.
 
-Acceptance coverage includes selection versus focus, mouse/keyboard navigation, collapse/expand, filtering, rename/move/reorder/merge operations, refresh preservation, mutation races, and stale asynchronous activity results.
+Acceptance coverage includes selection versus focus, mouse/keyboard navigation, collapse/expand, filtering, rename/move/reorder/merge operations, refresh preservation, mutation races, stale asynchronous activity results, and core CLI/TUI operation with no Atuin session files or history database present.
 
 Real-Kitty/macOS rehearsal complements the headless suite for behavior that depends on Kitty remote control or native-window effects.
