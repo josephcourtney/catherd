@@ -361,6 +361,13 @@ def test_atuin_enable_preserves_rc_symlink(tmp_path, monkeypatch):
     assert ATUIN_INTEGRATION_MARKER in target.read_text(encoding="utf-8")
     assert (tmp_path / ".zshrc.catherd.bak").read_text(encoding="utf-8") == "setopt promptsubst\n"
 
+    disable_result = CliRunner().invoke(cli.main, ["atuin", "disable", "--shell", "zsh"])
+
+    assert disable_result.exit_code == 0
+    assert rc.is_symlink()
+    assert target.read_text(encoding="utf-8") == "setopt promptsubst\n"
+    assert ATUIN_INTEGRATION_MARKER in (tmp_path / ".zshrc.catherd.disable.bak").read_text(encoding="utf-8")
+
 
 @pytest.mark.medium
 def test_atuin_enable_rejects_dangling_rc_symlink(tmp_path, monkeypatch):
@@ -561,6 +568,25 @@ def test_atuin_commands_are_visible_under_explicit_namespace():
 def test_is_sync_env_missing(monkeypatch):
     monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
     monkeypatch.delenv("ATUIN_SESSION", raising=False)
+    assert not cli.is_sync_active_in_this_shell()
+
+
+@pytest.mark.small
+def test_is_sync_unreadable_session_file_is_inactive(monkeypatch):
+    monkeypatch.setenv("KITTY_WINDOW_ID", "a")
+    monkeypatch.setenv("ATUIN_SESSION", "sess")
+
+    class UnreadableSessionFile:
+        @staticmethod
+        def exists():
+            return True
+
+        @staticmethod
+        def read_text(*_args, **_kwargs):
+            raise OSError("permission denied")
+
+    monkeypatch.setattr(cli, "get_session_file", lambda *_args, **_kwargs: UnreadableSessionFile())
+
     assert not cli.is_sync_active_in_this_shell()
 
 
