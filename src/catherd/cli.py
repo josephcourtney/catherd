@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import tempfile
 from itertools import groupby, starmap
 from pathlib import Path
 from typing import Final
@@ -8,11 +9,20 @@ from typing import Final
 import click
 
 from .activity import get_atuin_session_for_window
-from .atuin import get_last_command_for_atuin_session
+from .atuin import get_atuin_history_db_path, get_last_command_for_atuin_session
 from .config import get_session_file
 from .kitty import KittyClientError, get_kitty_state
 from .model import KittyState, Pane, PaneLocation
-from .shell import get_shell_rc_path, load_snippet_for_shell
+from .shell import (
+    SUPPORTED_SHELLS,
+    append_managed_snippet,
+    get_shell_rc_path,
+    load_snippet_for_shell,
+    managed_snippet_block,
+    managed_snippet_state,
+    replace_managed_snippet,
+    validate_snippet_for_shell,
+)
 from .tui import run_tui
 
 
@@ -272,108 +282,162 @@ def inspect(*, verbose: bool, pretty: bool) -> None:
     click.echo(json.dumps(payloads, indent=2 if pretty else None))
 
 
-def _install_shell_snippet(*, force_shell: str | None, dry_run: bool) -> None:
+def _atomic_write_text(path: Path, contents: str) -> None:
+    """Replace a text file atomically, preserving its mode when it already exists."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent, text=True)
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(contents)
+        if path.exists():
+            shutil.copymode(path, temporary_path)
+        os.replace(temporary_path, path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+def _backup_rc_file(rc_path: Path, suffix: str) -> Path:
+    backup = rc_path.with_suffix(rc_path.suffix + suffix)
+    shutil.copy2(rc_path, backup)
+    return backup
+
+
+def _enable_atuin_integration(*, force_shell: str | None, dry_run: bool) -> None:
     shell = get_shell_info(force_shell)
     rc_path = get_shell_rc_path(shell)
-    snippet_marker = "# catherd atuin/kitty sync snippet"
-    snippet_block = (
-        snippet_marker + "\n" + load_snippet_for_shell(shell).rstrip() + "\n# end catherd atuin/kitty sync\n"
-    )
-    if rc_path.exists():
-        contents = rc_path.read_text(encoding="utf-8")
-        if snippet_marker in contents:
-            click.secho(f"[OK] Snippet already installed in {rc_path}", fg="green")
-            return
-        if not dry_run:
-            shutil.copyfile(rc_path, rc_path.with_suffix(rc_path.suffix + ".catherd.bak"))
-        click.secho(
-            f"[INFO] Backed up {rc_path} → {rc_path.with_suffix(rc_path.suffix + '.catherd.bak')}",
-            fg="yellow",
-            err=dry_run,
-        )
-    elif dry_run:
-        click.echo(f"[DRY-RUN] Would create {rc_path} and append snippet", err=True)
-        click.secho("[OK] Dry-run complete; no changes made.", fg="green")
+
+    # Generated code must parse before catherd creates backups or modifies startup files.
+    validate_snippet_for_shell(shell)
+    block = managed_snippet_block(shell)
+
+    contents = rc_path.read_text(encoding="utf-8") if rc_path.exists() else ""
+    state = managed_snippet_state(contents)
+    if state == "current":
+        click.secho(f"[OK] Atuin integration already enabled in {rc_path}", fg="green")
         return
+
+    if state == "legacy":
+        new_contents, replaced = replace_managed_snippet(contents, block)
+        if not replaced:
+            msg = "Legacy catherd integration marker disappeared while preparing migration"
+            raise click.ClickException(msg)
+        action = "migrate the legacy catherd Atuin integration"
+    else:
+        new_contents = append_managed_snippet(contents, block)
+        action = "enable the catherd Atuin integration"
 
     if dry_run:
-        click.echo(f"[DRY-RUN] Would append snippet to {rc_path}", err=True)
+        click.echo(f"[DRY-RUN] Would {action} in {rc_path}", err=True)
         click.secho("[OK] Dry-run complete; no changes made.", fg="green")
         return
 
-    with rc_path.open("a", encoding="utf-8") as f:
-        f.write("\n\n" + snippet_block + "\n")
+    backup: Path | None = None
+    if rc_path.exists():
+        backup = _backup_rc_file(rc_path, ".catherd.bak")
+    _atomic_write_text(rc_path, new_contents)
 
-    click.secho(f"[OK] Snippet added to {rc_path}", fg="green")
+    if state == "legacy":
+        click.secho(f"[OK] Migrated legacy Atuin integration in {rc_path}", fg="green")
+    else:
+        click.secho(f"[OK] Atuin integration enabled in {rc_path}", fg="green")
+    if backup is not None:
+        click.echo(f"Backup: {backup}")
     click.secho(
-        "You must restart Kitty tabs/windows or re-source your shell for the change to take effect.",
+        "Restart or re-source the affected shell for the change to take effect.",
         fg="yellow",
     )
 
 
-@main.command("install")
-@click.option("--shell", "force_shell", help="Force install for this shell (zsh, bash, fish, csh)")
-@click.option("--dry-run", is_flag=True)
-def install_shell_snippet(*, force_shell: str | None = None, dry_run: bool) -> None:
-    """Install the Atuin/Kitty session sync snippet to your shell startup file (idempotent)."""
+def _disable_atuin_integration(*, force_shell: str | None, dry_run: bool) -> None:
+    shell = get_shell_info(force_shell)
+    rc_path = get_shell_rc_path(shell)
+    if not rc_path.exists():
+        click.secho(f"[INFO] No rc file found at {rc_path}; Atuin integration is not enabled there.", fg="yellow")
+        return
+
+    contents = rc_path.read_text(encoding="utf-8")
+    state = managed_snippet_state(contents)
+    if state == "absent":
+        click.secho(f"[INFO] No catherd Atuin integration found in {rc_path}", fg="yellow")
+        return
+
+    new_contents, removed = replace_managed_snippet(contents, None)
+    if not removed:
+        msg = "catherd integration marker disappeared while preparing removal"
+        raise click.ClickException(msg)
+
+    if dry_run:
+        click.echo(f"[DRY-RUN] Would disable the catherd Atuin integration in {rc_path}", err=True)
+        return
+
+    backup = _backup_rc_file(rc_path, ".catherd.disable.bak")
+    _atomic_write_text(rc_path, new_contents)
+    migrated = " legacy" if state == "legacy" else ""
+    click.secho(f"[OK] Removed{migrated} Atuin integration from {rc_path}", fg="green")
+    click.echo(f"Backup: {backup}")
+
+
+@main.group("atuin")
+def atuin_group() -> None:
+    """Manage optional Atuin completed-command history enrichment."""
+
+
+@atuin_group.command("enable")
+@click.option("--shell", "force_shell", help=f"Shell to configure ({', '.join(SUPPORTED_SHELLS)})")
+@click.option("--dry-run", is_flag=True, help="Show the planned rc-file change without writing it")
+def atuin_enable(*, force_shell: str | None = None, dry_run: bool) -> None:
+    """Enable catherd's optional Kitty-pane to Atuin-session association."""
     try:
-        _install_shell_snippet(force_shell=force_shell, dry_run=dry_run)
-    except ValueError as err:
+        _enable_atuin_integration(force_shell=force_shell, dry_run=dry_run)
+    except (OSError, ValueError) as err:
         raise click.ClickException(str(err)) from err
 
 
-@main.command("uninstall")
-@click.option("--shell", "force_shell", help="Force uninstall for this shell (zsh, bash, fish, csh)")
+@atuin_group.command("disable")
+@click.option("--shell", "force_shell", help=f"Shell to configure ({', '.join(SUPPORTED_SHELLS)})")
+@click.option("--dry-run", is_flag=True, help="Show the planned rc-file change without writing it")
+def atuin_disable(*, force_shell: str | None = None, dry_run: bool) -> None:
+    """Disable catherd's optional Atuin association and preserve an rc backup."""
+    try:
+        _disable_atuin_integration(force_shell=force_shell, dry_run=dry_run)
+    except (OSError, ValueError) as err:
+        raise click.ClickException(str(err)) from err
+
+
+@main.command("install", hidden=True)
+@click.option("--shell", "force_shell")
+@click.option("--dry-run", is_flag=True)
+def install_shell_snippet(*, force_shell: str | None = None, dry_run: bool) -> None:
+    """Deprecated compatibility alias for catherd atuin enable."""
+    click.echo("[DEPRECATED] Use 'catherd atuin enable' instead.", err=True)
+    try:
+        _enable_atuin_integration(force_shell=force_shell, dry_run=dry_run)
+    except (OSError, ValueError) as err:
+        raise click.ClickException(str(err)) from err
+
+
+@main.command("uninstall", hidden=True)
+@click.option("--shell", "force_shell")
 @click.option("--dry-run", is_flag=True)
 def uninstall(*, force_shell: str | None = None, dry_run: bool) -> None:
-    """Remove the Atuin/Kitty session sync snippet from your shell startup file."""
-    shell = get_shell_info(force_shell)
-    rc_path = get_shell_rc_path(shell)
-    marker = "# catherd atuin/kitty sync snippet"
-    end_marker = "# end catherd atuin/kitty sync"
-
-    if not rc_path.exists():
-        msg = f"No rc file found at {rc_path}"
-        raise click.ClickException(msg)
-
-    lines = rc_path.read_text(encoding="utf-8").splitlines()
-    inside = False
-    new = []
-    removed = False
-    for ln in lines:
-        if ln.strip() == marker:
-            inside = True
-            removed = True
-            continue
-        if inside and ln.strip() == end_marker:
-            inside = False
-            continue
-        if not inside:
-            new.append(ln)
-
-    if not removed:
-        click.secho(f"[WARN] No snippet found in {rc_path}", fg="yellow")
-        return
-
-    if dry_run:
-        click.echo(f"[DRY-RUN] Would remove snippet from {rc_path}", err=True)
-        return
-
-    backup = rc_path.with_suffix(rc_path.suffix + ".catherd.uninstall.bak")
-    shutil.copyfile(rc_path, backup)
-    rc_path.write_text("\n".join(new), encoding="utf-8")
-    click.secho(f"[OK] Snippet removed from {rc_path}; backup at {backup}", fg="green")
+    """Deprecated compatibility alias for catherd atuin disable."""
+    click.echo("[DEPRECATED] Use 'catherd atuin disable' instead.", err=True)
+    try:
+        _disable_atuin_integration(force_shell=force_shell, dry_run=dry_run)
+    except (OSError, ValueError) as err:
+        raise click.ClickException(str(err)) from err
 
 
 def print_shell_snippet(shell: str) -> None:
     try:
         rc_path = get_shell_rc_path(shell)
         snippet = load_snippet_for_shell(shell)
-        click.echo(f"Add this to your shell rc file ({rc_path}):\n")
+        click.echo(f"Optional Atuin association snippet for {shell} ({rc_path}):\n")
         click.echo(snippet)
-        click.echo("\nOr run 'catherd install' to do it automatically.")
-    except ValueError:
-        click.echo("[INFO] Unknown shell. See the README or scripts/catherd_rc_snippet.* for setup instructions.\n")
+        click.echo("\nOr run 'catherd atuin enable' to install it safely.")
+    except ValueError as err:
+        click.echo(f"[INFO] {err}")
 
 
 def print_env_diagnostics():
