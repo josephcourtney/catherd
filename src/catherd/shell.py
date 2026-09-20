@@ -17,7 +17,7 @@ _EMBEDDED_SNIPPETS: Final[dict[str, str]] = {
     "bash": (
         'if [[ -n "${KITTY_WINDOW_ID:-}" && -n "${ATUIN_SESSION:-}" ]]; then\n'
         '  _catherd_dir="${XDG_CACHE_HOME:-$HOME/.cache}/catherd"\n'
-        '  mkdir -p -- "$_catherd_dir"\n'
+        '  mkdir -p "$_catherd_dir"\n'
         "  printf '%s %s\\n' \"$ATUIN_SESSION\" \"$KITTY_WINDOW_ID\" > "
         '"$_catherd_dir/atuin_kitty_${KITTY_WINDOW_ID}"\n'
         "  unset _catherd_dir\n"
@@ -26,7 +26,7 @@ _EMBEDDED_SNIPPETS: Final[dict[str, str]] = {
     "zsh": (
         'if [[ -n "${KITTY_WINDOW_ID:-}" && -n "${ATUIN_SESSION:-}" ]]; then\n'
         '  _catherd_dir="${XDG_CACHE_HOME:-$HOME/.cache}/catherd"\n'
-        '  mkdir -p -- "$_catherd_dir"\n'
+        '  mkdir -p "$_catherd_dir"\n'
         '  print -r -- "$ATUIN_SESSION $KITTY_WINDOW_ID" > "$_catherd_dir/atuin_kitty_${KITTY_WINDOW_ID}"\n'
         "  unset _catherd_dir\n"
         "fi\n"
@@ -38,7 +38,7 @@ _EMBEDDED_SNIPPETS: Final[dict[str, str]] = {
         "    else\n"
         '        set -l _catherd_dir "$HOME/.cache/catherd"\n'
         "    end\n"
-        '    mkdir -p -- "$_catherd_dir"\n'
+        '    mkdir -p "$_catherd_dir"\n'
         "    printf '%s %s\\n' \"$ATUIN_SESSION\" \"$KITTY_WINDOW_ID\" > "
         '"$_catherd_dir/atuin_kitty_$KITTY_WINDOW_ID"\n'
         "end\n"
@@ -50,7 +50,7 @@ _EMBEDDED_SNIPPETS: Final[dict[str, str]] = {
         "    else\n"
         '        set _catherd_dir = "$HOME/.cache/catherd"\n'
         "    endif\n"
-        '    mkdir -p -- "$_catherd_dir"\n'
+        '    mkdir -p "$_catherd_dir"\n'
         '    echo "$ATUIN_SESSION $KITTY_WINDOW_ID" > "$_catherd_dir/atuin_kitty_$KITTY_WINDOW_ID"\n'
         "    unset _catherd_dir\n"
         "endif\n"
@@ -62,6 +62,12 @@ _MARKER_PAIRS: Final[dict[str, str]] = {
     LEGACY_ATUIN_INTEGRATION_MARKER: LEGACY_ATUIN_INTEGRATION_END_MARKER,
 }
 _END_MARKERS: Final[set[str]] = set(_MARKER_PAIRS.values())
+_VALIDATION_ARGS: Final[dict[str, tuple[str, ...]]] = {
+    "bash": ("--noprofile", "--norc", "-n"),
+    "zsh": ("-f", "-n"),
+    "fish": ("-N", "-n"),
+    "csh": ("-f", "-n", "-s"),
+}
 
 
 def get_shell_rc_path(shell: str) -> Path:
@@ -113,14 +119,17 @@ def validate_snippet_for_shell(shell: str) -> None:
         msg = f"Cannot validate {shell!r} integration: {shell} executable was not found on PATH"
         raise ValueError(msg)
 
+    environment = os.environ.copy()
+    environment.pop("BASH_ENV", None)
     try:
         result = subprocess.run(  # noqa: S603
-            [executable, "-n"],
+            [executable, *_VALIDATION_ARGS[shell]],
             input=snippet,
             check=False,
             capture_output=True,
             text=True,
             timeout=5,
+            env=environment,
         )
     except (OSError, subprocess.TimeoutExpired) as err:
         msg = f"Could not validate generated {shell} integration: {err}"
