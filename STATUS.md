@@ -4,29 +4,29 @@ This file records the current short-horizon project state for continuity and han
 
 ## Current state
 
-catherd 0.18.x is functionally complete for the scope defined in DESIGN.md. The interactive organizer supports inspection, filtering, explicit focus, rename, move, reorder, and merge operations over an existing Kitty hierarchy, with optional Atuin enrichment.
+catherd is in 0.19.0 public-release hardening. The core Kitty organizer remains functionally complete for the scope defined in DESIGN.md: inspection, filtering, explicit focus, rename, move, reorder, and merge all operate from Kitty state.
 
-The TUI makeover is complete and integrated with the existing backend model. Selection is distinct from Kitty focus, native tree collapse/expand behavior is preserved, connector topology is continuous, tab groups use non-structural banding, and the inspector separates status, location, process, and history information.
+Public-release Phase 1 is complete. Kitty is now explicitly the required core boundary, while Atuin is defined as optional completed-command history enrichment. Kitty shell integration and catherd's optional Kitty-pane-to-Atuin-session association are documented as separate mechanisms.
+
+The TUI makeover remains complete: selection is distinct from Kitty focus, native tree collapse/expand behavior is preserved, connector topology is continuous, tab groups use non-structural banding, and the inspector separates status, location, process, and optional history information.
 
 ## Verification
 
-The latest UI implementation passed:
+The existing suite covers interaction, structural mutations, and refresh races. Phase 1 adds explicit regression coverage that:
 
-- Ruff formatting and lint;
-- `ty` type checking;
-- import-linter checks;
-- the full automated test suite (146 tests).
+- `catherd show` uses Kitty current-command/process state with no Atuin session files or history database;
+- the TUI starts, renders Kitty command state, and performs core focus operations with no Atuin state present.
 
-Headless Textual tests cover interaction and refresh races. Real-Kitty/macOS rehearsal remains the appropriate check for behavior that depends on Kitty remote control or native-window effects.
+Real-Kitty/macOS rehearsal remains the appropriate check for behavior that depends on Kitty remote control or native-window effects.
 
 ## Known limitations
 
-These are intentional current-scope boundaries, not incomplete work:
+These are intentional current-scope boundaries, not incomplete core work:
 
 - catherd does not create shells, panes, tabs, or OS windows;
 - catherd does not close processes or terminal objects;
-- Atuin history is enrichment and may be unavailable independently of Kitty state.
+- Atuin history is optional enrichment and may be unavailable independently of Kitty state.
 
 ## Next
 
-No immediate feature work is queued. Future work should be bug fixes, compatibility maintenance, or an explicit DESIGN.md scope revision.
+Proceed to PLAN.md Phase 2: isolate and harden the optional Atuin integration, including explicit integration-scoped CLI terminology and validated shell snippets.
