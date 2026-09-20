@@ -10,7 +10,9 @@ The project is licensed under the GNU Lesser General Public License v3.0 only (`
 
 The final local quality, release, and installation rehearsals were reported passing before the version/documentation bump. Subsequent Phase 2 shell-integration fixes corrected fish variable scope, made managed-block enable/disable newline-preserving, and moved real-shell subprocess checks into a dedicated `just check` gate because pytest-test-categories misattributed those subprocesses to randomized small tests.
 
-The current tree has now passed a fresh `just check`, including the standalone real-shell integration gate and the full pytest suite.
+The Phase 2 shell-integration tree passed a fresh `just check`, including the standalone real-shell integration gate and the full pytest suite.
+
+The previously planned public-CLI hardening phase is now implemented on top of that verified baseline. `show` is hierarchy-oriented and terminal-responsive, human display text is normalized without changing JSON values, `--verbose` exposes lower-value diagnostics, `--version` reports installed package metadata, and unusable Kitty state now produces nonzero exits for `show`, `inspect`, and `doctor`. Main `doctor` output separates core Kitty health from optional Atuin enrichment.
 
 ## Known limitations
 
@@ -24,4 +26,4 @@ These are intentional scope boundaries rather than incomplete 1.0 work:
 
 ## Next
 
-Phase 2 verification is complete. Proceed to the next release-hardening work in PLAN.md, preserving the requirement that any eventual `v1.0.0` tag point at an exactly rehearsed tree.
+Run `just check` on the current CLI-hardening tree and fix any resulting lint/type/test failures. Once that gate passes, record the new verified baseline before further maintenance or release work.
