@@ -1,0 +1,19 @@
+name: Temporary presentation validation
+
+on:
+  push:
+    branches:
+      - ui-makeover
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync
+      - run: uv run ruff format --check src/catherd/tui.py tests/test_tui.py
+      - run: uv run ruff check --no-fix src/catherd/tui.py tests/test_tui.py
+      - run: uv run ty check src tests
+      - run: uv run lint-imports --cache-dir .cache/import-linter --verbose --config import-linter.toml
+      - run: uv run pytest --no-cov tests
