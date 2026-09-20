@@ -465,6 +465,33 @@ def test_doctor_basic(mock_state):
     assert "catherd atuin doctor" in result.output
 
 
+@pytest.mark.medium
+def test_atuin_doctor_treats_missing_atuin_as_optional(tmp_path, monkeypatch):
+    monkeypatch.setattr(cli.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(cli, "get_atuin_history_db_path", lambda: tmp_path / "missing-history.db")
+    monkeypatch.setattr(cli, "get_kitty_state", lambda **_kwargs: KittyState(os_windows=()))
+    monkeypatch.setattr(cli, "get_shell_info", lambda *_args, **_kwargs: "bash")
+    monkeypatch.setattr(cli, "is_sync_active_in_this_shell", lambda: False)
+    monkeypatch.setattr(cli, "print_shell_snippet", lambda _shell: None)
+
+    result = CliRunner().invoke(cli.main, ["atuin", "doctor"])
+
+    assert result.exit_code == 0
+    assert "Atuin executable not found" in result.output
+    assert "core catherd behavior" in result.output
+    assert "No Kitty panes are available" in result.output
+
+
+@pytest.mark.small
+def test_atuin_commands_are_visible_under_explicit_namespace():
+    result = CliRunner().invoke(cli.main, ["atuin", "--help"])
+
+    assert result.exit_code == 0
+    assert "enable" in result.output
+    assert "disable" in result.output
+    assert "doctor" in result.output
+
+
 @pytest.mark.small
 def test_is_sync_env_missing(monkeypatch):
     monkeypatch.delenv("KITTY_WINDOW_ID", raising=False)
@@ -556,10 +583,10 @@ def test_print_kitty_session_diagnostics_all_branches(monkeypatch, capsys):
     print_kitty_session_diagnostics(state, verbose=True)
     out = capsys.readouterr().out
     assert "[OK] Windows with valid Atuin session file:" in out
-    assert "missing session file" in out
-    assert "missing Atuin session ID" in out
+    assert "without optional Atuin pane/session association" in out
+    assert "unusable Atuin association state" in out
     assert "no command in Atuin" in out
-    assert "Atuin/Kitty sync active in" in out
+    assert "Optional Atuin history enrichment active in" in out
 
 
 @pytest.mark.small
@@ -594,4 +621,4 @@ def test_print_shell_snippet_and_env(monkeypatch, capsys):
     cli.print_shell_snippet("unknown")
     cli.print_env_diagnostics()
     out = capsys.readouterr().out
-    assert "Add this to your shell" in out or "Unknown shell" in out
+    assert "Optional Atuin association snippet" in out or "Unknown shell" in out
