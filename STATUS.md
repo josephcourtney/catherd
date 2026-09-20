@@ -6,20 +6,21 @@ This file records the current short-horizon project state for continuity and han
 
 catherd is in 0.19.0 public-release hardening. The core Kitty organizer remains functionally complete for the scope defined in DESIGN.md: inspection, filtering, explicit focus, rename, move, reorder, and merge all operate from Kitty state.
 
-Public-release Phase 1 is complete. Kitty is now explicitly the required core boundary, while Atuin is defined as optional completed-command history enrichment. Kitty shell integration and catherd's optional Kitty-pane-to-Atuin-session association are documented as separate mechanisms.
+Public-release Phases 1 and 2 are implemented. Kitty is the required core boundary; Atuin is optional completed-command history enrichment managed through the explicit `catherd atuin enable|disable|doctor` namespace. The former top-level `install` / `uninstall` commands remain hidden compatibility aliases.
 
-The TUI makeover remains complete: selection is distinct from Kitty focus, native tree collapse/expand behavior is preserved, connector topology is continuous, tab groups use non-structural banding, and the inspector separates status, location, process, and optional history information.
+The optional shell integration now uses shell-native bash, zsh, fish, and csh snippets. Generated snippets are syntax-validated before writes; existing rc files are backed up; replacement is atomic; legacy markers are migrated; malformed or duplicate managed blocks are rejected rather than guessed through.
 
 ## Verification
 
-`just check` passes on the current Phase 1 state.
+Phase 1 passed `just check`. Phase 2 adds regression coverage for:
 
-The existing suite covers interaction, structural mutations, and refresh races. Phase 1 adds explicit regression coverage that:
+- enable/disable idempotence, dry-run, backups, legacy-marker migration, malformed-block rejection, and write-failure recovery;
+- startup-file paths containing spaces and creation of a previously absent rc file;
+- real parser and execution checks for bash, zsh, fish, and csh when those executables are installed;
+- missing/unreadable Atuin state degrading to optional enrichment absence rather than a core failure;
+- hidden compatibility aliases and the explicit Atuin CLI namespace.
 
-- `catherd show` uses Kitty current-command/process state with no Atuin session files or history database;
-- the TUI starts, renders Kitty command state, and performs core focus operations with no Atuin state present.
-
-Real-Kitty/macOS rehearsal remains the appropriate check for behavior that depends on Kitty remote control or native-window effects.
+A local `just check` run is still required to close Phase 2 verification because this environment cannot execute the repository checkout.
 
 ## Known limitations
 
@@ -27,8 +28,9 @@ These are intentional current-scope boundaries, not incomplete core work:
 
 - catherd does not create shells, panes, tabs, or OS windows;
 - catherd does not close processes or terminal objects;
-- Atuin history is optional enrichment and may be unavailable independently of Kitty state.
+- Atuin history is optional enrichment and may be unavailable independently of Kitty state;
+- locally unavailable shell executables cause their real-shell tests to skip until the later CI matrix supplies them.
 
 ## Next
 
-Proceed to PLAN.md Phase 2: isolate and harden the optional Atuin integration, including explicit integration-scoped CLI terminology and validated shell snippets.
+Run the Phase 2 local quality gate. Once it passes, proceed to PLAN.md Phase 3: harden the public CLI, including responsive `show`, diagnostic structure, and exit semantics.
