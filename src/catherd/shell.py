@@ -33,10 +33,11 @@ _EMBEDDED_SNIPPETS: Final[dict[str, str]] = {
     ),
     "fish": (
         "if set -q KITTY_WINDOW_ID; and set -q ATUIN_SESSION\n"
+        "    set -l _catherd_dir\n"
         "    if set -q XDG_CACHE_HOME\n"
-        '        set -l _catherd_dir "$XDG_CACHE_HOME/catherd"\n'
+        '        set _catherd_dir "$XDG_CACHE_HOME/catherd"\n'
         "    else\n"
-        '        set -l _catherd_dir "$HOME/.cache/catherd"\n'
+        '        set _catherd_dir "$HOME/.cache/catherd"\n'
         "    end\n"
         '    mkdir -p "$_catherd_dir"\n'
         '    printf \'%s %s\\n\' "$ATUIN_SESSION" "$KITTY_WINDOW_ID" > '
@@ -198,8 +199,8 @@ def replace_managed_snippet(contents: str, replacement: str | None) -> tuple[str
 
 
 def append_managed_snippet(contents: str, block: str) -> str:
-    """Append a managed block with stable separation from existing rc contents."""
+    """Append a managed block without adding an unnecessary blank line."""
     if not contents:
         return block
-    separator = "\n" if contents.endswith("\n") else "\n\n"
+    separator = "" if contents.endswith("\n") else "\n"
     return contents + separator + block
