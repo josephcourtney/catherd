@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+### Fixed
+- fix fish Atuin integration variable scope so XDG/HOME cache paths are preserved through the nested branch.
+- make Atuin managed-block enable/disable preserve newline-terminated rc contents exactly.
+- run real advertised-shell parser/execution checks as a standalone repository gate instead of through pytest-test-categories subprocess isolation.
+
 ## [1.0.0] - 2026-09-20
 
 ### Added
