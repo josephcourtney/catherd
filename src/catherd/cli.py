@@ -32,9 +32,12 @@ def is_sync_active_in_this_shell() -> bool:
     if not kitty_id or not atuin_sess:
         return False
     session_path = get_session_file(str(kitty_id))
-    if not session_path.exists():
+    try:
+        if not session_path.exists():
+            return False
+        content = session_path.read_text(encoding="utf-8").strip()
+    except OSError:
         return False
-    content = session_path.read_text(encoding="utf-8").strip()
     if not content or not content.split():
         return False
     session_id, *_ = content.split()
@@ -267,8 +270,11 @@ def inspect(*, verbose: bool, pretty: bool) -> None:
         session_id = get_atuin_session_for_window(pane.id, verbose=verbose)
         session_path = get_session_file(pane.id)
         session_content: str | None = None
-        if session_path.exists():
-            session_content = session_path.read_text(encoding="utf-8").strip()
+        try:
+            if session_path.exists():
+                session_content = session_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            session_content = None
         atuin_cmd = get_last_command_for_atuin_session(session_id, verbose=verbose) if session_id else None
         display_cmd = _resolve_display_command(pane, atuin_cmd)
         payload = _serialize_pane(location, display_cmd)
@@ -440,13 +446,16 @@ def print_shell_snippet(shell: str) -> None:
         click.echo(f"[INFO] {err}")
 
 
-def print_env_diagnostics():
+def print_env_diagnostics() -> None:
     kitty_id = os.environ.get("KITTY_WINDOW_ID")
     atuin_sess = os.environ.get("ATUIN_SESSION")
     if not kitty_id:
         click.secho("[WARN] $KITTY_WINDOW_ID is not set in this shell. Are you inside Kitty?", fg="yellow")
     if not atuin_sess:
-        click.secho("[WARN] $ATUIN_SESSION is not set. Is Atuin initialized in your shell?", fg="yellow")
+        click.secho(
+            "[INFO] $ATUIN_SESSION is not set; optional Atuin history enrichment is inactive in this shell.",
+            fg="yellow",
+        )
 
 
 MIN_SESSION_TOKENS: Final[int] = 2
@@ -464,27 +473,31 @@ def _collect_kitty_session_diagnostics(
     for location in state.iter_panes():
         pane = location.pane
         session_path = get_session_file(pane.id)
-        if not session_path.exists():
-            missing_file.append(location)
-        else:
+        try:
+            if not session_path.exists():
+                missing_file.append(location)
+                continue
             content = session_path.read_text(encoding="utf-8").strip()
-            if not content or not content.split():
-                corrupt_file.append((location, content))
-            else:
-                session_id = content.split()[0]
-                session_map.setdefault(session_id, []).append(pane.id)
-                tokens = content.split()
-                if len(tokens) >= MIN_SESSION_TOKENS:
-                    declared_window = tokens[1]
-                    if declared_window != pane.id:
-                        notes.append(
-                            f"session file {session_path} references window {declared_window} but we expected {pane.id}"
-                        )
-                last_cmd = get_last_command_for_atuin_session(session_id, verbose=verbose)
-                if _is_missing_or_error_command(last_cmd):
-                    missing_command.append((location, content, last_cmd))
-                else:
-                    ok.append((location, content, last_cmd))
+        except OSError as err:
+            corrupt_file.append((location, f"unreadable: {err}"))
+            continue
+
+        if not content or not content.split():
+            corrupt_file.append((location, content))
+            continue
+
+        session_id = content.split()[0]
+        session_map.setdefault(session_id, []).append(pane.id)
+        tokens = content.split()
+        if len(tokens) >= MIN_SESSION_TOKENS:
+            declared_window = tokens[1]
+            if declared_window != pane.id:
+                notes.append(f"session file {session_path} references window {declared_window} but we expected {pane.id}")
+        last_cmd = get_last_command_for_atuin_session(session_id, verbose=verbose)
+        if _is_missing_or_error_command(last_cmd):
+            missing_command.append((location, content, last_cmd))
+        else:
+            ok.append((location, content, last_cmd))
     for session_id, pane_ids in session_map.items():
         if len(pane_ids) > 1:
             notes.append(f"duplicate ATUIN_SESSION {session_id} across windows {', '.join(sorted(pane_ids))}")
@@ -543,19 +556,19 @@ def _print_ok_windows(ok: list[tuple[PaneLocation, str, str]]) -> None:
 def _print_missing_files(missing_file: list[PaneLocation]) -> None:
     if not missing_file:
         return
-    click.secho("[WARN] Windows missing session file (sync inactive):", fg="yellow")
+    click.secho("[INFO] Windows without optional Atuin pane/session association:", fg="yellow")
     for location in missing_file:
         pane = location.pane
         click.echo(f"  - WinID: {pane.id}, TabID: {location.tab.id}, Title: {pane.title[:30]}")
         _print_kitty_window_metadata(pane)
-    click.echo("    -> The Atuin/Kitty sync snippet is NOT active in these windows/tabs.")
-    click.echo("    -> To activate: Ensure your shell sources the sync snippet and RESTART this Kitty tab/window.")
+    click.echo("    -> Kitty-only inspection and organization remain available.")
+    click.echo("    -> To add completed-command history: run 'catherd atuin enable', then restart the shell.")
 
 
 def _print_corrupt_windows(corrupt_file: list[tuple[PaneLocation, str]]) -> None:
     if not corrupt_file:
         return
-    click.secho("[FAIL] Windows with session file but missing Atuin session ID:", fg="red")
+    click.secho("[WARN] Windows with unusable Atuin association state:", fg="yellow")
     for location, content in corrupt_file:
         pane = location.pane
         click.echo(f"  - WinID: {pane.id}, TabID: {location.tab.id}, Title: {pane.title[:30]}")
@@ -607,9 +620,47 @@ def print_kitty_session_diagnostics(state: KittyState, *, verbose: bool = False)
     else:
         color = "green" if synced == total else "yellow"
         click.secho(
-            f"[INFO] Atuin/Kitty sync active in {synced}/{total} windows.",
+            f"[INFO] Optional Atuin history enrichment active in {synced}/{total} windows.",
             fg=color,
         )
+
+
+def _print_atuin_installation_status() -> None:
+    executable = shutil.which("atuin")
+    history_db = get_atuin_history_db_path()
+    if executable is None:
+        click.secho("[INFO] Atuin executable not found on PATH; this does not affect core catherd behavior.", fg="yellow")
+    else:
+        click.secho(f"[OK] Atuin executable: {executable}", fg="green")
+
+    if history_db.exists():
+        click.secho(f"[OK] Atuin history database: {history_db}", fg="green")
+    else:
+        click.secho(f"[INFO] Atuin history database not found at {history_db}", fg="yellow")
+
+
+@atuin_group.command("doctor")
+@click.option("-v", "--verbose", is_flag=True, help="Show verbose/debug output")
+def atuin_doctor(*, verbose: bool = False) -> None:
+    """Diagnose only the optional Atuin enrichment integration."""
+    click.echo("=== catherd atuin doctor ===")
+    _print_atuin_installation_status()
+    print_env_diagnostics()
+    shell = get_shell_info()
+    click.echo(f"[INFO] Detected shell: {shell}")
+
+    state = get_kitty_state(verbose=verbose)
+    if state is None or state.pane_count == 0:
+        click.secho(
+            "[INFO] No Kitty panes are available to inspect for Atuin association; core catherd is unaffected.",
+            fg="yellow",
+        )
+    else:
+        print_kitty_session_diagnostics(state, verbose=verbose)
+
+    if not is_sync_active_in_this_shell():
+        print_shell_snippet(shell)
+    click.secho("=== Atuin integration check complete ===", fg="blue")
 
 
 @main.command()
@@ -624,15 +675,12 @@ def tui() -> None:
 @main.command()
 @click.option("-v", "--verbose", is_flag=True, help="Show verbose/debug output")
 def doctor(*, verbose: bool = False) -> None:
-    """Diagnose catherd/Kitty/Atuin integration issues."""
+    """Diagnose catherd's Kitty boundary and report optional enrichment state."""
     click.echo("=== catherd doctor ===")
 
     print_env_diagnostics()
     shell = get_shell_info()
     click.echo(f"[INFO] Detected shell: {shell}")
-
-    if not is_sync_active_in_this_shell():
-        print_shell_snippet(shell)
 
     state = get_kitty_state(verbose=verbose)
     if state is None or state.pane_count == 0:
@@ -643,7 +691,8 @@ def doctor(*, verbose: bool = False) -> None:
 
     if not is_sync_active_in_this_shell():
         click.secho(
-            "TIP: Run 'catherd install' to set up the session sync automatically for your shell.",
+            "TIP: Optional Atuin history can be diagnosed or enabled with 'catherd atuin doctor' "
+            "and 'catherd atuin enable'.",
             fg="blue",
         )
     click.secho("=== Doctor check complete ===", fg="blue")
