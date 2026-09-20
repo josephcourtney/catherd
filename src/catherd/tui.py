@@ -904,8 +904,8 @@ class KittyTree(Tree[NodeRef]):
         *Tree.BINDINGS,
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
-        Binding("h", "collapse_or_parent", "Collapse", show=False),
-        Binding("l", "expand_or_child", "Expand", show=False),
+        Binding("h,left", "collapse_or_parent", "Collapse", show=False),
+        Binding("l,right", "expand_or_child", "Expand", show=False),
     ]
 
     def render_label(
@@ -960,49 +960,9 @@ class KittyTree(Tree[NodeRef]):
             return
         super().action_select_cursor()
 
-    def _render_spacer_line(self, node: TreeNode[NodeRef]) -> Strip:
-        guide_style = self.get_component_rich_style("tree--guides", partial=True)
-        guides_hidden = self.get_component_styles("tree--guides").color.a == 0
-
-        if self.show_guides and not guides_hidden:
-            lines = self.LINES["default"]
-            if guide_style.bold:
-                lines = self.LINES["bold"]
-            elif guide_style.underline2:
-                lines = self.LINES["double"]
-            guide_depth = max(0, self.guide_depth - 2)
-
-            def guide_text(characters: str) -> str:
-                return f"{characters[0]}{characters[1] * guide_depth} "
-
-            space = guide_text(lines[0])
-            vertical = guide_text(lines[1])
-        else:
-            space = vertical = " " * self.guide_depth
-
-        ancestors: list[TreeNode[NodeRef]] = []
-        ancestor = node.parent
-        while ancestor is not None and ancestor is not self.root:
-            ancestors.append(ancestor)
-            ancestor = ancestor.parent
-        ancestors.reverse()
-
-        guides = Text()
-        for ancestor in ancestors:
-            guides.append(space if ancestor.is_last else vertical, style=guide_style)
-        guides.append(vertical, style=guide_style)
-
-        strip = Strip(list(guides.render(self.app.console)))
-        strip = strip.extend_cell_length(self.size.width, self.rich_style)
-        scroll_x = self.scroll_offset.x
-        return strip.crop(scroll_x, scroll_x + self.size.width)
-
     def render_line(self, y: int) -> Strip:
         absolute_line = y + self.scroll_offset.y
         node = self.get_node_at_line(absolute_line)
-        if node is not None and node is not self.root and node.data is None:
-            return self._render_spacer_line(node)
-
         strip = super().render_line(y)
         strip = strip.extend_cell_length(self.size.width, self.rich_style)
 
@@ -1628,9 +1588,7 @@ class KittyManagerApp(App[None]):
             for os_window in state.os_windows
             if not self._filter_query or self._os_window_matches_filter(os_window)
         ]
-        for index, os_window in enumerate(visible_windows):
-            if index:
-                tree.root.add_leaf(" ", None)
+        for os_window in visible_windows:
             self._add_os_window(tree.root, os_window, nodes, expanded)
         self.state = state
         target = preferred or self._logical_selection or self._initial_ref(state)
@@ -1676,8 +1634,6 @@ class KittyManagerApp(App[None]):
             tab for tab in os_window.tabs if reveal_all or not self._filter_query or self._tab_matches_filter(tab)
         ]
         for index, tab in enumerate(visible_tabs):
-            if index:
-                node.add_leaf(" ", None)
             self._add_tab(
                 node,
                 tab,
@@ -1816,6 +1772,18 @@ class KittyManagerApp(App[None]):
         if event.node.data is not None:
             self._logical_selection = event.node.data
         self._show_details(event.node.data)
+
+    def on_tree_node_collapsed(self, event: Tree.NodeCollapsed[NodeRef]) -> None:
+        """Keep an explicit user collapse stable across polling refreshes."""
+        collapsed_ref = event.node.data
+        selected_ref = self._logical_selection
+        if collapsed_ref is None or selected_ref is None or collapsed_ref == selected_ref:
+            return
+        if not any(node.data == selected_ref for node in _walk_nodes(event.node)):
+            return
+        self._logical_selection = collapsed_ref
+        self._tree().call_after_refresh(self._tree().move_cursor, event.node, animate=False)
+        self._show_details(collapsed_ref)
 
     def on_tree_node_selected(self, event: Tree.NodeSelected[NodeRef]) -> None:
         """Treat mouse/Tree selection as selection inside catherd only."""
