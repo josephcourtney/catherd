@@ -214,7 +214,7 @@ def _prepare_show_rows(state: KittyState, *, verbose: bool) -> list[tuple[PaneLo
     rows: list[tuple[PaneLocation, str]] = []
     for location in state.iter_panes():
         session_id = get_atuin_session_for_window(location.pane.id, verbose=verbose)
-        last_cmd = get_last_command_for_atuin_session(session_id, verbose=verbose) if session_id else None
+        last_cmd = get_last_command_for_atuin_session(session_id, verbose=False) if session_id else None
         rows.append((location, _resolve_display_command(location.pane, last_cmd)))
     return rows
 
@@ -287,32 +287,18 @@ def _require_kitty_state() -> KittyState:
 
 
 @main.command()
-@click.option("-v", "--verbose", is_flag=True, help="Show verbose/debug output")
-@click.option("--json", "as_json", is_flag=True, help="Output in JSON format")
+@click.option("-v", "--verbose", is_flag=True, help="Show pane IDs and process/layout details")
+@click.option("--json", "as_json", is_flag=True, help="Output stable machine-readable JSON")
 def show(*, verbose: bool, as_json: bool) -> None:
-    """Show open Kitty panes with the best available current/recent command."""
-    if not (os.environ.get("KITTY_WINDOW_ID") and os.environ.get("ATUIN_SESSION")) and not as_json:
-        click.secho(
-            "[INFO] Optional Atuin history association is not active in this shell; "
-            "Kitty-only results remain available. Run 'catherd doctor' for details.",
-            fg="yellow",
-            err=True,
-        )
-
-    state = get_kitty_state(verbose=verbose)
-    if state is None:
-        click.echo("[error] Could not get Kitty windows. See error messages above.", err=True)
-        return
-    rows = _prepare_show_rows(state, verbose=verbose)
-    if not rows:
-        click.echo("[warning] No Kitty windows/tabs found. Is Kitty running?", err=True)
-        return
+    """Show the current Kitty hierarchy and best available command."""
+    state = _require_kitty_state()
+    rows = _prepare_show_rows(state, verbose=False)
 
     if as_json:
         click.echo(json.dumps(list(starmap(_serialize_pane, rows)), indent=2))
         return
 
-    _render_show_table(rows)
+    _render_show_hierarchy(rows, verbose=verbose)
 
 
 @main.command()
@@ -320,19 +306,13 @@ def show(*, verbose: bool, as_json: bool) -> None:
 @click.option("--pretty", is_flag=True, help="Pretty-print the JSON output")
 def inspect(*, verbose: bool, pretty: bool) -> None:
     """Show the richest per-window Kitty + Atuin dataset as JSON."""
-    state = get_kitty_state(verbose=verbose)
-    if state is None:
-        click.echo("[error] Could not get Kitty windows. See error messages above.", err=True)
-        return
+    state = _require_kitty_state()
     locations = list(state.iter_panes())
-    if not locations:
-        click.echo("[warning] No Kitty windows/tabs found. Is Kitty running?", err=True)
-        return
 
     payloads: list[dict[str, str | int | bool | None]] = []
     for location in locations:
         pane = location.pane
-        session_id = get_atuin_session_for_window(pane.id, verbose=verbose)
+        session_id = get_atuin_session_for_window(pane.id, verbose=False)
         session_path = get_session_file(pane.id)
         session_content: str | None = None
         try:
@@ -340,7 +320,7 @@ def inspect(*, verbose: bool, pretty: bool) -> None:
                 session_content = session_path.read_text(encoding="utf-8").strip()
         except OSError:
             session_content = None
-        atuin_cmd = get_last_command_for_atuin_session(session_id, verbose=verbose) if session_id else None
+        atuin_cmd = get_last_command_for_atuin_session(session_id, verbose=False) if session_id else None
         display_cmd = _resolve_display_command(pane, atuin_cmd)
         payload = _serialize_pane(location, display_cmd)
         payload.update({
