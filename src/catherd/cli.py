@@ -95,17 +95,6 @@ def _truncate(value: str | None, max_len: int) -> str:
     return value[: max_len - 3] + "..."
 
 
-def _active_summary(location: PaneLocation) -> str:
-    parts: list[str] = []
-    if location.os_window.is_active:
-        parts.append("os")
-    if location.tab.is_active:
-        parts.append("tab")
-    if location.pane.is_active:
-        parts.append("win")
-    return ",".join(parts)
-
-
 def _serialize_pane(location: PaneLocation, last_command: str) -> dict[str, str | int | bool | None]:
     pane = location.pane
     return {
@@ -210,10 +199,10 @@ def _pane_verbose_summary(pane: Pane) -> str:
     return " · ".join(parts)
 
 
-def _prepare_show_rows(state: KittyState, *, verbose: bool) -> list[tuple[PaneLocation, str]]:
+def _prepare_show_rows(state: KittyState) -> list[tuple[PaneLocation, str]]:
     rows: list[tuple[PaneLocation, str]] = []
     for location in state.iter_panes():
-        session_id = get_atuin_session_for_window(location.pane.id, verbose=verbose)
+        session_id = get_atuin_session_for_window(location.pane.id, verbose=False)
         last_cmd = get_last_command_for_atuin_session(session_id, verbose=False) if session_id else None
         rows.append((location, _resolve_display_command(location.pane, last_cmd)))
     return rows
@@ -292,7 +281,7 @@ def _require_kitty_state() -> KittyState:
 def show(*, verbose: bool, as_json: bool) -> None:
     """Show the current Kitty hierarchy and best available command."""
     state = _require_kitty_state()
-    rows = _prepare_show_rows(state, verbose=False)
+    rows = _prepare_show_rows(state)
 
     if as_json:
         click.echo(json.dumps(list(starmap(_serialize_pane, rows)), indent=2))
