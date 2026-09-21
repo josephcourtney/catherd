@@ -17,7 +17,7 @@ from rich.style import Style
 from rich.text import Text
 from textual.app import App
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.strip import Strip
 from textual.widgets import Input, Label, OptionList, Static, Tree
@@ -112,6 +112,7 @@ _PANE_HIERARCHY_WIDTH = 24
 _TREE_ID_WIDTH = 5
 _TREE_STATUS_WIDTH = 22
 _DETAIL_LABEL_WIDTH = 11
+_DETAIL_COMPACT_VALUE_MAX = 28
 
 _STYLE_ACTIVE_BRANCH = "bold"
 _STYLE_ACTIVE_GUIDE = "dim"
@@ -498,6 +499,7 @@ def _pane_label(
 def _action_strip_text() -> Text:
     actions = (
         ("Enter", "Focus"),
+        ("i", "Inspect"),
         ("/", "Filter"),
         ("a", "Focused pane"),
         ("?", "Help"),
@@ -612,6 +614,12 @@ def _home_relative_path(value: str | None) -> str | None:
     return value
 
 
+def _abbreviate_identifier(value: str | None, *, head: int = 8, tail: int = 6) -> str | None:
+    if value is None or len(value) <= head + tail + 1:
+        return value
+    return f"{value[:head]}…{value[-tail:]}"
+
+
 def _command_executable(value: str | None) -> str | None:
     if not value:
         return None
@@ -648,8 +656,15 @@ def _append_property(
     value: object | None,
     *,
     value_style: str = "",
+    block: bool = False,
 ) -> None:
     if value is None or value == "":
+        return
+    if block:
+        details.append(label, style=_STYLE_DETAIL_LABEL)
+        details.append("\n  ")
+        details.append(str(value), style=value_style)
+        details.append("\n")
         return
     label_text = f"{label:<{_DETAIL_LABEL_WIDTH}}"
     if len(label) >= _DETAIL_LABEL_WIDTH:
@@ -770,9 +785,16 @@ def _append_pane_status(details: Text, pane: Pane, *, focused: bool) -> None:
         _append_property(details, "Flags", ", ".join(flags), value_style="dim")
 
 
-def _append_pane_location(details: Text, pane: Pane) -> None:
+def _append_pane_location(details: Text, pane: Pane, *, full: bool) -> None:
     _append_section(details, "Location")
-    _append_property(details, "Path", _home_relative_path(pane.cwd), value_style="bold")
+    path = _home_relative_path(pane.cwd)
+    _append_property(
+        details,
+        "Path",
+        path if full else _compact_hint(path, max_len=_DETAIL_COMPACT_VALUE_MAX),
+        value_style="bold",
+        block=full,
+    )
     _append_property(details, "Pane", _pane_position_long(pane))
     _append_property(details, "Size", _pane_size(pane))
     _append_property(details, "Neighbors", _pane_neighbors(pane))
@@ -797,7 +819,7 @@ def _shell_command(pane: Pane) -> str | None:
     return None
 
 
-def _append_pane_process(details: Text, pane: Pane) -> None:
+def _append_pane_process(details: Text, pane: Pane, *, full: bool) -> None:
     foreground = None if _is_shell_wrapper(pane.foreground_cmd) else pane.foreground_cmd
     shell_command = _shell_command(pane)
     shell_executable = _command_executable(shell_command)
@@ -806,20 +828,30 @@ def _append_pane_process(details: Text, pane: Pane) -> None:
         return
 
     _append_section(details, "Process")
+    command = _normalized_human_text(pane.current_command)
     _append_property(
         details,
         "Command",
-        _normalized_human_text(pane.current_command),
+        command if full else _compact_hint(command, max_len=_DETAIL_COMPACT_VALUE_MAX),
         value_style="bold",
+        block=full,
     )
     if foreground and not _same_identity(foreground, pane.current_command):
-        _append_property(details, "Foreground", _normalized_human_text(foreground))
+        foreground_text = _normalized_human_text(foreground)
+        _append_property(
+            details,
+            "Foreground",
+            foreground_text if full else _compact_hint(foreground_text, max_len=_DETAIL_COMPACT_VALUE_MAX),
+            block=full,
+        )
     _append_property(details, "Shell", shell_name, value_style="bold" if shell_name else "")
     if shell_executable and shell_executable != shell_name:
+        executable = _home_relative_path(shell_executable)
         _append_property(
             details,
             "Executable",
-            _home_relative_path(shell_executable),
+            executable if full else _compact_hint(executable, max_len=_DETAIL_COMPACT_VALUE_MAX),
+            block=full,
         )
     _append_property(details, "PID", pane.pid)
 
@@ -829,6 +861,7 @@ def _append_session(
     *,
     activity: PaneActivity | None,
     activity_loading: bool,
+    full: bool,
 ) -> None:
     if activity_loading:
         _append_section(details, "History")
@@ -838,13 +871,25 @@ def _append_session(
         return
 
     _append_section(details, "History")
+    last_command = _normalized_human_text(activity.last_command)
     _append_property(
         details,
         "Last command",
-        _normalized_human_text(activity.last_command) or "No completed command",
+        (
+            last_command
+            if full
+            else _compact_hint(last_command, max_len=_DETAIL_COMPACT_VALUE_MAX)
+        )
+        or "No completed command",
         value_style="bold" if activity.last_command else "",
+        block=full,
     )
-    _append_property(details, "Session ID", activity.session_id)
+    _append_property(
+        details,
+        "Session ID",
+        activity.session_id if full else _abbreviate_identifier(activity.session_id),
+        block=full,
+    )
 
 
 def _pane_details(
@@ -854,6 +899,7 @@ def _pane_details(
     activity: PaneActivity | None,
     activity_loading: bool,
     display_title: str | None,
+    full: bool,
 ) -> Text:
     location = state.find_pane(ref.id)
     if location is None:
@@ -868,21 +914,21 @@ def _pane_details(
 
     focused = bool(location.os_window.is_active and location.tab.is_active and pane.is_active)
     _append_pane_status(details, pane, focused=focused)
-    _append_pane_location(details, pane)
-    _append_pane_process(details, pane)
-    _append_session(details, activity=activity, activity_loading=activity_loading)
+    _append_pane_location(details, pane, full=full)
+    _append_pane_process(details, pane, full=full)
+    _append_session(details, activity=activity, activity_loading=activity_loading, full=full)
     return details
 
 
-def selected_details(
+def _selected_details(
     state: KittyState,
     ref: NodeRef,
     *,
-    activity: PaneActivity | None = None,
-    activity_loading: bool = False,
-    display_title: str | None = None,
+    activity: PaneActivity | None,
+    activity_loading: bool,
+    display_title: str | None,
+    full: bool,
 ) -> Text:
-    """Render a compact, grouped inspector for an object in the current Kitty snapshot."""
     if ref.kind == "os_window":
         return _os_window_details(state, ref, display_title=display_title)
     if ref.kind == "tab":
@@ -893,6 +939,45 @@ def selected_details(
         activity=activity,
         activity_loading=activity_loading,
         display_title=display_title,
+        full=full,
+    )
+
+
+def selected_details(
+    state: KittyState,
+    ref: NodeRef,
+    *,
+    activity: PaneActivity | None = None,
+    activity_loading: bool = False,
+    display_title: str | None = None,
+) -> Text:
+    """Render the compact sidebar inspector for the selected object."""
+    return _selected_details(
+        state,
+        ref,
+        activity=activity,
+        activity_loading=activity_loading,
+        display_title=display_title,
+        full=False,
+    )
+
+
+def selected_full_details(
+    state: KittyState,
+    ref: NodeRef,
+    *,
+    activity: PaneActivity | None = None,
+    activity_loading: bool = False,
+    display_title: str | None = None,
+) -> Text:
+    """Render complete human-readable details for the inspection modal."""
+    return _selected_details(
+        state,
+        ref,
+        activity=activity,
+        activity_loading=activity_loading,
+        display_title=display_title,
+        full=True,
     )
 
 
