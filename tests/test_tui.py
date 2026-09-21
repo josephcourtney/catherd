@@ -545,6 +545,17 @@ def test_selected_details_explains_empty_recent_command() -> None:
 
 
 @pytest.mark.medium
+async def test_details_panel_wraps_overflowing_values() -> None:
+    app = KittyManagerApp(FakeBackend(_state()), poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        details = app.query_one("#details", Static)
+        assert details.styles.text_wrap == "wrap"
+        assert details.styles.text_overflow == "fold"
+
+
+@pytest.mark.medium
 async def test_details_panel_loads_activity_for_highlighted_pane() -> None:
     calls: list[str] = []
 
