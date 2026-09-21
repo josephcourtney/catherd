@@ -20,7 +20,6 @@ from catherd.tui import (
     KittyManagerApp,
     KittyTree,
     NodeRef,
-    _abbreviate_identifier,
     _apply_row_background,
     _apply_selection,
     _compact_hint,
@@ -781,12 +780,55 @@ def test_inspector_uses_labels_to_explain_values() -> None:
 
 
 @pytest.mark.small
-def test_home_relative_paths_and_opaque_ids_are_compact(monkeypatch) -> None:
+def test_home_relative_paths_are_compact(monkeypatch) -> None:
     monkeypatch.setattr(tui_module.pathlib.Path, "home", classmethod(lambda cls: cls("/Users/example")))
 
     assert _home_relative_path("/Users/example/code/catherd") == "~/code/catherd"
     assert _home_relative_path("/var/work") == "/var/work"
-    assert _abbreviate_identifier("01a0b73179e7711183ac42d84ca228c5") == "01a0b731…a228c5"
+
+
+@pytest.mark.small
+def test_selected_details_preserves_full_long_values() -> None:
+    command = f"python {'x' * 80} COMMAND_END"
+    foreground = f"/usr/bin/python {'y' * 80} FOREGROUND_END"
+    cwd = f"/code/{'pathsegment/' * 8}CWD_END"
+    history = f"pytest {'z' * 80} HISTORY_END"
+    session_id = "session-" + "a" * 48
+    state = KittyState(
+        os_windows=(
+            OsWindow(
+                id="os",
+                tabs=(
+                    Tab(
+                        id="tab",
+                        title="shell",
+                        panes=(
+                            Pane(
+                                id="pane",
+                                title="shell",
+                                cwd=cwd,
+                                current_command=command,
+                                foreground_cmd=foreground,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+    )
+
+    details = selected_details(
+        state,
+        NodeRef("pane", "pane"),
+        activity=PaneActivity(session_id=session_id, last_command=history),
+    )
+
+    assert command in details.plain
+    assert foreground in details.plain
+    assert cwd in details.plain
+    assert history in details.plain
+    assert session_id in details.plain
+    assert "..." not in details.plain
 
 
 @pytest.mark.small
