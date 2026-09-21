@@ -875,11 +875,7 @@ def _append_session(
     _append_property(
         details,
         "Last command",
-        (
-            last_command
-            if full
-            else _compact_hint(last_command, max_len=_DETAIL_COMPACT_VALUE_MAX)
-        )
+        (last_command if full else _compact_hint(last_command, max_len=_DETAIL_COMPACT_VALUE_MAX))
         or "No completed command",
         value_style="bold" if activity.last_command else "",
         block=full,

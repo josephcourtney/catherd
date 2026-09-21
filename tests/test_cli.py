@@ -374,7 +374,7 @@ def test_show_verbose_adds_diagnostic_metadata(monkeypatch):
     assert result.exit_code == 0
     assert "id w" in result.output
     assert "pid 123" in result.output
-    assert "131×69" in result.output
+    assert "131×69" in result.output  # ruff: ignore[ambiguous-unicode-character-string]
     assert "fg python -m pytest" in result.output
 
 
