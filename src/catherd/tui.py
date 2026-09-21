@@ -865,7 +865,7 @@ def _append_session(
 ) -> None:
     if activity_loading:
         _append_section(details, "History")
-        _append_property(details, "Last command", "loading…")
+        _append_property(details, "Last command", "loading…", block=full)
         return
     if activity is None or (activity.session_id is None and activity.last_command is None):
         return
@@ -1305,12 +1305,14 @@ class DetailsScreen(ModalScreen[None]):
                     id="inspect-content",
                 ),
                 id="inspect-scroll",
+                can_focus=True,
             ),
             Static("Esc / q / i  Close", id="inspect-footer"),
             id="inspect-dialog",
         )
 
     def on_mount(self) -> None:
+        self.query_one("#inspect-scroll", VerticalScroll).focus()
         if self._ref.kind == "pane":
             self.run_worker(
                 self._load_activity(),
