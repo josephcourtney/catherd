@@ -871,7 +871,7 @@ async def test_inspect_modal_shows_complete_history_and_closes_with_i() -> None:
         await pilot.press("i")
         await pilot.pause()
         assert isinstance(app.screen, DetailsScreen)
-        await app.screen.workers.wait_for_complete()
+        await app.workers.wait_for_complete()
         await pilot.pause()
 
         content = app.screen.query_one("#inspect-content", Static)
@@ -1153,6 +1153,7 @@ async def test_help_moves_infrequent_actions_out_of_persistent_footer() -> None:
         await pilot.pause()
 
         help_dialog = app.screen.query_one("#help-dialog", Static)
+        assert "i         inspect full details" in str(help_dialog.content)
         assert "M         merge tab / OS window" in str(help_dialog.content)
         assert "J/K       reorder pane / tab" in str(help_dialog.content)
 
@@ -1166,6 +1167,7 @@ async def test_action_strip_is_quiet_static_help() -> None:
         await pilot.pause()
         actions = app.query_one("#actions", Static)
         assert isinstance(actions.content, Text)
+        assert "i Inspect" in actions.content.plain
         assert "/ Filter" in actions.content.plain
         assert "a Focused pane" in actions.content.plain
         assert "? Help" in actions.content.plain
