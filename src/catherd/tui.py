@@ -1222,6 +1222,115 @@ class FilterScreen(ModalScreen[str | None]):
         self.dismiss(None)
 
 
+class DetailsScreen(ModalScreen[None]):
+    """Near-full-screen inspector for complete selected-object details."""
+
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("escape,q,i", "close", "Close", show=False),
+    ]
+
+    CSS = """
+    DetailsScreen {
+        align: center middle;
+    }
+
+    DetailsScreen > #inspect-dialog {
+        width: 90%;
+        height: 90%;
+        padding: 1 2;
+        border: round $primary;
+        background: $surface;
+    }
+
+    #inspect-title {
+        height: 1;
+        text-style: bold;
+    }
+
+    #inspect-scroll {
+        height: 1fr;
+        margin-top: 1;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    #inspect-content {
+        width: 1fr;
+        height: auto;
+        text-wrap: wrap;
+        text-overflow: fold;
+    }
+
+    #inspect-footer {
+        height: 1;
+        margin-top: 1;
+        color: $text-muted;
+    }
+    """
+
+    def __init__(
+        self,
+        state: KittyState,
+        ref: NodeRef,
+        *,
+        activity_provider: Callable[[str], PaneActivity],
+        display_title: str | None,
+    ) -> None:
+        super().__init__()
+        self._state = state
+        self._ref = ref
+        self._activity_provider = activity_provider
+        self._display_title = display_title
+
+    def _render_details(
+        self,
+        *,
+        activity: PaneActivity | None = None,
+        activity_loading: bool = False,
+    ) -> Text:
+        return selected_full_details(
+            self._state,
+            self._ref,
+            activity=activity,
+            activity_loading=activity_loading,
+            display_title=self._display_title,
+        )
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Static("Full details", id="inspect-title"),
+            VerticalScroll(
+                Static(
+                    self._render_details(activity_loading=self._ref.kind == "pane"),
+                    id="inspect-content",
+                ),
+                id="inspect-scroll",
+            ),
+            Static("Esc / q / i  Close", id="inspect-footer"),
+            id="inspect-dialog",
+        )
+
+    def on_mount(self) -> None:
+        if self._ref.kind == "pane":
+            self.run_worker(
+                self._load_activity(),
+                group="inspect-activity",
+                exclusive=True,
+            )
+
+    async def _load_activity(self) -> None:
+        try:
+            activity = await asyncio.to_thread(self._activity_provider, self._ref.id)
+        except OSError as exc:
+            self.query_one("#inspect-content", Static).update(self._render_details())
+            self.query_one("#inspect-footer", Static).update(f"Activity unavailable: {exc} · Esc / q / i  Close")
+            return
+        self.query_one("#inspect-content", Static).update(self._render_details(activity=activity))
+
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+
 class HelpScreen(ModalScreen[None]):
     """Compact command reference."""
 
@@ -1257,6 +1366,7 @@ a         jump to focused pane
 
 [b]Act[/b]
 Enter/f   focus in Kitty
+i         inspect full details
 r         rename
 m         move
 M         merge tab / OS window
@@ -1339,6 +1449,7 @@ class KittyManagerApp(App[None]):
         Binding("escape", "clear_filter", "Clear filter", show=False),
         Binding("/", "filter_tree", "Filter"),
         Binding("a", "jump_active", "Focused pane"),
+        Binding("i", "inspect_selected", "Inspect"),
         Binding("r", "rename_selected", "Rename"),
         Binding("m", "move_selected", "Move"),
         Binding("M,shift+m", "merge_selected", "Merge"),
@@ -1406,8 +1517,8 @@ class KittyManagerApp(App[None]):
         border-left: solid $border-blurred;
         overflow-x: hidden;
         overflow-y: auto;
-        text-wrap: wrap;
-        text-overflow: fold;
+        text-wrap: nowrap;
+        text-overflow: ellipsis;
     }
 
     #footer {
@@ -1845,6 +1956,19 @@ class KittyManagerApp(App[None]):
 
     def action_help(self) -> None:
         self.push_screen(HelpScreen())
+
+    def action_inspect_selected(self) -> None:
+        ref = self._selected_ref()
+        if ref is None:
+            return
+        self.push_screen(
+            DetailsScreen(
+                self.state,
+                ref,
+                activity_provider=self._activity_provider,
+                display_title=self._display_names.get(ref),
+            )
+        )
 
     def action_filter_tree(self) -> None:
         self.push_screen(FilterScreen(self._filter_query), self._complete_filter)
