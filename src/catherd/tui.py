@@ -191,10 +191,16 @@ def _apply_selection(strip: Strip, background: str) -> Strip:
     return Strip([marker, *remainder], selected.cell_length)
 
 
-def _compact_hint(value: str | None, max_len: int = _TREE_HINT_MAX) -> str | None:
+def _normalized_human_text(value: str | None) -> str | None:
     if not value:
         return None
-    normalized = " ".join(value.split())
+    return " ".join(value.split())
+
+
+def _compact_hint(value: str | None, max_len: int = _TREE_HINT_MAX) -> str | None:
+    normalized = _normalized_human_text(value)
+    if normalized is None:
+        return None
     if len(normalized) <= max_len:
         return normalized
     return normalized[: max_len - 3].rstrip() + "..."
@@ -606,12 +612,6 @@ def _home_relative_path(value: str | None) -> str | None:
     return value
 
 
-def _abbreviate_identifier(value: str | None, *, head: int = 8, tail: int = 6) -> str | None:
-    if value is None or len(value) <= head + tail + 1:
-        return value
-    return f"{value[:head]}…{value[-tail:]}"
-
-
 def _command_executable(value: str | None) -> str | None:
     if not value:
         return None
@@ -809,11 +809,11 @@ def _append_pane_process(details: Text, pane: Pane) -> None:
     _append_property(
         details,
         "Command",
-        _compact_hint(pane.current_command, max_len=32),
+        _normalized_human_text(pane.current_command),
         value_style="bold",
     )
     if foreground and not _same_identity(foreground, pane.current_command):
-        _append_property(details, "Foreground", _compact_hint(foreground, max_len=32))
+        _append_property(details, "Foreground", _normalized_human_text(foreground))
     _append_property(details, "Shell", shell_name, value_style="bold" if shell_name else "")
     if shell_executable and shell_executable != shell_name:
         _append_property(
@@ -841,10 +841,10 @@ def _append_session(
     _append_property(
         details,
         "Last command",
-        _compact_hint(activity.last_command, max_len=32) or "No completed command",
+        _normalized_human_text(activity.last_command) or "No completed command",
         value_style="bold" if activity.last_command else "",
     )
-    _append_property(details, "Session ID", _abbreviate_identifier(activity.session_id))
+    _append_property(details, "Session ID", activity.session_id)
 
 
 def _pane_details(
