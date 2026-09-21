@@ -9,6 +9,7 @@
 - reorganize `doctor` so core Kitty health and Kitty-reported metadata are reported separately from optional Atuin enrichment.
 
 ### Fixed
+- preserve complete long command and path values in human `show` output by wrapping instead of truncating; keep the TUI sidebar compact while adding an `i` full-details modal with complete pane paths, commands, history, and identifiers.
 - fix fish Atuin integration variable scope so XDG/HOME cache paths are preserved through the nested branch.
 - make Atuin managed-block enable/disable preserve newline-terminated rc contents exactly.
 - run real advertised-shell parser/execution checks as a standalone repository gate instead of through pytest-test-categories subprocess isolation.

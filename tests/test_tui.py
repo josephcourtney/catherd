@@ -17,10 +17,10 @@ from catherd.activity import PaneActivity
 from catherd.model import KittyState, OsWindow, Pane, Tab
 from catherd.tui import (
     Destination,
+    DetailsScreen,
     KittyManagerApp,
     KittyTree,
     NodeRef,
-    _abbreviate_identifier,
     _apply_row_background,
     _apply_selection,
     _compact_hint,
@@ -41,6 +41,7 @@ from catherd.tui import (
     merge_tab_destinations,
     move_destinations,
     selected_details,
+    selected_full_details,
     selected_title,
 )
 
@@ -546,6 +547,17 @@ def test_selected_details_explains_empty_recent_command() -> None:
 
 
 @pytest.mark.medium
+async def test_details_panel_stays_compact() -> None:
+    app = KittyManagerApp(FakeBackend(_state()), poll_interval=None, activity_provider=_activity)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        details = app.query_one("#details", Static)
+        assert details.styles.text_wrap == "nowrap"
+        assert details.styles.text_overflow == "ellipsis"
+
+
+@pytest.mark.medium
 async def test_details_panel_loads_activity_for_highlighted_pane() -> None:
     calls: list[str] = []
 
@@ -781,12 +793,98 @@ def test_inspector_uses_labels_to_explain_values() -> None:
 
 
 @pytest.mark.small
-def test_home_relative_paths_and_opaque_ids_are_compact(monkeypatch) -> None:
+def test_home_relative_paths_are_compact(monkeypatch) -> None:
     monkeypatch.setattr(tui_module.pathlib.Path, "home", classmethod(lambda cls: cls("/Users/example")))
 
     assert _home_relative_path("/Users/example/code/catherd") == "~/code/catherd"
     assert _home_relative_path("/var/work") == "/var/work"
-    assert _abbreviate_identifier("01a0b73179e7711183ac42d84ca228c5") == "01a0b731…a228c5"
+
+
+@pytest.mark.small
+def test_compact_details_truncate_but_full_details_preserve_long_values() -> None:
+    command = f"python {'x' * 80} COMMAND_END"
+    foreground = f"/usr/bin/python {'y' * 80} FOREGROUND_END"
+    cwd = f"/code/{'pathsegment/' * 8}CWD_END"
+    history = f"pytest {'z' * 80} HISTORY_END"
+    session_id = "session-" + "a" * 48
+    state = KittyState(
+        os_windows=(
+            OsWindow(
+                id="os",
+                tabs=(
+                    Tab(
+                        id="tab",
+                        title="shell",
+                        panes=(
+                            Pane(
+                                id="pane",
+                                title="shell",
+                                cwd=cwd,
+                                current_command=command,
+                                foreground_cmd=foreground,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+    )
+    activity = PaneActivity(session_id=session_id, last_command=history)
+
+    compact = selected_details(state, NodeRef("pane", "pane"), activity=activity)
+    full = selected_full_details(state, NodeRef("pane", "pane"), activity=activity)
+
+    for suffix in ("COMMAND_END", "FOREGROUND_END", "CWD_END", "HISTORY_END"):
+        assert suffix not in compact.plain
+        assert suffix in full.plain
+    assert session_id not in compact.plain
+    assert session_id in full.plain
+    assert "..." in compact.plain
+    assert "Command\n  " in full.plain
+    assert "Path\n  " in full.plain
+    assert "Last command\n  " in full.plain
+    assert "Session ID\n  " in full.plain
+
+
+@pytest.mark.medium
+async def test_inspect_modal_shows_complete_history_and_closes_with_i() -> None:
+    history = f"git fetch origin {'x' * 80} HISTORY_END"
+    session_id = "session-" + "b" * 48
+
+    def activity_provider(_pane_id: str) -> PaneActivity:
+        return PaneActivity(session_id=session_id, last_command=history)
+
+    app = KittyManagerApp(
+        FakeBackend(_state()),
+        poll_interval=None,
+        activity_provider=activity_provider,
+    )
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+
+        sidebar = app.query_one("#details", Static)
+        assert isinstance(sidebar.content, Text)
+        assert "HISTORY_END" not in sidebar.content.plain
+
+        await pilot.press("i")
+        await pilot.pause()
+        assert isinstance(app.screen, DetailsScreen)
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        content = app.screen.query_one("#inspect-content", Static)
+        assert isinstance(content.content, Text)
+        assert history in content.content.plain
+        assert session_id in content.content.plain
+        assert "Last command\n  " in content.content.plain
+        assert content.styles.text_wrap == "wrap"
+        assert content.styles.text_overflow == "fold"
+
+        await pilot.press("i")
+        await pilot.pause()
+        assert not isinstance(app.screen, DetailsScreen)
 
 
 @pytest.mark.small
@@ -1055,6 +1153,7 @@ async def test_help_moves_infrequent_actions_out_of_persistent_footer() -> None:
         await pilot.pause()
 
         help_dialog = app.screen.query_one("#help-dialog", Static)
+        assert "i         inspect full details" in str(help_dialog.content)
         assert "M         merge tab / OS window" in str(help_dialog.content)
         assert "J/K       reorder pane / tab" in str(help_dialog.content)
 
@@ -1068,6 +1167,7 @@ async def test_action_strip_is_quiet_static_help() -> None:
         await pilot.pause()
         actions = app.query_one("#actions", Static)
         assert isinstance(actions.content, Text)
+        assert "i Inspect" in actions.content.plain
         assert "/ Filter" in actions.content.plain
         assert "a Focused pane" in actions.content.plain
         assert "? Help" in actions.content.plain

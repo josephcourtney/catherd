@@ -322,6 +322,24 @@ def test_show_normalizes_multiline_command_for_human_output(monkeypatch):
 
 
 @pytest.mark.small
+def test_show_wraps_long_command_and_path_without_truncating(monkeypatch):
+    command = f"python {'x' * 90} COMMAND_END"
+    cwd = f"/code/{'pathsegment/' * 8}CWD_END"
+    state = _state(Pane(id="w", title="shell", current_command=command, cwd=cwd))
+    monkeypatch.setattr(cli, "get_kitty_state", lambda **_kwargs: state)
+    monkeypatch.setattr(cli, "get_atuin_session_for_window", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(cli, "_show_width", lambda: 48)
+
+    result = CliRunner().invoke(cli.main, ["show"])
+
+    assert result.exit_code == 0
+    assert "COMMAND_END" in result.output
+    assert "CWD_END" in result.output
+    assert "..." not in result.output
+    assert all(len(line) <= 48 for line in result.output.splitlines())
+
+
+@pytest.mark.small
 def test_show_wide_output_puts_cwd_on_command_line(monkeypatch):
     state = _state(Pane(id="w", title="shell", current_command="git status", cwd="/code/project"))
     monkeypatch.setattr(cli, "get_kitty_state", lambda **_kwargs: state)

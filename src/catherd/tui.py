@@ -17,7 +17,7 @@ from rich.style import Style
 from rich.text import Text
 from textual.app import App
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.strip import Strip
 from textual.widgets import Input, Label, OptionList, Static, Tree
@@ -112,6 +112,7 @@ _PANE_HIERARCHY_WIDTH = 24
 _TREE_ID_WIDTH = 5
 _TREE_STATUS_WIDTH = 22
 _DETAIL_LABEL_WIDTH = 11
+_DETAIL_COMPACT_VALUE_MAX = 28
 
 _STYLE_ACTIVE_BRANCH = "bold"
 _STYLE_ACTIVE_GUIDE = "dim"
@@ -191,10 +192,16 @@ def _apply_selection(strip: Strip, background: str) -> Strip:
     return Strip([marker, *remainder], selected.cell_length)
 
 
-def _compact_hint(value: str | None, max_len: int = _TREE_HINT_MAX) -> str | None:
+def _normalized_human_text(value: str | None) -> str | None:
     if not value:
         return None
-    normalized = " ".join(value.split())
+    return " ".join(value.split())
+
+
+def _compact_hint(value: str | None, max_len: int = _TREE_HINT_MAX) -> str | None:
+    normalized = _normalized_human_text(value)
+    if normalized is None:
+        return None
     if len(normalized) <= max_len:
         return normalized
     return normalized[: max_len - 3].rstrip() + "..."
@@ -492,6 +499,7 @@ def _pane_label(
 def _action_strip_text() -> Text:
     actions = (
         ("Enter", "Focus"),
+        ("i", "Inspect"),
         ("/", "Filter"),
         ("a", "Focused pane"),
         ("?", "Help"),
@@ -648,8 +656,15 @@ def _append_property(
     value: object | None,
     *,
     value_style: str = "",
+    block: bool = False,
 ) -> None:
     if value is None or value == "":
+        return
+    if block:
+        details.append(label, style=_STYLE_DETAIL_LABEL)
+        details.append("\n  ")
+        details.append(str(value), style=value_style)
+        details.append("\n")
         return
     label_text = f"{label:<{_DETAIL_LABEL_WIDTH}}"
     if len(label) >= _DETAIL_LABEL_WIDTH:
@@ -770,9 +785,16 @@ def _append_pane_status(details: Text, pane: Pane, *, focused: bool) -> None:
         _append_property(details, "Flags", ", ".join(flags), value_style="dim")
 
 
-def _append_pane_location(details: Text, pane: Pane) -> None:
+def _append_pane_location(details: Text, pane: Pane, *, full: bool) -> None:
     _append_section(details, "Location")
-    _append_property(details, "Path", _home_relative_path(pane.cwd), value_style="bold")
+    path = _home_relative_path(pane.cwd)
+    _append_property(
+        details,
+        "Path",
+        path if full else _compact_hint(path, max_len=_DETAIL_COMPACT_VALUE_MAX),
+        value_style="bold",
+        block=full,
+    )
     _append_property(details, "Pane", _pane_position_long(pane))
     _append_property(details, "Size", _pane_size(pane))
     _append_property(details, "Neighbors", _pane_neighbors(pane))
@@ -797,7 +819,7 @@ def _shell_command(pane: Pane) -> str | None:
     return None
 
 
-def _append_pane_process(details: Text, pane: Pane) -> None:
+def _append_pane_process(details: Text, pane: Pane, *, full: bool) -> None:
     foreground = None if _is_shell_wrapper(pane.foreground_cmd) else pane.foreground_cmd
     shell_command = _shell_command(pane)
     shell_executable = _command_executable(shell_command)
@@ -806,20 +828,30 @@ def _append_pane_process(details: Text, pane: Pane) -> None:
         return
 
     _append_section(details, "Process")
+    command = _normalized_human_text(pane.current_command)
     _append_property(
         details,
         "Command",
-        _compact_hint(pane.current_command, max_len=32),
+        command if full else _compact_hint(command, max_len=_DETAIL_COMPACT_VALUE_MAX),
         value_style="bold",
+        block=full,
     )
     if foreground and not _same_identity(foreground, pane.current_command):
-        _append_property(details, "Foreground", _compact_hint(foreground, max_len=32))
+        foreground_text = _normalized_human_text(foreground)
+        _append_property(
+            details,
+            "Foreground",
+            foreground_text if full else _compact_hint(foreground_text, max_len=_DETAIL_COMPACT_VALUE_MAX),
+            block=full,
+        )
     _append_property(details, "Shell", shell_name, value_style="bold" if shell_name else "")
     if shell_executable and shell_executable != shell_name:
+        executable = _home_relative_path(shell_executable)
         _append_property(
             details,
             "Executable",
-            _home_relative_path(shell_executable),
+            executable if full else _compact_hint(executable, max_len=_DETAIL_COMPACT_VALUE_MAX),
+            block=full,
         )
     _append_property(details, "PID", pane.pid)
 
@@ -829,22 +861,31 @@ def _append_session(
     *,
     activity: PaneActivity | None,
     activity_loading: bool,
+    full: bool,
 ) -> None:
     if activity_loading:
         _append_section(details, "History")
-        _append_property(details, "Last command", "loading…")
+        _append_property(details, "Last command", "loading…", block=full)
         return
     if activity is None or (activity.session_id is None and activity.last_command is None):
         return
 
     _append_section(details, "History")
+    last_command = _normalized_human_text(activity.last_command)
     _append_property(
         details,
         "Last command",
-        _compact_hint(activity.last_command, max_len=32) or "No completed command",
+        (last_command if full else _compact_hint(last_command, max_len=_DETAIL_COMPACT_VALUE_MAX))
+        or "No completed command",
         value_style="bold" if activity.last_command else "",
+        block=full,
     )
-    _append_property(details, "Session ID", _abbreviate_identifier(activity.session_id))
+    _append_property(
+        details,
+        "Session ID",
+        activity.session_id if full else _abbreviate_identifier(activity.session_id),
+        block=full,
+    )
 
 
 def _pane_details(
@@ -854,6 +895,7 @@ def _pane_details(
     activity: PaneActivity | None,
     activity_loading: bool,
     display_title: str | None,
+    full: bool,
 ) -> Text:
     location = state.find_pane(ref.id)
     if location is None:
@@ -868,21 +910,21 @@ def _pane_details(
 
     focused = bool(location.os_window.is_active and location.tab.is_active and pane.is_active)
     _append_pane_status(details, pane, focused=focused)
-    _append_pane_location(details, pane)
-    _append_pane_process(details, pane)
-    _append_session(details, activity=activity, activity_loading=activity_loading)
+    _append_pane_location(details, pane, full=full)
+    _append_pane_process(details, pane, full=full)
+    _append_session(details, activity=activity, activity_loading=activity_loading, full=full)
     return details
 
 
-def selected_details(
+def _selected_details(
     state: KittyState,
     ref: NodeRef,
     *,
-    activity: PaneActivity | None = None,
-    activity_loading: bool = False,
-    display_title: str | None = None,
+    activity: PaneActivity | None,
+    activity_loading: bool,
+    display_title: str | None,
+    full: bool,
 ) -> Text:
-    """Render a compact, grouped inspector for an object in the current Kitty snapshot."""
     if ref.kind == "os_window":
         return _os_window_details(state, ref, display_title=display_title)
     if ref.kind == "tab":
@@ -893,6 +935,45 @@ def selected_details(
         activity=activity,
         activity_loading=activity_loading,
         display_title=display_title,
+        full=full,
+    )
+
+
+def selected_details(
+    state: KittyState,
+    ref: NodeRef,
+    *,
+    activity: PaneActivity | None = None,
+    activity_loading: bool = False,
+    display_title: str | None = None,
+) -> Text:
+    """Render the compact sidebar inspector for the selected object."""
+    return _selected_details(
+        state,
+        ref,
+        activity=activity,
+        activity_loading=activity_loading,
+        display_title=display_title,
+        full=False,
+    )
+
+
+def selected_full_details(
+    state: KittyState,
+    ref: NodeRef,
+    *,
+    activity: PaneActivity | None = None,
+    activity_loading: bool = False,
+    display_title: str | None = None,
+) -> Text:
+    """Render complete human-readable details for the inspection modal."""
+    return _selected_details(
+        state,
+        ref,
+        activity=activity,
+        activity_loading=activity_loading,
+        display_title=display_title,
+        full=True,
     )
 
 
@@ -1137,6 +1218,117 @@ class FilterScreen(ModalScreen[str | None]):
         self.dismiss(None)
 
 
+class DetailsScreen(ModalScreen[None]):
+    """Near-full-screen inspector for complete selected-object details."""
+
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("escape,q,i", "close", "Close", show=False),
+    ]
+
+    CSS = """
+    DetailsScreen {
+        align: center middle;
+    }
+
+    DetailsScreen > #inspect-dialog {
+        width: 90%;
+        height: 90%;
+        padding: 1 2;
+        border: round $primary;
+        background: $surface;
+    }
+
+    #inspect-title {
+        height: 1;
+        text-style: bold;
+    }
+
+    #inspect-scroll {
+        height: 1fr;
+        margin-top: 1;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    #inspect-content {
+        width: 1fr;
+        height: auto;
+        text-wrap: wrap;
+        text-overflow: fold;
+    }
+
+    #inspect-footer {
+        height: 1;
+        margin-top: 1;
+        color: $text-muted;
+    }
+    """
+
+    def __init__(
+        self,
+        state: KittyState,
+        ref: NodeRef,
+        *,
+        activity_provider: Callable[[str], PaneActivity],
+        display_title: str | None,
+    ) -> None:
+        super().__init__()
+        self._state = state
+        self._ref = ref
+        self._activity_provider = activity_provider
+        self._display_title = display_title
+
+    def _render_details(
+        self,
+        *,
+        activity: PaneActivity | None = None,
+        activity_loading: bool = False,
+    ) -> Text:
+        return selected_full_details(
+            self._state,
+            self._ref,
+            activity=activity,
+            activity_loading=activity_loading,
+            display_title=self._display_title,
+        )
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Static("Full details", id="inspect-title"),
+            VerticalScroll(
+                Static(
+                    self._render_details(activity_loading=self._ref.kind == "pane"),
+                    id="inspect-content",
+                ),
+                id="inspect-scroll",
+                can_focus=True,
+            ),
+            Static("Esc / q / i  Close", id="inspect-footer"),
+            id="inspect-dialog",
+        )
+
+    def on_mount(self) -> None:
+        self.query_one("#inspect-scroll", VerticalScroll).focus()
+        if self._ref.kind == "pane":
+            self.run_worker(
+                self._load_activity(),
+                group="inspect-activity",
+                exclusive=True,
+            )
+
+    async def _load_activity(self) -> None:
+        try:
+            activity = await asyncio.to_thread(self._activity_provider, self._ref.id)
+        except OSError as exc:
+            self.query_one("#inspect-content", Static).update(self._render_details())
+            self.query_one("#inspect-footer", Static).update(f"Activity unavailable: {exc} · Esc / q / i  Close")
+            return
+        self.query_one("#inspect-content", Static).update(self._render_details(activity=activity))
+
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+
 class HelpScreen(ModalScreen[None]):
     """Compact command reference."""
 
@@ -1172,6 +1364,7 @@ a         jump to focused pane
 
 [b]Act[/b]
 Enter/f   focus in Kitty
+i         inspect full details
 r         rename
 m         move
 M         merge tab / OS window
@@ -1254,6 +1447,7 @@ class KittyManagerApp(App[None]):
         Binding("escape", "clear_filter", "Clear filter", show=False),
         Binding("/", "filter_tree", "Filter"),
         Binding("a", "jump_active", "Focused pane"),
+        Binding("i", "inspect_selected", "Inspect"),
         Binding("r", "rename_selected", "Rename"),
         Binding("m", "move_selected", "Move"),
         Binding("M,shift+m", "merge_selected", "Merge"),
@@ -1321,6 +1515,8 @@ class KittyManagerApp(App[None]):
         border-left: solid $border-blurred;
         overflow-x: hidden;
         overflow-y: auto;
+        text-wrap: nowrap;
+        text-overflow: ellipsis;
     }
 
     #footer {
@@ -1758,6 +1954,19 @@ class KittyManagerApp(App[None]):
 
     def action_help(self) -> None:
         self.push_screen(HelpScreen())
+
+    def action_inspect_selected(self) -> None:
+        ref = self._selected_ref()
+        if ref is None:
+            return
+        self.push_screen(
+            DetailsScreen(
+                self.state,
+                ref,
+                activity_provider=self._activity_provider,
+                display_title=self._display_names.get(ref),
+            )
+        )
 
     def action_filter_tree(self) -> None:
         self.push_screen(FilterScreen(self._filter_query), self._complete_filter)

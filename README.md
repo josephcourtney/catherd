@@ -17,13 +17,14 @@ catherd tui
 
 The TUI presents Kitty as a collapsible OS-window → tab → pane hierarchy. Native tree guides remain continuous, alternating tab subtrees provide non-structural grouping, and command-like titles are normalized for scanning. The selected row belongs to catherd and is shown with a neutral background plus a left-edge cursor marker; it does not change Kitty focus. The actually focused pane is marked `● focused`, while pane activity is reported independently as `▶ running` or `○ at prompt`.
 
-The inspector shows richer information for the selected object, including location, process metadata, layout position and neighbors, and Atuin-backed command history when available. Mouse clicks change only the catherd selection; focusing the corresponding Kitty object is always explicit.
+The right-hand inspector is a compact summary of the selected object. Long paths, commands, history values, and identifiers may be abbreviated there for scanning; press `i` to open a near-full-screen, scrollable inspector containing the complete display-normalized values in block form. Mouse clicks change only the catherd selection; focusing the corresponding Kitty object is always explicit.
 
 | Key | Action |
 | --- | --- |
 | `j` / `k` | move through the tree |
 | `h` / `l`, `←` / `→` | collapse / expand |
 | `Enter` / `f` | focus selected OS window, tab, or pane in Kitty |
+| `i` | open full details for the selected object; `i`, `Esc`, or `q` closes it |
 | `/` | filter by title, ID, path, or command; submit empty or press `Esc` to clear |
 | `a` | clear filtering and jump to the focused Kitty pane |
 | `r` | rename selected object |
@@ -64,7 +65,7 @@ Running `catherd` without a subcommand is equivalent to `catherd show`. Use `cat
 | `catherd atuin enable` | safely enable Kitty-pane-to-Atuin-session association |
 | `catherd atuin disable` | remove that association while preserving an rc-file backup |
 
-The default human `show` view adapts to terminal width. It normalizes multiline commands for display, places the working directory beside the command when space permits and on a subordinate line when it does not, and omits low-value process metadata unless `--verbose` is requested. JSON and `inspect` retain exact underlying values rather than display-normalized text.
+The default human `show` view adapts to terminal width. It normalizes multiline commands for display, places the working directory beside the command when both fit, and otherwise wraps complete command and path values across indented lines rather than truncating them. Low-value process metadata remains behind `--verbose`. JSON and `inspect` retain exact underlying values rather than display-normalized text.
 
 Core Kitty failures are command failures: `show`, `inspect`, and `doctor` return a nonzero exit status when a usable Kitty hierarchy cannot be obtained. Missing Atuin state remains optional and does not make those core commands unhealthy.
 

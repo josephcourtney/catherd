@@ -2,6 +2,7 @@ import json
 import os
 import shutil
 import tempfile
+import textwrap
 from itertools import groupby, starmap
 from pathlib import Path
 from typing import Final
@@ -166,8 +167,45 @@ def _show_width() -> int:
 
 
 def _fit_human(value: str | None, width: int) -> str:
-    """Normalize and truncate text to a display width."""
+    """Normalize and truncate secondary text to a display width."""
     return _truncate(_normalize_human_text(value), max(1, width))
+
+
+def _wrapped_human_lines(
+    value: str | None,
+    *,
+    width: int,
+    initial_indent: str = "",
+    subsequent_indent: str | None = None,
+) -> list[str]:
+    """Wrap normalized human-readable text without discarding content."""
+    normalized = _normalize_human_text(value)
+    if not normalized:
+        return []
+    wrapper = textwrap.TextWrapper(
+        width=max(width, len(initial_indent) + 1),
+        initial_indent=initial_indent,
+        subsequent_indent=initial_indent if subsequent_indent is None else subsequent_indent,
+        break_long_words=True,
+        break_on_hyphens=False,
+    )
+    return wrapper.wrap(normalized)
+
+
+def _echo_wrapped_human(
+    value: str | None,
+    *,
+    width: int,
+    initial_indent: str,
+    subsequent_indent: str | None = None,
+) -> None:
+    for line in _wrapped_human_lines(
+        value,
+        width=width,
+        initial_indent=initial_indent,
+        subsequent_indent=subsequent_indent,
+    ):
+        click.echo(line)
 
 
 def _tab_title_hint(tab_rows: list[tuple[PaneLocation, str]]) -> str:
@@ -232,16 +270,28 @@ def _print_show_pane(location: PaneLocation, display_cmd: str, *, width: int, ve
         available = max(1, width - len(prefix))
         cwd_width = min(_SHOW_CWD_TARGET_WIDTH, max(18, available // 3))
         command_width = max(1, available - cwd_width - 2)
-        click.echo(f"{prefix}{_fit_human(command, command_width):<{command_width}}  {_fit_human(cwd, cwd_width)}")
+        if len(command) <= command_width and len(cwd) <= cwd_width:
+            click.echo(f"{prefix}{command:<{command_width}}  {cwd}")
+        else:
+            _echo_wrapped_human(
+                command,
+                width=width,
+                initial_indent=prefix,
+                subsequent_indent=" " * len(prefix),
+            )
+            _echo_wrapped_human(cwd, width=width, initial_indent="      ")
     else:
-        click.echo(prefix + _fit_human(command, width - len(prefix)))
+        _echo_wrapped_human(
+            command,
+            width=width,
+            initial_indent=prefix,
+            subsequent_indent=" " * len(prefix),
+        )
         if cwd:
-            cwd_prefix = "      "
-            click.echo(cwd_prefix + _fit_human(cwd, width - len(cwd_prefix)))
+            _echo_wrapped_human(cwd, width=width, initial_indent="      ")
 
     if verbose:
-        detail_prefix = "      "
-        click.echo(detail_prefix + _fit_human(_pane_verbose_summary(pane), width - len(detail_prefix)))
+        _echo_wrapped_human(_pane_verbose_summary(pane), width=width, initial_indent="      ")
 
 
 def _render_show_hierarchy(

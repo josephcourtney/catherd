@@ -102,7 +102,7 @@ Managed shell integration obeys a narrow-write policy: catherd edits only its ma
 
 The default invocation remains `show`. `--version` reports installed package metadata.
 
-Human display normalization must not mutate machine-readable values. Multiline/irregular whitespace may be collapsed and long secondary values truncated in the human `show` view, while `show --json` and `inspect` retain exact values.
+Human display normalization must not mutate machine-readable values. Multiline/irregular whitespace may be collapsed in human views, but `show` must wrap long command and path values rather than discard them. The TUI tree and persistent sidebar may abbreviate values for scanning only when the selected object can expose the complete display-normalized value through the full-details inspector. `show --json` and `inspect` retain exact underlying values.
 
 Core Kitty availability determines command health: failure to obtain a usable Kitty hierarchy is a nonzero CLI failure for `show`, `inspect`, and `doctor`. Missing or degraded Atuin enrichment is informational and must not change those core success semantics.
 
@@ -120,7 +120,7 @@ The tree presentation follows these semantic rules:
 - IDs, guides, and secondary metadata are visually subordinate to object identity;
 - tab-subtree banding is presentational only and must not change the logical tree.
 
-The inspector contains richer information for the currently selected object. Command-like titles may be normalized for identity/display, while exact process commands remain available in process metadata.
+The persistent right-hand inspector is a compact summary and may abbreviate long secondary values. A dedicated near-full-screen, scrollable details modal is the lossless human-readable escape hatch for compact tree/sidebar presentation. Long paths, process commands, history commands, and identifiers are rendered there as labeled blocks with complete display-normalized values. Command-like titles may still be normalized for identity/display.
 
 Mouse selection never focuses Kitty implicitly. Focus requires an explicit action.
 
