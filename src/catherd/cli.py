@@ -183,7 +183,7 @@ def _pane_primary_text(location: PaneLocation, display_cmd: str) -> str:
 
     if command == _DISPLAY_COMMAND_FALLBACK:
         return title or command
-    if title and title != command and title != tab_title:
+    if title and title not in {command, tab_title}:
         return f"{title} — {command}"
     return command
 
@@ -191,7 +191,7 @@ def _pane_primary_text(location: PaneLocation, display_cmd: str) -> str:
 def _pane_size(pane: Pane) -> str | None:
     if pane.cols is None and pane.rows is None:
         return None
-    return f"{pane.cols or '?'}×{pane.rows or '?'}"
+    return f"{pane.cols or '?'}×{pane.rows or '?'}"  # ruff: ignore[ambiguous-unicode-character-string]
 
 
 def _pane_verbose_summary(pane: Pane) -> str:
@@ -282,9 +282,11 @@ def _render_show_hierarchy(
 def _require_kitty_state() -> KittyState:
     state = get_kitty_state(verbose=False)
     if state is None:
-        raise click.ClickException("Could not read Kitty state.")
+        msg = "Could not read Kitty state."
+        raise click.ClickException(msg)
     if state.pane_count == 0:
-        raise click.ClickException("No Kitty panes found. Is Kitty running with remote control enabled?")
+        msg = "No Kitty panes found. Is Kitty running with remote control enabled?"
+        raise click.ClickException(msg)
     return state
 
 
@@ -700,8 +702,7 @@ def _print_core_doctor_summary(state: KittyState) -> None:
     command_count = sum(bool(pane.current_command or pane.foreground_cmd) for pane in panes)
     tty_count = sum(pane.tty is not None for pane in panes)
     click.echo(
-        "  [INFO] Kitty metadata: "
-        f"CWD {cwd_count}/{total}, command {command_count}/{total}, TTY {tty_count}/{total}"
+        f"  [INFO] Kitty metadata: CWD {cwd_count}/{total}, command {command_count}/{total}, TTY {tty_count}/{total}"
     )
     if tty_count < total:
         click.echo(

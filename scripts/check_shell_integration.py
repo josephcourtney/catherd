@@ -48,14 +48,12 @@ def _check_xdg_cache(shell: str, executable: str, root: Path) -> None:
     script.write_text(load_snippet_for_shell(shell), encoding="utf-8")
     cache_home = root / "cache home"
     env = _base_env()
-    env.update(
-        {
-            "HOME": str(root / "home"),
-            "XDG_CACHE_HOME": str(cache_home),
-            "KITTY_WINDOW_ID": "27",
-            "ATUIN_SESSION": "session-abc",
-        }
-    )
+    env.update({
+        "HOME": str(root / "home"),
+        "XDG_CACHE_HOME": str(cache_home),
+        "KITTY_WINDOW_ID": "27",
+        "ATUIN_SESSION": "session-abc",
+    })
 
     _run_script(shell, executable, script, env)
 
@@ -72,13 +70,11 @@ def _check_home_fallback(shell: str, executable: str, root: Path) -> None:
     home = root / "home with spaces"
     env = _base_env()
     env.pop("XDG_CACHE_HOME", None)
-    env.update(
-        {
-            "HOME": str(home),
-            "KITTY_WINDOW_ID": "12",
-            "ATUIN_SESSION": "session-home",
-        }
-    )
+    env.update({
+        "HOME": str(home),
+        "KITTY_WINDOW_ID": "12",
+        "ATUIN_SESSION": "session-home",
+    })
 
     _run_script(shell, executable, script, env)
 
