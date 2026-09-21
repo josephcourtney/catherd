@@ -1,4 +1,5 @@
 import json
+from importlib.metadata import version
 from unittest.mock import patch
 
 import pytest
@@ -59,12 +60,12 @@ def test_main_entrypoint_exits_zero():
     assert result.exit_code == 0
 
 
-@pytest.mark.medium
+@pytest.mark.small
 def test_version_option_reports_package_version():
     result = CliRunner().invoke(cli.main, ["--version"])
 
     assert result.exit_code == 0
-    assert "catherd, version 1.0.0" in result.output
+    assert result.output == f"catherd, version {version('catherd')}\n"
 
 
 @pytest.mark.small
