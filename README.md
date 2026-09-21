@@ -17,13 +17,14 @@ catherd tui
 
 The TUI presents Kitty as a collapsible OS-window → tab → pane hierarchy. Native tree guides remain continuous, alternating tab subtrees provide non-structural grouping, and command-like titles are normalized for scanning. The selected row belongs to catherd and is shown with a neutral background plus a left-edge cursor marker; it does not change Kitty focus. The actually focused pane is marked `● focused`, while pane activity is reported independently as `▶ running` or `○ at prompt`.
 
-The inspector shows richer information for the selected object, including complete display-normalized paths and commands, layout position and neighbors, and Atuin-backed command history when available. Tree rows remain compact, but selecting an object provides the full human-readable value instead of leaving truncation irreversible. Mouse clicks change only the catherd selection; focusing the corresponding Kitty object is always explicit.
+The right-hand inspector is a compact summary of the selected object. Long paths, commands, history values, and identifiers may be abbreviated there for scanning; press `i` to open a near-full-screen, scrollable inspector containing the complete display-normalized values in block form. Mouse clicks change only the catherd selection; focusing the corresponding Kitty object is always explicit.
 
 | Key | Action |
 | --- | --- |
 | `j` / `k` | move through the tree |
 | `h` / `l`, `←` / `→` | collapse / expand |
 | `Enter` / `f` | focus selected OS window, tab, or pane in Kitty |
+| `i` | open full details for the selected object; `i`, `Esc`, or `q` closes it |
 | `/` | filter by title, ID, path, or command; submit empty or press `Esc` to clear |
 | `a` | clear filtering and jump to the focused Kitty pane |
 | `r` | rename selected object |
