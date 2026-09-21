@@ -1321,6 +1321,8 @@ class KittyManagerApp(App[None]):
         border-left: solid $border-blurred;
         overflow-x: hidden;
         overflow-y: auto;
+        text-wrap: wrap;
+        text-overflow: fold;
     }
 
     #footer {
