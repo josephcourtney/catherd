@@ -60,7 +60,7 @@ def test_main_entrypoint_exits_zero():
     assert result.exit_code == 0
 
 
-@pytest.mark.small
+@pytest.mark.medium
 def test_version_option_reports_package_version():
     result = CliRunner().invoke(cli.main, ["--version"])
 
