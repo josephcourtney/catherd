@@ -179,7 +179,11 @@ complexity raw="false" strict="false" min_complexity="11":
 
 [group('code quality')]
 dup:
-  {{JSCPD}} --pattern "{{PY_SRC}}/**/*.py" --pattern "{{PY_TESTPATH}}/**/*.py" --reporters console
+  {{JSCPD}} \
+    --pattern "{{PY_SRC}}/**/*.py" \
+    --pattern "{{PY_TESTPATH}}/**/*.py" \
+    --pattern "{{PY_SCRIPTS}}/**/*.py" \
+    --reporters console
 
 [group('security')]
 secrets:

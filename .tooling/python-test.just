@@ -51,8 +51,19 @@ test strict="true" fast="false" dev="false" quiet="" logs="" debug="" failing="f
 
   if [ "{{dev}}" = "true" ]; then
     eval "args+=({{PYTEST_DEV_BASE_OPTS}})"
+
+    collect_args=(
+      {{PYTEST}}
+      "--collect-only"
+      "-q"
+      "--no-cov"
+    )
+    [ "{{fast}}" != "true" ] || eval "collect_args+=({{PYTEST_FAST_OPTS}})"
+    [ "{{failing}}" != "true" ] || eval "collect_args+=({{PYTEST_FAILING_OPTS}})"
+    collect_args+=("{{ROOT_DIR}}/{{PY_TESTPATH}}")
+
     set +e
-    collect_out="$({{PYTEST}} --collect-only -q --no-cov "{{ROOT_DIR}}/{{PY_TESTPATH}}" 2>&1)"
+    collect_out="$("${collect_args[@]}" 2>&1)"
     collect_status=$?
     set -e
     if [ "$collect_status" -ne 0 ] && [ "$collect_status" -ne 5 ]; then
