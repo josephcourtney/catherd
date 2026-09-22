@@ -179,11 +179,17 @@ complexity raw="false" strict="false" min_complexity="11":
 
 [group('code quality')]
 dup:
-  {{JSCPD}} \
-    --pattern "{{PY_SRC}}/**/*.py" \
-    --pattern "{{PY_TESTPATH}}/**/*.py" \
-    --pattern "{{PY_SCRIPTS}}/**/*.py" \
-    --reporters console
+  #!/usr/bin/env bash
+  set -euo pipefail
+  paths=()
+  for path in "{{PY_SRC}}" "{{PY_TESTPATH}}" "{{PY_SCRIPTS}}"; do
+    [[ -e "$path" ]] && paths+=("$path")
+  done
+  if [ "${#paths[@]}" -eq 0 ]; then
+    echo "dup: no Python source directories found; skipping"
+    exit 0
+  fi
+  {{JSCPD}} --pattern "**/*.py" --reporters console "${paths[@]}"
 
 [group('security')]
 secrets:

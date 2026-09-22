@@ -1,5 +1,5 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY.
-_commit: 52eb86b
+_commit: e4de0fa
 _src_path: git@github.com:josephcourtney/skellington.git
 cli_smoke: catherd --help
 line_length: 120
