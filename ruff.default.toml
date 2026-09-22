@@ -27,7 +27,7 @@ exclude = [
   "venv",
 ]
 
-target-version    = "py314"
+target-version    = "py312"
 line-length       = 120
 indent-width      = 4
 output-format     = "concise"
